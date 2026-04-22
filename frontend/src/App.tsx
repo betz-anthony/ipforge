@@ -1,4 +1,4 @@
-import { Routes, Route, Link, NavLink } from 'react-router-dom'
+import { Routes, Route, NavLink } from 'react-router-dom'
 import Subnets from './pages/Subnets'
 import Addresses from './pages/Addresses'
 
