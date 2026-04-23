@@ -34,3 +34,12 @@ app.include_router(addresses.router, prefix="/api/addresses", tags=["addresses"]
 app.include_router(dns.router, prefix="/api/dns", tags=["dns"])
 app.include_router(dhcp.router, prefix="/api/dhcp", tags=["dhcp"])
 app.include_router(settings_router.router, prefix="/api/settings", tags=["settings"])
+
+
+@app.get("/api/providers", tags=["settings"])
+def get_active_providers():
+    from app.providers.registry import get_dns_providers, get_dhcp_providers
+    return {
+        "dns": [p.source for p in get_dns_providers()],
+        "dhcp": [p.source for p in get_dhcp_providers()],
+    }

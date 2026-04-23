@@ -20,7 +20,7 @@ export default function SearchPage() {
   const leaseQueries = useQueries({
     queries: (scopes ?? []).map(s => ({
       queryKey: ['dhcp-leases', s.scope_id],
-      queryFn: () => dhcpApi.listLeases(s.scope_id),
+      queryFn: () => dhcpApi.listLeases(s.scope_id, s.source),
     })),
   })
 

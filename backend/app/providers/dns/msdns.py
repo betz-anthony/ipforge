@@ -5,6 +5,8 @@ from app.providers.dns.base import DNSProvider, DNSRecord
 
 
 class MSDNSProvider(DNSProvider):
+    source = "msdns"
+
     def __init__(self):
         self._session = None
 

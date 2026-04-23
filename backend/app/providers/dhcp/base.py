@@ -11,6 +11,7 @@ class DHCPScope(BaseModel):
     description: str = ""
     active: bool = True
     ip_version: int = 4
+    source: str = ""
 
 
 class DHCPReservation(BaseModel):
@@ -24,6 +25,7 @@ class DHCPReservation(BaseModel):
 
 
 class DHCPProvider(ABC):
+    source: str = ""
     @abstractmethod
     def get_scopes(self) -> list[DHCPScope]: ...
 

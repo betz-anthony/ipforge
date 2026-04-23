@@ -9,6 +9,8 @@ def _is_v6(scope_id: str) -> bool:
 
 
 class MSDHCPProvider(DHCPProvider):
+    source = "msdhcp"
+
     def __init__(self):
         self._session = None
 

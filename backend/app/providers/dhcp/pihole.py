@@ -7,6 +7,7 @@ from app.providers.dhcp.base import DHCPProvider, DHCPScope, DHCPReservation
 
 
 class PiholeDHCPProvider(DHCPProvider):
+    source = "pihole"
     SCOPE_ID = "pihole"
 
     def __init__(self):

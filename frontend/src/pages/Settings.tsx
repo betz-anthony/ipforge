@@ -6,6 +6,29 @@ import { settingsApi, type AppSettingsUpdate } from '../api/client'
 const TRANSPORT_OPTIONS = ['ntlm', 'kerberos', 'basic', 'certificate', 'credssp']
 const TSIG_ALGORITHMS   = ['hmac-sha256', 'hmac-sha512', 'hmac-sha1', 'hmac-md5']
 
+const DNS_OPTIONS  = [
+  { value: 'msdns',  label: 'Microsoft DNS' },
+  { value: 'pihole', label: 'Pi-hole v6' },
+  { value: 'bind',   label: 'BIND (dnspython)' },
+]
+const DHCP_OPTIONS = [
+  { value: 'msdhcp',  label: 'Microsoft DHCP' },
+  { value: 'pihole',  label: 'Pi-hole v6' },
+  { value: 'keadhcp', label: 'ISC Kea' },
+]
+
+function toggleProvider(current: string, value: string): string {
+  const parts = current.split(',').map(s => s.trim()).filter(Boolean)
+  const idx = parts.indexOf(value)
+  if (idx >= 0) parts.splice(idx, 1)
+  else parts.push(value)
+  return parts.join(',')
+}
+
+function hasProvider(current: string, value: string): boolean {
+  return current.split(',').map(s => s.trim()).includes(value)
+}
+
 type FormState = AppSettingsUpdate & {
   _ms_password:    string
   _pihole_password: string
@@ -126,8 +149,10 @@ export default function SettingsPage() {
     (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
       setForm(f => ({ ...f, [key]: (key === 'ms_winrm_port' || key === 'bind_port') ? Number(e.target.value) : e.target.value }))
 
-  const needsWinRM = form.dns_provider === 'msdns' || form.dhcp_provider === 'msdhcp'
-  const needsPihole = form.dns_provider === 'pihole' || form.dhcp_provider === 'pihole'
+  const needsWinRM  = hasProvider(form.dns_provider ?? '', 'msdns')  || hasProvider(form.dhcp_provider ?? '', 'msdhcp')
+  const needsPihole = hasProvider(form.dns_provider ?? '', 'pihole') || hasProvider(form.dhcp_provider ?? '', 'pihole')
+  const needsBind   = hasProvider(form.dns_provider ?? '', 'bind')
+  const needsKea    = hasProvider(form.dhcp_provider ?? '', 'keadhcp')
 
   if (isLoading) return <p className="loading">Loading…</p>
 
@@ -141,19 +166,33 @@ export default function SettingsPage() {
         <div className="settings-section">
           <SectionTitle>Providers</SectionTitle>
           <div className="form-grid">
-            <Field label="DNS Provider">
-              <select value={form.dns_provider ?? 'msdns'} onChange={s('dns_provider')}>
-                <option value="msdns">Microsoft DNS</option>
-                <option value="pihole">Pi-hole v6</option>
-                <option value="bind">BIND (dnspython)</option>
-              </select>
+            <Field label="DNS Providers">
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', paddingTop: '0.25rem' }}>
+                {DNS_OPTIONS.map(opt => (
+                  <label key={opt.value} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', fontSize: '0.85rem' }}>
+                    <input
+                      type="checkbox"
+                      checked={hasProvider(form.dns_provider ?? '', opt.value)}
+                      onChange={() => setForm(f => ({ ...f, dns_provider: toggleProvider(f.dns_provider ?? '', opt.value) }))}
+                    />
+                    {opt.label}
+                  </label>
+                ))}
+              </div>
             </Field>
-            <Field label="DHCP Provider">
-              <select value={form.dhcp_provider ?? 'msdhcp'} onChange={s('dhcp_provider')}>
-                <option value="msdhcp">Microsoft DHCP</option>
-                <option value="pihole">Pi-hole v6</option>
-                <option value="keadhcp">ISC Kea</option>
-              </select>
+            <Field label="DHCP Providers">
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', paddingTop: '0.25rem' }}>
+                {DHCP_OPTIONS.map(opt => (
+                  <label key={opt.value} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', fontSize: '0.85rem' }}>
+                    <input
+                      type="checkbox"
+                      checked={hasProvider(form.dhcp_provider ?? '', opt.value)}
+                      onChange={() => setForm(f => ({ ...f, dhcp_provider: toggleProvider(f.dhcp_provider ?? '', opt.value) }))}
+                    />
+                    {opt.label}
+                  </label>
+                ))}
+              </div>
             </Field>
           </div>
         </div>
@@ -214,7 +253,7 @@ export default function SettingsPage() {
         )}
 
         {/* ── BIND ── */}
-        {form.dns_provider === 'bind' && (
+        {needsBind && (
           <div className="settings-section">
             <SectionTitle>BIND DNS</SectionTitle>
             <div className="form-grid">
@@ -249,7 +288,7 @@ export default function SettingsPage() {
         )}
 
         {/* ── ISC Kea ── */}
-        {form.dhcp_provider === 'keadhcp' && (
+        {needsKea && (
           <div className="settings-section">
             <SectionTitle>ISC Kea Control Agent</SectionTitle>
             <div className="form-grid">

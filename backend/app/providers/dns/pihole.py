@@ -7,6 +7,7 @@ from app.providers.dns.base import DNSProvider, DNSRecord
 
 
 class PiholeDNSProvider(DNSProvider):
+    source = "pihole"
     ZONE = "pihole-local"
 
     def __init__(self):

@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.models.setting import AppSetting
 from app.config import settings
-from app.providers.registry import get_dns_provider, get_dhcp_provider
+from app.providers.registry import get_dns_providers, get_dhcp_providers
 
 router = APIRouter()
 
@@ -127,6 +127,6 @@ def update_settings(body: SettingsUpdate, db: Session = Depends(get_db)):
         _upsert(db, key, str(value))
         setattr(settings, key, value)
     db.commit()
-    get_dns_provider.cache_clear()
-    get_dhcp_provider.cache_clear()
+    get_dns_providers.cache_clear()
+    get_dhcp_providers.cache_clear()
     return get_settings()

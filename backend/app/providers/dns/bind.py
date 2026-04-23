@@ -14,6 +14,7 @@ from app.providers.dns.base import DNSProvider, DNSRecord
 
 
 class BINDDNSProvider(DNSProvider):
+    source = "bind"
 
     def _keyring(self):
         if not settings.bind_tsig_key_name:
