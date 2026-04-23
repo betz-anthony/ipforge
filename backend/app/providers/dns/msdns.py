@@ -33,12 +33,32 @@ class MSDNSProvider(DNSProvider):
         return data if isinstance(data, list) else [data]
 
     def get_records(self, zone: str) -> list[DNSRecord]:
-        out = self._run(
-            f"Get-DnsServerResourceRecord -ZoneName '{zone}' -ComputerName '{settings.ms_dns_server}' "
-            "| Select-Object HostName, RecordType, "
-            "@{N='Data';E={$_.RecordData.IPv4Address ?? $_.RecordData.IPv6Address ?? $_.RecordData.NameHost ?? $_.RecordData.PtrDomainName}}, "
-            "TimeToLive | ConvertTo-Json -Depth 3"
-        )
+        # PS 5.1-compatible: no ?? operator; resolve IP objects to strings;
+        # convert TimeToLive to int seconds inside PowerShell.
+        ps = f"""
+Get-DnsServerResourceRecord -ZoneName '{zone}' -ComputerName '{settings.ms_dns_server}' | ForEach-Object {{
+    $rd = $_.RecordData
+    if ($rd.IPv4Address)      {{ $data = $rd.IPv4Address.IPAddressToString }}
+    elseif ($rd.IPv6Address)  {{ $data = $rd.IPv6Address.IPAddressToString }}
+    elseif ($rd.NameHost)     {{ $data = $rd.NameHost }}
+    elseif ($rd.PtrDomainName){{ $data = $rd.PtrDomainName }}
+    elseif ($rd.DomainName)   {{ $data = $rd.DomainName }}
+    elseif ($rd.MailExchange) {{ $data = $rd.MailExchange }}
+    elseif ($rd.DescriptiveText) {{ $data = $rd.DescriptiveText }}
+    else {{ $data = $null }}
+    if ($data -ne $null) {{
+        [PSCustomObject]@{{
+            HostName   = $_.HostName
+            RecordType = $_.RecordType
+            Data       = $data
+            TTL        = [int]$_.TimeToLive.TotalSeconds
+        }}
+    }}
+}} | ConvertTo-Json
+"""
+        out = self._run(ps)
+        if not out.strip():
+            return []
         records = json.loads(out)
         if isinstance(records, dict):
             records = [records]
@@ -48,7 +68,7 @@ class MSDNSProvider(DNSProvider):
                 record_type=r["RecordType"],
                 value=r.get("Data") or "",
                 zone=zone,
-                ttl=r.get("TimeToLive", {}).get("TotalSeconds", 3600),
+                ttl=r.get("TTL", 3600),
             )
             for r in records
             if r.get("Data")

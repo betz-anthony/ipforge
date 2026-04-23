@@ -3,13 +3,18 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Plus, X } from 'lucide-react'
 import { dhcpApi, type DHCPScope } from '../api/client'
 
-const emptyForm = { ip_address: '', mac_address: '', name: '', description: '' }
+const emptyForm = {
+  ip_address: '', mac_address: '', client_duid: '', iaid: 0,
+  name: '', description: '',
+}
 
 export default function DHCP() {
   const [selectedScope, setSelectedScope] = useState<DHCPScope | null>(null)
   const [showForm, setShowForm]           = useState(false)
   const [form, setForm]                   = useState(emptyForm)
   const qc = useQueryClient()
+
+  const isV6 = (scope: DHCPScope | null) => scope ? scope.ip_version === 6 : false
 
   const { data: scopes, isLoading: loadingScopes } = useQuery({
     queryKey: ['dhcp-scopes'],
@@ -38,7 +43,11 @@ export default function DHCP() {
 
   const set = (key: keyof typeof emptyForm) =>
     (e: React.ChangeEvent<HTMLInputElement>) =>
-      setForm(f => ({ ...f, [key]: e.target.value }))
+      setForm(f => ({ ...f, [key]: key === 'iaid' ? Number(e.target.value) : e.target.value }))
+
+  const canSubmit = form.ip_address && form.name && (
+    isV6(selectedScope) ? form.client_duid : form.mac_address
+  )
 
   return (
     <div>
@@ -54,9 +63,14 @@ export default function DHCP() {
             <div
               key={s.scope_id}
               className={'panel-list-item' + (selectedScope?.scope_id === s.scope_id ? ' active' : '')}
-              onClick={() => { setSelectedScope(s); setShowForm(false) }}
+              onClick={() => { setSelectedScope(s); setShowForm(false); setForm(emptyForm) }}
             >
-              <div>{s.name}</div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                <span className={`badge ${s.ip_version === 6 ? 'badge-blue' : 'badge-green'}`} style={{ fontSize: '0.6rem' }}>
+                  IPv{s.ip_version}
+                </span>
+                {s.name}
+              </div>
               <div className="panel-list-item-sub font-mono">{s.scope_id}</div>
             </div>
           ))}
@@ -71,7 +85,12 @@ export default function DHCP() {
                   <h1>{selectedScope.name}</h1>
                   <p style={{ fontSize: '0.775rem', marginTop: '2px' }}>
                     <span className="font-mono">{selectedScope.scope_id}</span>
-                    {' · '}{selectedScope.start_range} – {selectedScope.end_range}
+                    {selectedScope.ip_version === 4 && selectedScope.start_range &&
+                      <> · {selectedScope.start_range} – {selectedScope.end_range}</>
+                    }
+                    {selectedScope.ip_version === 6 &&
+                      <> · prefix length {selectedScope.subnet_mask}</>
+                    }
                   </p>
                 </div>
                 <div className="page-header-actions">
@@ -88,12 +107,44 @@ export default function DHCP() {
                   <div className="form-grid">
                     <div className="form-field">
                       <label>IP Address</label>
-                      <input placeholder="10.0.0.100" value={form.ip_address} onChange={set('ip_address')} />
+                      <input
+                        placeholder={isV6(selectedScope) ? '2001:db8::100' : '10.0.0.100'}
+                        value={form.ip_address}
+                        onChange={set('ip_address')}
+                      />
                     </div>
-                    <div className="form-field">
-                      <label>MAC Address</label>
-                      <input placeholder="AA-BB-CC-DD-EE-FF" value={form.mac_address} onChange={set('mac_address')} />
-                    </div>
+
+                    {isV6(selectedScope) ? (
+                      <>
+                        <div className="form-field">
+                          <label>Client DUID</label>
+                          <input
+                            placeholder="00-01-00-01-12-34-56-78-AA-BB-CC-DD-EE-FF"
+                            value={form.client_duid}
+                            onChange={set('client_duid')}
+                          />
+                        </div>
+                        <div className="form-field">
+                          <label>IAID</label>
+                          <input
+                            type="number"
+                            placeholder="12345678"
+                            value={form.iaid || ''}
+                            onChange={set('iaid')}
+                          />
+                        </div>
+                      </>
+                    ) : (
+                      <div className="form-field">
+                        <label>MAC Address</label>
+                        <input
+                          placeholder="AA-BB-CC-DD-EE-FF"
+                          value={form.mac_address}
+                          onChange={set('mac_address')}
+                        />
+                      </div>
+                    )}
+
                     <div className="form-field">
                       <label>Hostname / Name</label>
                       <input placeholder="server01" value={form.name} onChange={set('name')} />
@@ -107,7 +158,7 @@ export default function DHCP() {
                     <button
                       className="btn-primary btn-sm"
                       onClick={() => addMutation.mutate()}
-                      disabled={addMutation.isPending || !form.ip_address || !form.mac_address || !form.name}
+                      disabled={addMutation.isPending || !canSubmit}
                     >
                       {addMutation.isPending ? 'Adding…' : 'Add'}
                     </button>
@@ -131,7 +182,8 @@ export default function DHCP() {
                     <thead>
                       <tr>
                         <th>IP Address</th>
-                        <th>MAC</th>
+                        <th>{isV6(selectedScope) ? 'Client DUID' : 'MAC'}</th>
+                        {isV6(selectedScope) && <th>IAID</th>}
                         <th>Hostname</th>
                         <th>Description</th>
                         <th></th>
@@ -139,12 +191,13 @@ export default function DHCP() {
                     </thead>
                     <tbody>
                       {leases?.length === 0 && (
-                        <tr><td colSpan={5} className="empty-state">No leases in this scope.</td></tr>
+                        <tr><td colSpan={isV6(selectedScope) ? 6 : 5} className="empty-state">No leases in this scope.</td></tr>
                       )}
                       {leases?.map(l => (
                         <tr key={l.ip_address}>
                           <td><span className="font-mono">{l.ip_address}</span></td>
-                          <td><span className="font-mono">{l.mac_address}</span></td>
+                          <td><span className="font-mono">{isV6(selectedScope) ? l.client_duid : l.mac_address}</span></td>
+                          {isV6(selectedScope) && <td><span className="font-mono">{l.iaid || <span className="text-muted">—</span>}</span></td>}
                           <td>{l.name || <span className="text-muted">—</span>}</td>
                           <td>{l.description || <span className="text-muted">—</span>}</td>
                           <td>
