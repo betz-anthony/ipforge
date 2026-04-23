@@ -278,7 +278,7 @@ export default function DNS() {
                           <td>
                             <button
                               className="btn-danger btn-sm"
-                              onClick={() => deleteMutation.mutate(r)}
+                              onClick={() => window.confirm(`Delete ${r.record_type} record "${r.name}"?`) && deleteMutation.mutate(r)}
                               disabled={deleteMutation.isPending}
                             >
                               <Trash2 size={12} />
