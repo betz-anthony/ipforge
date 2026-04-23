@@ -1,4 +1,5 @@
 import { Routes, Route, NavLink } from 'react-router-dom'
+import Dashboard from './pages/Dashboard'
 import Subnets from './pages/Subnets'
 import Addresses from './pages/Addresses'
 import DHCP from './pages/DHCP'
@@ -9,7 +10,8 @@ export default function App() {
   return (
     <div>
       <nav>
-        <NavLink to="/">Subnets</NavLink>
+        <NavLink to="/" end>Home</NavLink>
+        <NavLink to="/subnets">Subnets</NavLink>
         <NavLink to="/addresses">Addresses</NavLink>
         <NavLink to="/dhcp">DHCP</NavLink>
         <NavLink to="/dns">DNS</NavLink>
@@ -17,7 +19,8 @@ export default function App() {
       </nav>
       <main>
         <Routes>
-          <Route path="/" element={<Subnets />} />
+          <Route path="/" element={<Dashboard />} />
+          <Route path="/subnets" element={<Subnets />} />
           <Route path="/addresses" element={<Addresses />} />
           <Route path="/dhcp" element={<DHCP />} />
           <Route path="/dns" element={<DNS />} />
