@@ -42,3 +42,49 @@ export const addressesApi = {
     api.put<IPAddress>(`/addresses/${id}`, data).then(r => r.data),
   delete: (id: number) => api.delete(`/addresses/${id}`),
 }
+
+export interface DHCPScope {
+  scope_id: string
+  name: string
+  subnet_mask: string
+  start_range: string
+  end_range: string
+  description: string
+  active: boolean
+}
+
+export interface DHCPReservation {
+  scope_id: string
+  ip_address: string
+  mac_address: string
+  name: string
+  description: string
+}
+
+export interface DNSRecord {
+  name: string
+  record_type: string
+  value: string
+  zone: string
+  ttl: number
+}
+
+export const dhcpApi = {
+  listScopes: () => api.get<DHCPScope[]>('/dhcp/scopes').then(r => r.data),
+  listLeases: (scope_id: string) =>
+    api.get<DHCPReservation[]>(`/dhcp/scopes/${scope_id}/leases`).then(r => r.data),
+  addReservation: (scope_id: string, data: Omit<DHCPReservation, 'scope_id'>) =>
+    api.post<DHCPReservation>(`/dhcp/scopes/${scope_id}/reservations`, data).then(r => r.data),
+  deleteReservation: (scope_id: string, ip_address: string) =>
+    api.delete(`/dhcp/scopes/${scope_id}/reservations/${ip_address}`),
+}
+
+export const dnsApi = {
+  listZones: () => api.get<string[]>('/dns/zones').then(r => r.data),
+  listRecords: (zone: string) =>
+    api.get<DNSRecord[]>(`/dns/zones/${zone}/records`).then(r => r.data),
+  createRecord: (zone: string, data: Omit<DNSRecord, 'zone'>) =>
+    api.post<DNSRecord>(`/dns/zones/${zone}/records`, data).then(r => r.data),
+  deleteRecord: (zone: string, record: DNSRecord) =>
+    api.delete(`/dns/zones/${zone}/records`, { data: record }),
+}
