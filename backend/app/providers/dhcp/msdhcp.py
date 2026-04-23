@@ -150,7 +150,6 @@ class MSDHCPProvider(DHCPProvider):
             )
         else:
             self._run(
-                f"Remove-DhcpServerv4Reservation -ScopeId '{scope_id}' "
-                f"-IPAddress '{ip_address}' -Force "
+                f"Remove-DhcpServerv4Reservation -IPAddress '{ip_address}' -Force "
                 f"-ComputerName '{settings.ms_dhcp_server}'"
             )

@@ -13,9 +13,13 @@ class PiholeDNSProvider(DNSProvider):
     def __init__(self):
         self._sid: str | None = None
 
+    @property
+    def _base(self) -> str:
+        return settings.pihole_url.rstrip("/")
+
     def _authenticate(self) -> str:
         r = requests.post(
-            f"{settings.pihole_url}/api/auth",
+            f"{self._base}/api/auth",
             json={"password": settings.pihole_password},
             verify=False,
             timeout=10,
@@ -29,9 +33,10 @@ class PiholeDNSProvider(DNSProvider):
         return {"X-FTL-SID": self._sid}
 
     def _req(self, method: str, path: str, **kwargs):
+        url = f"{self._base}/api{path}"
         r = requests.request(
             method,
-            f"{settings.pihole_url}/api{path}",
+            url,
             headers=self._headers(),
             verify=False,
             timeout=10,
@@ -41,7 +46,7 @@ class PiholeDNSProvider(DNSProvider):
             self._sid = None
             r = requests.request(
                 method,
-                f"{settings.pihole_url}/api{path}",
+                url,
                 headers=self._headers(),
                 verify=False,
                 timeout=10,
