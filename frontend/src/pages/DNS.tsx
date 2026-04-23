@@ -1,7 +1,7 @@
 import { useState, useMemo } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { SlidersHorizontal, Plus, X, Trash2 } from 'lucide-react'
-import { dnsApi, providersApi, type DNSRecord } from '../api/client'
+import { dnsApi, providersApi, type DNSRecord, type DNSZone } from '../api/client'
 import SyncBar from '../components/SyncBar'
 import DetailPanel from '../components/DetailPanel'
 
@@ -21,7 +21,6 @@ const SOURCE_LABEL: Record<string, string> = {
   msdns: 'MS DNS', pihole: 'Pi-hole', bind: 'BIND',
 }
 
-// Record types with a pingable IP/hostname in their value field
 const PINGABLE = new Set(['A', 'AAAA', 'CNAME', 'PTR'])
 
 type SortCol = 'name' | 'record_type' | 'value' | 'ttl'
@@ -40,14 +39,14 @@ function SortArrow({ col, sortCol, sortDir }: { col: SortCol; sortCol: SortCol |
 }
 
 export default function DNS() {
-  const [selectedZone, setSelectedZone]   = useState<string | null>(null)
-  const [filter, setFilter]               = useState('')
-  const [typeFilter, setTypeFilter]       = useState<string>('')
-  const [sortCol, setSortCol]             = useState<SortCol | null>(null)
-  const [sortDir, setSortDir]             = useState<SortDir>('asc')
-  const [showForm, setShowForm]           = useState(false)
-  const [form, setForm]                   = useState(emptyForm)
-  const [viewMode, setViewMode]           = useState<ViewMode>('combined')
+  const [selectedZone, setSelectedZone]     = useState<string | null>(null)
+  const [filter, setFilter]                 = useState('')
+  const [typeFilter, setTypeFilter]         = useState<string>('')
+  const [sortCol, setSortCol]               = useState<SortCol | null>(null)
+  const [sortDir, setSortDir]               = useState<SortDir>('asc')
+  const [showForm, setShowForm]             = useState(false)
+  const [form, setForm]                     = useState(emptyForm)
+  const [viewMode, setViewMode]             = useState<ViewMode>('combined')
   const [selectedRecord, setSelectedRecord] = useState<DNSRecord | null>(null)
   const qc = useQueryClient()
 
@@ -83,6 +82,32 @@ export default function DNS() {
       setSelectedRecord(null)
     },
   })
+
+  // Zones deduplicated by name for combined view
+  const combinedZones = useMemo(() => {
+    const seen = new Set<string>()
+    return (zones ?? []).filter(z => {
+      if (seen.has(z.zone)) return false
+      seen.add(z.zone)
+      return true
+    })
+  }, [zones])
+
+  // Zones grouped by source for by-server view
+  const groupedZones = useMemo(() => {
+    const groups = new Map<string, DNSZone[]>()
+    for (const z of zones ?? []) {
+      if (!groups.has(z.source)) groups.set(z.source, [])
+      groups.get(z.source)!.push(z)
+    }
+    return groups
+  }, [zones])
+
+  // Unique sources present in zones (ground truth for multi-provider detection)
+  const uniqueZoneSources = useMemo(
+    () => new Set((zones ?? []).map(z => z.source).filter(Boolean)),
+    [zones]
+  )
 
   const presentTypes = useMemo(
     () => [...new Set((records ?? []).map(r => r.record_type))].sort(),
@@ -122,6 +147,18 @@ export default function DNS() {
     return groups
   }, [processed])
 
+  const recordSources = useMemo(
+    () => new Set((records ?? []).map(r => r.source).filter(Boolean)),
+    [records]
+  )
+
+  const multiProvider =
+    uniqueZoneSources.size > 1 ||
+    recordSources.size > 1 ||
+    (providers?.dns?.length ?? 0) > 1
+
+  const dnsProviders = providers?.dns ?? []
+
   const set = (key: keyof typeof emptyForm) =>
     (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
       setForm(f => ({ ...f, [key]: key === 'ttl' ? Number(e.target.value) : e.target.value }))
@@ -135,17 +172,6 @@ export default function DNS() {
     className: 'sortable' + (sortCol === col ? ' sorted' : ''),
     onClick: () => handleSort(col),
   })
-
-  const dnsProviders = providers?.dns ?? []
-
-  // Derive from actual record sources as primary signal; providers API as fallback.
-  // Records are the ground truth — if two providers have synced data for this zone,
-  // show the toggle even if the providers API hasn't refreshed yet.
-  const recordSources = useMemo(
-    () => [...new Set((records ?? []).map(r => r.source).filter(Boolean))],
-    [records]
-  )
-  const multiProvider = recordSources.length > 1 || dnsProviders.length > 1
 
   const renderTable = (recs: DNSRecord[]) => (
     <div className="table-wrap">
@@ -169,11 +195,7 @@ export default function DNS() {
             </tr>
           )}
           {recs.map((r, i) => (
-            <tr
-              key={i}
-              className="clickable"
-              onClick={() => setSelectedRecord(r)}
-            >
+            <tr key={i} className="clickable" onClick={() => setSelectedRecord(r)}>
               <td><span className="font-mono">{r.name}</span></td>
               <td>
                 <span className={`badge ${TYPE_BADGE[r.record_type] ?? 'badge-gray'}`}>
@@ -210,6 +232,16 @@ export default function DNS() {
     </div>
   )
 
+  const renderZoneItem = (z: DNSZone, key: string) => (
+    <div
+      key={key}
+      className={'panel-list-item' + (selectedZone === z.zone ? ' active' : '')}
+      onClick={() => resetZone(z.zone)}
+    >
+      {z.zone}
+    </div>
+  )
+
   return (
     <div>
       <div className="page-header">
@@ -219,18 +251,42 @@ export default function DNS() {
 
       <div className="two-panel">
         <div className="panel-list">
-          <div className="panel-list-header">Zones</div>
+          <div className="panel-list-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span>Zones</span>
+            {multiProvider && (
+              <div className="view-toggle">
+                <button
+                  className={viewMode === 'combined' ? 'active' : ''}
+                  onClick={() => setViewMode('combined')}
+                >
+                  All
+                </button>
+                <button
+                  className={viewMode === 'by-server' ? 'active' : ''}
+                  onClick={() => setViewMode('by-server')}
+                >
+                  By Server
+                </button>
+              </div>
+            )}
+          </div>
           {loadingZones && <p className="loading" style={{ padding: '0.75rem' }}>Loading…</p>}
-          {zones?.map(z => (
-            <div
-              key={z}
-              className={'panel-list-item' + (selectedZone === z ? ' active' : '')}
-              onClick={() => resetZone(z)}
-            >
-              {z}
-            </div>
-          ))}
-          {zones?.length === 0 && <p className="loading" style={{ padding: '0.75rem' }}>No zones found.</p>}
+          {viewMode === 'combined' ? (
+            combinedZones.map(z => renderZoneItem(z, z.zone))
+          ) : (
+            [...groupedZones.entries()].map(([src, zoneList]) => (
+              <div key={src}>
+                <div className="panel-server-header">
+                  <span>{SOURCE_LABEL[src] ?? src}</span>
+                  <span className="panel-server-count">{zoneList.length}</span>
+                </div>
+                {zoneList.map(z => renderZoneItem(z, `${src}:${z.zone}`))}
+              </div>
+            ))
+          )}
+          {zones?.length === 0 && (
+            <p className="loading" style={{ padding: '0.75rem' }}>No zones found.</p>
+          )}
         </div>
 
         <div className="panel-main">
@@ -248,22 +304,6 @@ export default function DNS() {
                       style={{ width: '200px' }}
                     />
                   </div>
-                  {multiProvider && (
-                    <div className="view-toggle">
-                      <button
-                        className={viewMode === 'combined' ? 'active' : ''}
-                        onClick={() => setViewMode('combined')}
-                      >
-                        Combined
-                      </button>
-                      <button
-                        className={viewMode === 'by-server' ? 'active' : ''}
-                        onClick={() => setViewMode('by-server')}
-                      >
-                        By Server
-                      </button>
-                    </div>
-                  )}
                   {!showForm && (
                     <button className="btn-primary btn-sm" onClick={() => setShowForm(true)}>
                       <Plus size={13} /> Add Record

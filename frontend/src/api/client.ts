@@ -66,6 +66,11 @@ export interface DHCPReservation {
   synced_at?: string | null
 }
 
+export interface DNSZone {
+  zone: string
+  source: string
+}
+
 export interface DNSRecord {
   name: string
   record_type: string
@@ -105,7 +110,7 @@ export const providersApi = {
 }
 
 export const dnsApi = {
-  listZones: () => api.get<string[]>('/dns/zones').then(r => r.data),
+  listZones: () => api.get<DNSZone[]>('/dns/zones').then(r => r.data),
   listRecords: (zone: string) =>
     api.get<DNSRecord[]>(`/dns/zones/${zone}/records`).then(r => r.data),
   createRecord: (zone: string, data: Omit<DNSRecord, 'zone'>) =>

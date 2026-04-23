@@ -29,10 +29,13 @@ export default function SearchPage() {
     queryFn: dnsApi.listZones,
   })
 
+  // Deduplicate zones by name so we don't fetch the same zone twice
+  const uniqueZoneNames = [...new Set((zones ?? []).map(z => z.zone))]
+
   const recordQueries = useQueries({
-    queries: (zones ?? []).map(z => ({
-      queryKey: ['dns-records', z],
-      queryFn: () => dnsApi.listRecords(z),
+    queries: uniqueZoneNames.map(name => ({
+      queryKey: ['dns-records', name],
+      queryFn: () => dnsApi.listRecords(name),
     })),
   })
 
