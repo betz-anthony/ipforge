@@ -1,13 +1,14 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { Plus, X } from 'lucide-react'
 import { dhcpApi, type DHCPScope } from '../api/client'
 
 const emptyForm = { ip_address: '', mac_address: '', name: '', description: '' }
 
 export default function DHCP() {
   const [selectedScope, setSelectedScope] = useState<DHCPScope | null>(null)
-  const [showForm, setShowForm] = useState(false)
-  const [form, setForm] = useState(emptyForm)
+  const [showForm, setShowForm]           = useState(false)
+  const [form, setForm]                   = useState(emptyForm)
   const qc = useQueryClient()
 
   const { data: scopes, isLoading: loadingScopes } = useQuery({
@@ -35,118 +36,137 @@ export default function DHCP() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ['dhcp-leases', selectedScope?.scope_id] }),
   })
 
+  const set = (key: keyof typeof emptyForm) =>
+    (e: React.ChangeEvent<HTMLInputElement>) =>
+      setForm(f => ({ ...f, [key]: e.target.value }))
+
   return (
-    <div style={{ display: 'flex', gap: '2rem' }}>
-      <div style={{ minWidth: '220px' }}>
-        <h2>Scopes</h2>
-        {loadingScopes && <p>Loading...</p>}
-        <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
-          {scopes?.map(s => (
-            <li
-              key={s.scope_id}
-              onClick={() => { setSelectedScope(s); setShowForm(false) }}
-              style={{
-                cursor: 'pointer',
-                fontWeight: selectedScope?.scope_id === s.scope_id ? 'bold' : 'normal',
-                padding: '4px 0',
-                borderBottom: '1px solid #eee',
-              }}
-            >
-              <div>{s.name}</div>
-              <div style={{ fontSize: '0.8em', color: '#666' }}>{s.scope_id}</div>
-            </li>
-          ))}
-        </ul>
+    <div>
+      <div className="page-header">
+        <h1>DHCP</h1>
       </div>
 
-      <div style={{ flex: 1 }}>
-        {selectedScope ? (
-          <>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
-              <h2 style={{ margin: 0 }}>{selectedScope.name} — {selectedScope.scope_id}</h2>
-              <button onClick={() => setShowForm(f => !f)}>+ Add Reservation</button>
+      <div className="two-panel">
+        <div className="panel-list">
+          <div className="panel-list-header">Scopes</div>
+          {loadingScopes && <p className="loading" style={{ padding: '0.75rem' }}>Loading…</p>}
+          {scopes?.map(s => (
+            <div
+              key={s.scope_id}
+              className={'panel-list-item' + (selectedScope?.scope_id === s.scope_id ? ' active' : '')}
+              onClick={() => { setSelectedScope(s); setShowForm(false) }}
+            >
+              <div>{s.name}</div>
+              <div className="panel-list-item-sub font-mono">{s.scope_id}</div>
             </div>
+          ))}
+          {scopes?.length === 0 && <p className="loading" style={{ padding: '0.75rem' }}>No scopes found.</p>}
+        </div>
 
-            {showForm && (
-              <form
-                onSubmit={e => { e.preventDefault(); addMutation.mutate() }}
-                style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginBottom: '1rem', padding: '0.75rem', background: '#f9f9f9', borderRadius: '4px' }}
-              >
-                <input
-                  placeholder="IP Address"
-                  value={form.ip_address}
-                  onChange={e => setForm(f => ({ ...f, ip_address: e.target.value }))}
-                  required
-                />
-                <input
-                  placeholder="MAC (xx-xx-xx-xx-xx-xx)"
-                  value={form.mac_address}
-                  onChange={e => setForm(f => ({ ...f, mac_address: e.target.value }))}
-                  required
-                />
-                <input
-                  placeholder="Hostname / Name"
-                  value={form.name}
-                  onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
-                  required
-                />
-                <input
-                  placeholder="Description"
-                  value={form.description}
-                  onChange={e => setForm(f => ({ ...f, description: e.target.value }))}
-                />
-                <button type="submit" disabled={addMutation.isPending}>
-                  {addMutation.isPending ? 'Adding…' : 'Add'}
-                </button>
-                <button type="button" onClick={() => setShowForm(false)}>Cancel</button>
-                {addMutation.isError && (
-                  <span style={{ color: 'red', width: '100%' }}>
-                    Error: {String((addMutation.error as Error).message)}
-                  </span>
-                )}
-              </form>
-            )}
-
-            {loadingLeases ? (
-              <p>Loading leases…</p>
-            ) : (
-              <table>
-                <thead>
-                  <tr>
-                    <th>IP Address</th>
-                    <th>MAC</th>
-                    <th>Name</th>
-                    <th>Description</th>
-                    <th></th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {leases?.length === 0 && (
-                    <tr><td colSpan={5} style={{ color: '#999' }}>No leases in this scope.</td></tr>
+        <div className="panel-main">
+          {selectedScope ? (
+            <>
+              <div className="page-header">
+                <div>
+                  <h1>{selectedScope.name}</h1>
+                  <p style={{ fontSize: '0.775rem', marginTop: '2px' }}>
+                    <span className="font-mono">{selectedScope.scope_id}</span>
+                    {' · '}{selectedScope.start_range} – {selectedScope.end_range}
+                  </p>
+                </div>
+                <div className="page-header-actions">
+                  {!showForm && (
+                    <button className="btn-primary btn-sm" onClick={() => setShowForm(true)}>
+                      <Plus size={13} /> Add Reservation
+                    </button>
                   )}
-                  {leases?.map(l => (
-                    <tr key={l.ip_address}>
-                      <td>{l.ip_address}</td>
-                      <td>{l.mac_address}</td>
-                      <td>{l.name}</td>
-                      <td>{l.description || '—'}</td>
-                      <td>
-                        <button
-                          onClick={() => deleteMutation.mutate(l.ip_address)}
-                          disabled={deleteMutation.isPending}
-                        >
-                          Delete
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            )}
-          </>
-        ) : (
-          <p style={{ color: '#999' }}>Select a scope.</p>
-        )}
+                </div>
+              </div>
+
+              {showForm && (
+                <div className="inline-form">
+                  <div className="form-grid">
+                    <div className="form-field">
+                      <label>IP Address</label>
+                      <input placeholder="10.0.0.100" value={form.ip_address} onChange={set('ip_address')} />
+                    </div>
+                    <div className="form-field">
+                      <label>MAC Address</label>
+                      <input placeholder="AA-BB-CC-DD-EE-FF" value={form.mac_address} onChange={set('mac_address')} />
+                    </div>
+                    <div className="form-field">
+                      <label>Hostname / Name</label>
+                      <input placeholder="server01" value={form.name} onChange={set('name')} />
+                    </div>
+                    <div className="form-field">
+                      <label>Description</label>
+                      <input placeholder="Optional" value={form.description} onChange={set('description')} />
+                    </div>
+                  </div>
+                  <div className="form-actions">
+                    <button
+                      className="btn-primary btn-sm"
+                      onClick={() => addMutation.mutate()}
+                      disabled={addMutation.isPending || !form.ip_address || !form.mac_address || !form.name}
+                    >
+                      {addMutation.isPending ? 'Adding…' : 'Add'}
+                    </button>
+                    <button className="btn-ghost btn-sm" onClick={() => { setShowForm(false); setForm(emptyForm) }}>
+                      <X size={13} /> Cancel
+                    </button>
+                    {addMutation.isError && (
+                      <span className="feedback-error">
+                        {String((addMutation.error as Error).message)}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {loadingLeases ? (
+                <p className="loading">Loading leases…</p>
+              ) : (
+                <div className="table-wrap">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>IP Address</th>
+                        <th>MAC</th>
+                        <th>Hostname</th>
+                        <th>Description</th>
+                        <th></th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {leases?.length === 0 && (
+                        <tr><td colSpan={5} className="empty-state">No leases in this scope.</td></tr>
+                      )}
+                      {leases?.map(l => (
+                        <tr key={l.ip_address}>
+                          <td><span className="font-mono">{l.ip_address}</span></td>
+                          <td><span className="font-mono">{l.mac_address}</span></td>
+                          <td>{l.name || <span className="text-muted">—</span>}</td>
+                          <td>{l.description || <span className="text-muted">—</span>}</td>
+                          <td>
+                            <button
+                              className="btn-danger btn-sm"
+                              onClick={() => deleteMutation.mutate(l.ip_address)}
+                              disabled={deleteMutation.isPending}
+                            >
+                              Delete
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </>
+          ) : (
+            <div className="empty-state">Select a scope from the list.</div>
+          )}
+        </div>
       </div>
     </div>
   )
