@@ -1,5 +1,6 @@
 import json
 import winrm
+from winrm.exceptions import WinRMTransportError
 from app.config import settings
 from app.providers.dns.base import DNSProvider, DNSRecord
 
@@ -21,7 +22,11 @@ class MSDNSProvider(DNSProvider):
         return self._session
 
     def _run(self, ps: str) -> str:
-        result = self.session.run_ps(ps)
+        try:
+            result = self.session.run_ps(ps)
+        except WinRMTransportError:
+            self._session = None
+            result = self.session.run_ps(ps)
         if result.status_code != 0:
             raise RuntimeError(result.std_err.decode())
         return result.std_out.decode()

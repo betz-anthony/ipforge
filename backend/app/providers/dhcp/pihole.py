@@ -47,7 +47,7 @@ class PiholeDHCPProvider(DHCPProvider):
         return data.get("config", {}).get("dhcp", {})
 
     def _static_hosts_raw(self) -> list[str]:
-        return self._dhcp_cfg().get("hosts", {}).get("v", [])
+        return self._dhcp_cfg().get("hosts", [])
 
     def get_scopes(self) -> list[DHCPScope]:
         cfg = self._dhcp_cfg()
@@ -55,10 +55,10 @@ class PiholeDHCPProvider(DHCPProvider):
             scope_id=self.SCOPE_ID,
             name="Pi-hole DHCP",
             subnet_mask="",
-            start_range=cfg.get("start", {}).get("v", ""),
-            end_range=cfg.get("end", {}).get("v", ""),
-            description=f"Router: {cfg.get('router', {}).get('v', '')}",
-            active=bool(cfg.get("active", {}).get("v", False)),
+            start_range=cfg.get("start", ""),
+            end_range=cfg.get("end", ""),
+            description=f"Router: {cfg.get('router', '')}",
+            active=bool(cfg.get("active", False)),
         )]
 
     def get_leases(self, scope_id: str) -> list[DHCPReservation]:
