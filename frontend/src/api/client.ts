@@ -188,3 +188,14 @@ export const syncApi = {
   trigger: (type?: 'dns' | 'dhcp') =>
     api.post('/sync/trigger', null, { params: type ? { type } : {} }).then(r => r.data),
 }
+
+export interface AppStats {
+  dns_zones:   number
+  dns_records: number
+  dhcp_scopes: number
+  dhcp_leases: number
+}
+
+export const statsApi = {
+  get: () => api.get<AppStats>('/stats').then(r => r.data),
+}

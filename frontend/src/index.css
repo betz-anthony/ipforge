@@ -458,6 +458,23 @@ tbody tr.clickable { cursor: pointer; }
   padding: 0.1rem 0.45rem;
   border-radius: 99px;
 }
+.zone-type-header {
+  display: flex; align-items: center; gap: 0.4rem;
+  padding: 0.35rem 0.875rem;
+  cursor: pointer;
+  font-size: 0.72rem; font-weight: 600;
+  color: var(--text-subtle);
+  border-bottom: 1px solid var(--border);
+  user-select: none;
+}
+.zone-type-header:hover { background: var(--surface-2); }
+.zone-type-header .panel-server-count { margin-left: auto; }
+.zone-type-arrow {
+  font-size: 0.55rem;
+  color: var(--text-muted);
+  width: 0.75rem;
+  flex-shrink: 0;
+}
 
 /* ── Detail panel ────────────────────────────────────── */
 @keyframes slide-in-right {
