@@ -53,7 +53,7 @@ def sync_dns() -> None:
                         results.append((zone, f.result()))
                     except Exception as e:
                         logger.error("DNS %s get_records(%s): %s", p.source, zone, e)
-            return results
+            return len(zones), results
 
         now = _utcnow()
         with ThreadPoolExecutor(max_workers=len(providers) or 1) as ex:
@@ -61,9 +61,12 @@ def sync_dns() -> None:
             for f in as_completed(fmap):
                 p = fmap[f]
                 try:
-                    zone_records = f.result()
+                    zones_count, zone_records = f.result()
                 except Exception as e:
                     logger.error("DNS %s sync: %s", p.source, e)
+                    continue
+                if zones_count > 0 and not zone_records:
+                    logger.warning("DNS %s: %d zones listed but 0 records fetched, preserving cache", p.source, zones_count)
                     continue
                 db.query(CachedDNSZone).filter_by(source=p.source).delete()
                 db.query(CachedDNSRecord).filter_by(source=p.source).delete()

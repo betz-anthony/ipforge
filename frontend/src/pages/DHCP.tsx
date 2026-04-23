@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Plus, X } from 'lucide-react'
-import { dhcpApi, type DHCPReservation, type DHCPScope } from '../api/client'
+import { dhcpApi, providersApi, type DHCPReservation, type DHCPScope } from '../api/client'
 import SyncBar from '../components/SyncBar'
 import DetailPanel from '../components/DetailPanel'
 
@@ -31,6 +31,13 @@ export default function DHCP() {
     queryFn: dhcpApi.listScopes,
   })
 
+  const { data: providers } = useQuery({
+    queryKey: ['providers'],
+    queryFn: providersApi.get,
+  })
+
+  const dhcpProviders = providers?.dhcp ?? []
+
   const { data: leases, isLoading: loadingLeases } = useQuery({
     queryKey: ['dhcp-leases', selectedScope?.scope_id, selectedScope?.source],
     queryFn: () => dhcpApi.listLeases(selectedScope!.scope_id, selectedScope!.source),
@@ -54,21 +61,28 @@ export default function DHCP() {
     },
   })
 
-  const uniqueSources = useMemo(
-    () => [...new Set((scopes ?? []).map(s => s.source).filter(Boolean))],
-    [scopes]
+  const filteredScopes = useMemo(
+    () => dhcpProviders.length
+      ? (scopes ?? []).filter(s => dhcpProviders.includes(s.source))
+      : (scopes ?? []),
+    [scopes, dhcpProviders]
   )
-  const multiProvider = uniqueSources.length > 1
+
+  const uniqueSources = useMemo(
+    () => [...new Set(filteredScopes.map(s => s.source).filter(Boolean))],
+    [filteredScopes]
+  )
+  const multiProvider = uniqueSources.length > 1 || dhcpProviders.length > 1
 
   const groupedScopes = useMemo(() => {
     const groups = new Map<string, DHCPScope[]>()
-    for (const s of scopes ?? []) {
+    for (const s of filteredScopes) {
       const src = s.source || 'unknown'
       if (!groups.has(src)) groups.set(src, [])
       groups.get(src)!.push(s)
     }
     return groups
-  }, [scopes])
+  }, [filteredScopes])
 
   const set = (key: keyof typeof emptyForm) =>
     (e: React.ChangeEvent<HTMLInputElement>) =>
@@ -135,7 +149,7 @@ export default function DHCP() {
           </div>
           {loadingScopes && <p className="loading" style={{ padding: '0.75rem' }}>Loading…</p>}
           {viewMode === 'combined' ? (
-            scopes?.map(s => renderScopeItem(s))
+            filteredScopes.map(s => renderScopeItem(s))
           ) : (
             [...groupedScopes.entries()].map(([src, scopeList]) => (
               <div key={src}>
@@ -147,7 +161,7 @@ export default function DHCP() {
               </div>
             ))
           )}
-          {scopes?.length === 0 && <p className="loading" style={{ padding: '0.75rem' }}>No scopes found.</p>}
+          {filteredScopes.length === 0 && !loadingScopes && <p className="loading" style={{ padding: '0.75rem' }}>No scopes found.</p>}
         </div>
 
         <div className="panel-main">

@@ -7,7 +7,7 @@ from app.schemas.address import AddressCreate, AddressRead, AddressUpdate
 router = APIRouter()
 
 
-@router.get("/", response_model=list[AddressRead])
+@router.get("", response_model=list[AddressRead])
 def list_addresses(
     subnet_id: int | None = Query(None),
     status: AddressStatus | None = Query(None),
@@ -21,7 +21,7 @@ def list_addresses(
     return q.all()
 
 
-@router.post("/", response_model=AddressRead, status_code=201)
+@router.post("", response_model=AddressRead, status_code=201)
 def create_address(data: AddressCreate, db: Session = Depends(get_db)):
     if db.query(IPAddress).filter(IPAddress.address == data.address).first():
         raise HTTPException(409, "Address already exists")

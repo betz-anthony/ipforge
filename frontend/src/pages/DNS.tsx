@@ -60,6 +60,8 @@ export default function DNS() {
     queryFn: providersApi.get,
   })
 
+  const dnsProviders = providers?.dns ?? []
+
   const { data: records, isLoading: loadingRecords } = useQuery({
     queryKey: ['dns-records', selectedZone],
     queryFn: () => dnsApi.listRecords(selectedZone!),
@@ -83,30 +85,38 @@ export default function DNS() {
     },
   })
 
+  // Only show zones from configured providers
+  const filteredZones = useMemo(
+    () => dnsProviders.length
+      ? (zones ?? []).filter(z => dnsProviders.includes(z.source))
+      : (zones ?? []),
+    [zones, dnsProviders]
+  )
+
   // Zones deduplicated by name for combined view
   const combinedZones = useMemo(() => {
     const seen = new Set<string>()
-    return (zones ?? []).filter(z => {
+    return filteredZones.filter(z => {
       if (seen.has(z.zone)) return false
       seen.add(z.zone)
       return true
     })
-  }, [zones])
+  }, [filteredZones])
 
   // Zones grouped by source for by-server view
   const groupedZones = useMemo(() => {
     const groups = new Map<string, DNSZone[]>()
-    for (const z of zones ?? []) {
+    for (const z of filteredZones) {
       if (!groups.has(z.source)) groups.set(z.source, [])
       groups.get(z.source)!.push(z)
     }
     return groups
-  }, [zones])
+  }, [filteredZones])
 
   // Unique sources present in zones (ground truth for multi-provider detection)
   const uniqueZoneSources = useMemo(
-    () => new Set((zones ?? []).map(z => z.source).filter(Boolean)),
-    [zones]
+    () => new Set(filteredZones.map(z => z.source).filter(Boolean)),
+    [filteredZones]
   )
 
   const presentTypes = useMemo(
@@ -156,8 +166,6 @@ export default function DNS() {
     uniqueZoneSources.size > 1 ||
     recordSources.size > 1 ||
     (providers?.dns?.length ?? 0) > 1
-
-  const dnsProviders = providers?.dns ?? []
 
   const set = (key: keyof typeof emptyForm) =>
     (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
