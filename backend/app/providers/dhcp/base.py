@@ -13,7 +13,7 @@ class DHCPScope(BaseModel):
 
 
 class DHCPReservation(BaseModel):
-    scope_id: str
+    scope_id: str = ""   # overwritten by path param in add_reservation route
     ip_address: str
     mac_address: str
     name: str
