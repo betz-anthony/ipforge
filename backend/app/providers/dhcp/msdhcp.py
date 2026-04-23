@@ -4,6 +4,12 @@ from winrm.exceptions import WinRMTransportError
 from app.config import settings
 from app.providers.dhcp.base import DHCPProvider, DHCPScope, DHCPReservation
 
+try:
+    from spnego.exceptions import BadMICError as _BadMICError
+    _WINRM_RETRY = (WinRMTransportError, _BadMICError)
+except ImportError:
+    _WINRM_RETRY = (WinRMTransportError,)
+
 
 def _is_v6(scope_id: str) -> bool:
     return ":" in scope_id
@@ -28,8 +34,8 @@ class MSDHCPProvider(DHCPProvider):
     def _run(self, ps: str) -> str:
         try:
             result = self.session.run_ps(ps)
-        except WinRMTransportError:
-            self._session = None  # stale session — force reconnect
+        except _WINRM_RETRY:
+            self._session = None
             result = self.session.run_ps(ps)
         if result.status_code != 0:
             raise RuntimeError(result.std_err.decode())
