@@ -54,7 +54,7 @@ class PiholeDNSProvider(DNSProvider):
         cfg = self._dns_config()
 
         # dns.hosts: ["192.168.1.10 hostname", ...]
-        for entry in cfg.get("hosts", {}).get("v", []):
+        for entry in cfg.get("hosts", []):
             parts = entry.split(None, 1)
             if len(parts) == 2:
                 ip, name = parts
@@ -65,7 +65,7 @@ class PiholeDNSProvider(DNSProvider):
                 ))
 
         # dns.cnameRecords: ["alias,target" or "alias,target,ttl", ...]
-        for entry in cfg.get("cnameRecords", {}).get("v", []):
+        for entry in cfg.get("cnameRecords", []):
             parts = entry.split(",")
             if len(parts) >= 2:
                 ttl = int(parts[2]) if len(parts) >= 3 and parts[2].isdigit() else 0
