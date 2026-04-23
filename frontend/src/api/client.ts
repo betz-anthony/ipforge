@@ -88,3 +88,32 @@ export const dnsApi = {
   deleteRecord: (zone: string, record: DNSRecord) =>
     api.delete(`/dns/zones/${zone}/records`, { data: record }),
 }
+
+export interface AppSettings {
+  dns_provider: string
+  dhcp_provider: string
+  ms_winrm_host: string
+  ms_winrm_user: string
+  ms_winrm_password_set: boolean
+  ms_winrm_port: number
+  ms_winrm_transport: string
+  ms_dns_server: string
+  ms_dhcp_server: string
+}
+
+export interface AppSettingsUpdate {
+  dns_provider?: string
+  dhcp_provider?: string
+  ms_winrm_host?: string
+  ms_winrm_user?: string
+  ms_winrm_password?: string
+  ms_winrm_port?: number
+  ms_winrm_transport?: string
+  ms_dns_server?: string
+  ms_dhcp_server?: string
+}
+
+export const settingsApi = {
+  get: () => api.get<AppSettings>('/settings').then(r => r.data),
+  update: (data: AppSettingsUpdate) => api.put<AppSettings>('/settings', data).then(r => r.data),
+}

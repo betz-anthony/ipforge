@@ -1,14 +1,21 @@
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from app.database import engine, Base
+from app.database import engine, Base, SessionLocal
 from app.api import subnets, addresses, dns, dhcp
+from app.api import settings as settings_router
 import app.models  # noqa: F401 — ensures models are registered before create_all
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     Base.metadata.create_all(bind=engine)
+    db = SessionLocal()
+    try:
+        from app.api.settings import apply_db_settings
+        apply_db_settings(db)
+    finally:
+        db.close()
     yield
 
 
@@ -26,3 +33,4 @@ app.include_router(subnets.router, prefix="/api/subnets", tags=["subnets"])
 app.include_router(addresses.router, prefix="/api/addresses", tags=["addresses"])
 app.include_router(dns.router, prefix="/api/dns", tags=["dns"])
 app.include_router(dhcp.router, prefix="/api/dhcp", tags=["dhcp"])
+app.include_router(settings_router.router, prefix="/api/settings", tags=["settings"])
