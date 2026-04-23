@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Plus, X } from 'lucide-react'
 import { dhcpApi, type DHCPScope } from '../api/client'
+import SyncBar from '../components/SyncBar'
 
 const SOURCE_LABEL: Record<string, string> = {
   msdhcp: 'MS DHCP', pihole: 'Pi-hole', keadhcp: 'Kea',
@@ -57,6 +58,7 @@ export default function DHCP() {
     <div>
       <div className="page-header">
         <h1>DHCP</h1>
+        <SyncBar type="dhcp" />
       </div>
 
       <div className="two-panel">
