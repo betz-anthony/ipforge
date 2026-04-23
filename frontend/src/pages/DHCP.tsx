@@ -221,7 +221,7 @@ export default function DHCP() {
                           <td>
                             <button
                               className="btn-danger btn-sm"
-                              onClick={() => deleteMutation.mutate(l.ip_address)}
+                              onClick={() => window.confirm(`Delete reservation for ${l.ip_address}?`) && deleteMutation.mutate(l.ip_address)}
                               disabled={deleteMutation.isPending}
                             >
                               Delete
