@@ -32,6 +32,9 @@ class Settings(BaseSettings):
     kea_url: str = ""           # e.g. http://kea-host:8000
     kea_secret: str = ""        # API key (if auth enabled)
 
+    # Deployment mode: "background" (docker-compose) or "disabled" (K8s CronJob handles sync)
+    sync_mode: str = "background"
+
     class Config:
         env_file = ".env"
 

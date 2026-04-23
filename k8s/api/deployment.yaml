@@ -1,0 +1,64 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api
+  namespace: ipam
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: api
+  template:
+    metadata:
+      labels:
+        app: api
+    spec:
+      initContainers:
+        - name: migrate
+          image: ghcr.io/YOUR_ORG/ipam-api:latest  # replace with your image
+          command: ["alembic", "upgrade", "head"]
+          env:
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: ipam-secret
+                  key: DATABASE_URL
+                  optional: true
+          envFrom:
+            - configMapRef:
+                name: ipam-config
+            - secretRef:
+                name: ipam-secret
+      containers:
+        - name: api
+          image: ghcr.io/YOUR_ORG/ipam-api:latest  # replace with your image
+          ports:
+            - containerPort: 8000
+          env:
+            - name: DATABASE_URL
+              value: postgresql://ipam:$(DB_PASSWORD)@postgres:5432/ipam
+          envFrom:
+            - configMapRef:
+                name: ipam-config
+            - secretRef:
+                name: ipam-secret
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 15
+            periodSeconds: 30
+            failureThreshold: 3
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi

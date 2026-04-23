@@ -25,6 +25,7 @@ env/
 *.keytab
 *.pfx
 *.pem
+k8s/secret.yaml        # contains base64 secrets — use Sealed Secrets or ESO instead
 
 # Logs
 *.log

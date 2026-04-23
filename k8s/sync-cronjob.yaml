@@ -1,0 +1,40 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: ipam-sync
+  namespace: ipam
+spec:
+  schedule: "*/5 * * * *"   # every 5 minutes
+  concurrencyPolicy: Forbid  # skip if previous run still going
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      activeDeadlineSeconds: 240
+      template:
+        spec:
+          restartPolicy: Never
+          containers:
+            - name: sync
+              image: ghcr.io/YOUR_ORG/ipam-api:latest  # same image as api
+              command:
+                - python
+                - -c
+                - |
+                  from app.sync import sync_all
+                  sync_all()
+              env:
+                - name: DATABASE_URL
+                  value: postgresql://ipam:$(DB_PASSWORD)@postgres:5432/ipam
+              envFrom:
+                - configMapRef:
+                    name: ipam-config
+                - secretRef:
+                    name: ipam-secret
+              resources:
+                requests:
+                  cpu: 100m
+                  memory: 256Mi
+                limits:
+                  cpu: 500m
+                  memory: 512Mi

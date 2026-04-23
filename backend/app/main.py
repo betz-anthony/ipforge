@@ -2,27 +2,37 @@ import threading
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from app.database import engine, Base, SessionLocal
+from app.database import SessionLocal
+from app.config import settings as app_settings
 from app.api import subnets, addresses, dns, dhcp
 from app.api import settings as settings_router
 from app.api import sync as sync_router
 from app.api import tools as tools_router
 from app.api import stats as stats_router
-import app.models  # noqa: F401 — ensures models are registered before create_all
+import app.models  # noqa: F401
+
+
+def _run_migrations():
+    from alembic.config import Config
+    from alembic import command
+    import os
+    alembic_cfg = Config(os.path.join(os.path.dirname(__file__), "..", "alembic.ini"))
+    command.upgrade(alembic_cfg, "head")
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    Base.metadata.create_all(bind=engine)
+    _run_migrations()
     db = SessionLocal()
     try:
         from app.api.settings import apply_db_settings
         apply_db_settings(db)
     finally:
         db.close()
-    from app.sync import sync_all, start_background_sync
-    threading.Thread(target=sync_all, daemon=True, name="ipam-initial-sync").start()
-    start_background_sync()
+    if app_settings.sync_mode == "background":
+        from app.sync import sync_all, start_background_sync
+        threading.Thread(target=sync_all, daemon=True, name="ipam-initial-sync").start()
+        start_background_sync()
     yield
 
 
@@ -44,6 +54,11 @@ app.include_router(settings_router.router, prefix="/api/settings", tags=["settin
 app.include_router(sync_router.router, prefix="/api/sync", tags=["sync"])
 app.include_router(tools_router.router, prefix="/api/tools", tags=["tools"])
 app.include_router(stats_router.router, prefix="/api/stats", tags=["stats"])
+
+
+@app.get("/health", tags=["ops"])
+def health():
+    return {"status": "ok"}
 
 
 @app.get("/api/providers", tags=["settings"])
