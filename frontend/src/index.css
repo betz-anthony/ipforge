@@ -399,6 +399,122 @@ th.sortable.sorted .sort-arrow { opacity: 1; color: var(--accent); }
 /* ── Spin animation ──────────────────────────────────── */
 @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
 
+/* ── View toggle ─────────────────────────────────────── */
+.view-toggle {
+  display: inline-flex;
+  border: 1px solid var(--border-2);
+  border-radius: var(--radius-sm);
+  overflow: hidden; flex-shrink: 0;
+}
+.view-toggle button {
+  padding: 0.2rem 0.65rem;
+  font-size: 0.7rem; border-radius: 0;
+  background: transparent; color: var(--text-muted);
+  border: none; border-right: 1px solid var(--border-2);
+  gap: 0; letter-spacing: 0;
+}
+.view-toggle button:last-child { border-right: none; }
+.view-toggle button.active { background: var(--surface-2); color: var(--text-subtle); }
+.view-toggle button:hover:not(.active) { background: rgba(255,255,255,0.03); color: var(--text-muted); }
+
+/* ── Source group header ─────────────────────────────── */
+.source-group-label {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 0.4rem 0; margin: 0.875rem 0 0.375rem;
+  font-size: 0.65rem; text-transform: uppercase;
+  letter-spacing: 0.07em; font-weight: 700; color: var(--text-muted);
+  border-bottom: 1px solid var(--border);
+}
+.source-group-label:first-child { margin-top: 0; }
+
+/* ── Clickable table rows ────────────────────────────── */
+tbody tr.clickable { cursor: pointer; }
+
+/* ── Panel list group label ──────────────────────────── */
+.panel-list-group-label {
+  padding: 0.5rem 0.75rem 0.25rem;
+  font-size: 0.6rem; text-transform: uppercase;
+  letter-spacing: 0.08em; font-weight: 700;
+  color: var(--text-muted);
+  border-top: 1px solid var(--border);
+}
+.panel-list-group-label:first-child { border-top: none; }
+
+/* ── Detail panel ────────────────────────────────────── */
+@keyframes slide-in-right {
+  from { transform: translateX(100%); opacity: 0; }
+  to   { transform: translateX(0);    opacity: 1; }
+}
+.detail-backdrop {
+  position: fixed; inset: 0;
+  background: rgba(2, 6, 23, 0.55);
+  z-index: 200;
+}
+.detail-panel {
+  position: fixed; top: 0; right: 0; bottom: 0;
+  width: 340px; max-width: 90vw;
+  background: var(--surface);
+  border-left: 1px solid var(--border-2);
+  z-index: 201;
+  display: flex; flex-direction: column;
+  animation: slide-in-right 0.18s ease-out;
+}
+.detail-panel-header {
+  display: flex; align-items: flex-start; justify-content: space-between;
+  padding: 1rem 1rem 0.875rem; gap: 0.5rem;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+.detail-panel-title {
+  font-size: 0.875rem; font-weight: 600; color: var(--text);
+  word-break: break-all; line-height: 1.3;
+}
+.detail-panel-subtitle {
+  font-size: 0.7rem; color: var(--text-muted); margin-top: 0.25rem;
+}
+.detail-panel-body {
+  flex: 1; overflow-y: auto;
+  padding: 1rem;
+  display: flex; flex-direction: column; gap: 1.125rem;
+}
+.detail-section-title {
+  font-size: 0.6rem; text-transform: uppercase;
+  letter-spacing: 0.08em; font-weight: 700;
+  color: var(--text-muted); margin-bottom: 0.5rem;
+}
+.detail-fields {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+.detail-field {
+  display: flex; justify-content: space-between; align-items: flex-start;
+  gap: 0.75rem; padding: 0.475rem 0.75rem;
+  border-bottom: 1px solid var(--border); font-size: 0.78rem;
+}
+.detail-field:last-child { border-bottom: none; }
+.detail-field-label { color: var(--text-muted); flex-shrink: 0; }
+.detail-field-value { color: var(--text); text-align: right; word-break: break-all; }
+.ping-card {
+  background: var(--surface-2); border: 1px solid var(--border);
+  border-radius: var(--radius-sm); padding: 0.75rem;
+}
+.ping-host {
+  font-family: var(--font-mono); font-size: 0.72rem;
+  color: var(--text-muted); margin-bottom: 0.5rem;
+}
+.ping-status {
+  display: flex; align-items: center; gap: 0.375rem;
+  font-size: 0.8rem; font-weight: 500;
+}
+.ping-stats {
+  display: flex; gap: 0.75rem; flex-wrap: wrap;
+  font-size: 0.71rem; color: var(--text-muted); margin-top: 0.5rem;
+}
+.ping-stats strong { color: var(--text-subtle); font-weight: 600; }
+.ping-loading { font-size: 0.78rem; color: var(--text-muted); }
+
 /* ── Scrollbar ───────────────────────────────────────── */
 ::-webkit-scrollbar { width: 6px; height: 6px; }
 ::-webkit-scrollbar-track { background: transparent; }

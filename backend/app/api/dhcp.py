@@ -29,18 +29,19 @@ def list_scopes(db: Session = Depends(get_db)):
     ]
 
 
-@router.get("/scopes/{scope_id}/leases", response_model=list[DHCPReservation])
+@router.get("/scopes/{scope_id}/leases")
 def list_leases(scope_id: str, source: str = Query(""), db: Session = Depends(get_db)):
     q = db.query(CachedDHCPLease).filter(CachedDHCPLease.scope_id == scope_id)
     if source:
         q = q.filter(CachedDHCPLease.source == source)
     rows = q.all()
     return [
-        DHCPReservation(
-            scope_id=r.scope_id, ip_address=r.ip_address,
-            mac_address=r.mac_address, client_duid=r.client_duid,
-            iaid=r.iaid, name=r.name, description=r.description,
-        )
+        {
+            "scope_id": r.scope_id, "ip_address": r.ip_address,
+            "mac_address": r.mac_address, "client_duid": r.client_duid,
+            "iaid": r.iaid, "name": r.name, "description": r.description,
+            "synced_at": r.synced_at.isoformat() + "Z" if r.synced_at else None,
+        }
         for r in rows
     ]
 

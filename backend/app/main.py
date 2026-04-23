@@ -6,6 +6,7 @@ from app.database import engine, Base, SessionLocal
 from app.api import subnets, addresses, dns, dhcp
 from app.api import settings as settings_router
 from app.api import sync as sync_router
+from app.api import tools as tools_router
 import app.models  # noqa: F401 — ensures models are registered before create_all
 
 
@@ -40,6 +41,7 @@ app.include_router(dns.router, prefix="/api/dns", tags=["dns"])
 app.include_router(dhcp.router, prefix="/api/dhcp", tags=["dhcp"])
 app.include_router(settings_router.router, prefix="/api/settings", tags=["settings"])
 app.include_router(sync_router.router, prefix="/api/sync", tags=["sync"])
+app.include_router(tools_router.router, prefix="/api/tools", tags=["tools"])
 
 
 @app.get("/api/providers", tags=["settings"])
