@@ -52,6 +52,7 @@ export interface DHCPScope {
   description: string
   active: boolean
   ip_version: number
+  source: string
 }
 
 export interface DHCPReservation {
@@ -70,16 +71,21 @@ export interface DNSRecord {
   value: string
   zone: string
   ttl: number
+  source: string
 }
 
 export const dhcpApi = {
   listScopes: () => api.get<DHCPScope[]>('/dhcp/scopes').then(r => r.data),
-  listLeases: (scope_id: string) =>
-    api.get<DHCPReservation[]>(`/dhcp/scopes/${scope_id}/leases`).then(r => r.data),
-  addReservation: (scope_id: string, data: Omit<DHCPReservation, 'scope_id'>) =>
-    api.post<DHCPReservation>(`/dhcp/scopes/${scope_id}/reservations`, data).then(r => r.data),
-  deleteReservation: (scope_id: string, ip_address: string) =>
-    api.delete(`/dhcp/scopes/${scope_id}/reservations/${ip_address}`),
+  listLeases: (scope_id: string, source: string) =>
+    api.get<DHCPReservation[]>(`/dhcp/scopes/${scope_id}/leases`, { params: { source } }).then(r => r.data),
+  addReservation: (scope_id: string, data: Omit<DHCPReservation, 'scope_id'>, source: string) =>
+    api.post<DHCPReservation>(`/dhcp/scopes/${scope_id}/reservations`, data, { params: { source } }).then(r => r.data),
+  deleteReservation: (scope_id: string, ip_address: string, source: string) =>
+    api.delete(`/dhcp/scopes/${scope_id}/reservations/${ip_address}`, { params: { source } }),
+}
+
+export const providersApi = {
+  get: () => api.get<{ dns: string[]; dhcp: string[] }>('/providers').then(r => r.data),
 }
 
 export const dnsApi = {

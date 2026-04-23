@@ -8,9 +8,11 @@ class DNSRecord(BaseModel):
     value: str
     zone: str = ""
     ttl: int = 3600
+    source: str = ""
 
 
 class DNSProvider(ABC):
+    source: str = ""
     @abstractmethod
     def get_zones(self) -> list[str]: ...
 

@@ -8,6 +8,7 @@ from app.providers.dhcp.base import DHCPProvider, DHCPScope, DHCPReservation
 
 
 class KeaDHCPProvider(DHCPProvider):
+    source = "keadhcp"
 
     def _cmd(self, command: str, service: str = "dhcp4", arguments: dict | None = None) -> dict:
         body: dict = {"command": command, "service": [service]}

@@ -1,7 +1,7 @@
 import { useState, useMemo } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { SlidersHorizontal, Plus, X, Trash2 } from 'lucide-react'
-import { dnsApi, type DNSRecord } from '../api/client'
+import { dnsApi, providersApi, type DNSRecord } from '../api/client'
 
 const RECORD_TYPES = ['A', 'AAAA', 'CNAME', 'PTR', 'MX', 'TXT', 'NS']
 
@@ -15,10 +15,14 @@ const TYPE_BADGE: Record<string, string> = {
   NS:    'badge-gray',
 }
 
+const SOURCE_LABEL: Record<string, string> = {
+  msdns: 'MS DNS', pihole: 'Pi-hole', bind: 'BIND',
+}
+
 type SortCol = 'name' | 'record_type' | 'value' | 'ttl'
 type SortDir = 'asc' | 'desc'
 
-const emptyForm = { name: '', record_type: 'A', value: '', ttl: 3600 }
+const emptyForm = { name: '', record_type: 'A', value: '', ttl: 3600, source: '' }
 
 function SortArrow({ col, sortCol, sortDir }: { col: SortCol; sortCol: SortCol | null; sortDir: SortDir }) {
   const active = col === sortCol
@@ -44,6 +48,11 @@ export default function DNS() {
     queryFn: dnsApi.listZones,
   })
 
+  const { data: providers } = useQuery({
+    queryKey: ['providers'],
+    queryFn: providersApi.get,
+  })
+
   const { data: records, isLoading: loadingRecords } = useQuery({
     queryKey: ['dns-records', selectedZone],
     queryFn: () => dnsApi.listRecords(selectedZone!),
@@ -54,7 +63,7 @@ export default function DNS() {
     mutationFn: () => dnsApi.createRecord(selectedZone!, form),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['dns-records', selectedZone] })
-      setForm(emptyForm)
+      setForm(f => ({ ...emptyForm, source: f.source }))
       setShowForm(false)
     },
   })
@@ -64,7 +73,6 @@ export default function DNS() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ['dns-records', selectedZone] }),
   })
 
-  // unique types present in zone for chip row
   const presentTypes = useMemo(
     () => [...new Set((records ?? []).map(r => r.record_type))].sort(),
     [records]
@@ -106,6 +114,9 @@ export default function DNS() {
     className: 'sortable' + (sortCol === col ? ' sorted' : ''),
     onClick: () => handleSort(col),
   })
+
+  const dnsProviders = providers?.dns ?? []
+  const multiProvider = dnsProviders.length > 1
 
   return (
     <div>
@@ -191,6 +202,16 @@ export default function DNS() {
                       <label>TTL (seconds)</label>
                       <input type="number" value={form.ttl} onChange={set('ttl')} />
                     </div>
+                    {multiProvider && (
+                      <div className="form-field">
+                        <label>Provider</label>
+                        <select value={form.source} onChange={set('source')}>
+                          {dnsProviders.map(p => (
+                            <option key={p} value={p}>{SOURCE_LABEL[p] ?? p}</option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
                   </div>
                   <div className="form-actions">
                     <button
@@ -223,13 +244,14 @@ export default function DNS() {
                         <th {...thProps('record_type')}>Type <SortArrow col="record_type" sortCol={sortCol} sortDir={sortDir} /></th>
                         <th {...thProps('value')}>Value <SortArrow col="value" sortCol={sortCol} sortDir={sortDir} /></th>
                         <th {...thProps('ttl')}>TTL <SortArrow col="ttl" sortCol={sortCol} sortDir={sortDir} /></th>
+                        {multiProvider && <th>Source</th>}
                         <th></th>
                       </tr>
                     </thead>
                     <tbody>
                       {processed.length === 0 && (
                         <tr>
-                          <td colSpan={5} className="empty-state">
+                          <td colSpan={multiProvider ? 6 : 5} className="empty-state">
                             No records{filter || typeFilter ? ' matching filters' : ''}.
                           </td>
                         </tr>
@@ -244,6 +266,15 @@ export default function DNS() {
                           </td>
                           <td><span className="font-mono">{r.value}</span></td>
                           <td><span className="text-muted">{r.ttl}</span></td>
+                          {multiProvider && (
+                            <td>
+                              {r.source && (
+                                <span className="badge badge-gray" style={{ fontSize: '0.65rem' }}>
+                                  {SOURCE_LABEL[r.source] ?? r.source}
+                                </span>
+                              )}
+                            </td>
+                          )}
                           <td>
                             <button
                               className="btn-danger btn-sm"

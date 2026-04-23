@@ -4,29 +4,39 @@ from app.providers.dns.base import DNSProvider
 from app.providers.dhcp.base import DHCPProvider
 
 
-@lru_cache()
-def get_dns_provider() -> DNSProvider:
-    if settings.dns_provider == "msdns":
+def _make_dns_provider(name: str) -> DNSProvider:
+    name = name.strip()
+    if name == "msdns":
         from app.providers.dns.msdns import MSDNSProvider
         return MSDNSProvider()
-    if settings.dns_provider == "pihole":
+    if name == "pihole":
         from app.providers.dns.pihole import PiholeDNSProvider
         return PiholeDNSProvider()
-    if settings.dns_provider == "bind":
+    if name == "bind":
         from app.providers.dns.bind import BINDDNSProvider
         return BINDDNSProvider()
-    raise ValueError(f"Unknown DNS provider: {settings.dns_provider}")
+    raise ValueError(f"Unknown DNS provider: {name}")
+
+
+def _make_dhcp_provider(name: str) -> DHCPProvider:
+    name = name.strip()
+    if name == "msdhcp":
+        from app.providers.dhcp.msdhcp import MSDHCPProvider
+        return MSDHCPProvider()
+    if name == "pihole":
+        from app.providers.dhcp.pihole import PiholeDHCPProvider
+        return PiholeDHCPProvider()
+    if name == "keadhcp":
+        from app.providers.dhcp.isc import KeaDHCPProvider
+        return KeaDHCPProvider()
+    raise ValueError(f"Unknown DHCP provider: {name}")
 
 
 @lru_cache()
-def get_dhcp_provider() -> DHCPProvider:
-    if settings.dhcp_provider == "msdhcp":
-        from app.providers.dhcp.msdhcp import MSDHCPProvider
-        return MSDHCPProvider()
-    if settings.dhcp_provider == "pihole":
-        from app.providers.dhcp.pihole import PiholeDHCPProvider
-        return PiholeDHCPProvider()
-    if settings.dhcp_provider == "keadhcp":
-        from app.providers.dhcp.isc import KeaDHCPProvider
-        return KeaDHCPProvider()
-    raise ValueError(f"Unknown DHCP provider: {settings.dhcp_provider}")
+def get_dns_providers() -> list[DNSProvider]:
+    return [_make_dns_provider(n) for n in settings.dns_provider.split(",") if n.strip()]
+
+
+@lru_cache()
+def get_dhcp_providers() -> list[DHCPProvider]:
+    return [_make_dhcp_provider(n) for n in settings.dhcp_provider.split(",") if n.strip()]

@@ -3,6 +3,10 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Plus, X } from 'lucide-react'
 import { dhcpApi, type DHCPScope } from '../api/client'
 
+const SOURCE_LABEL: Record<string, string> = {
+  msdhcp: 'MS DHCP', pihole: 'Pi-hole', keadhcp: 'Kea',
+}
+
 const emptyForm = {
   ip_address: '', mac_address: '', client_duid: '', iaid: 0,
   name: '', description: '',
@@ -22,23 +26,23 @@ export default function DHCP() {
   })
 
   const { data: leases, isLoading: loadingLeases } = useQuery({
-    queryKey: ['dhcp-leases', selectedScope?.scope_id],
-    queryFn: () => dhcpApi.listLeases(selectedScope!.scope_id),
+    queryKey: ['dhcp-leases', selectedScope?.scope_id, selectedScope?.source],
+    queryFn: () => dhcpApi.listLeases(selectedScope!.scope_id, selectedScope!.source),
     enabled: !!selectedScope,
   })
 
   const addMutation = useMutation({
-    mutationFn: () => dhcpApi.addReservation(selectedScope!.scope_id, form),
+    mutationFn: () => dhcpApi.addReservation(selectedScope!.scope_id, form, selectedScope!.source),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['dhcp-leases', selectedScope?.scope_id] })
+      qc.invalidateQueries({ queryKey: ['dhcp-leases', selectedScope?.scope_id, selectedScope?.source] })
       setForm(emptyForm)
       setShowForm(false)
     },
   })
 
   const deleteMutation = useMutation({
-    mutationFn: (ip: string) => dhcpApi.deleteReservation(selectedScope!.scope_id, ip),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['dhcp-leases', selectedScope?.scope_id] }),
+    mutationFn: (ip: string) => dhcpApi.deleteReservation(selectedScope!.scope_id, ip, selectedScope!.source),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['dhcp-leases', selectedScope?.scope_id, selectedScope?.source] }),
   })
 
   const set = (key: keyof typeof emptyForm) =>
@@ -61,8 +65,8 @@ export default function DHCP() {
           {loadingScopes && <p className="loading" style={{ padding: '0.75rem' }}>Loading…</p>}
           {scopes?.map(s => (
             <div
-              key={s.scope_id}
-              className={'panel-list-item' + (selectedScope?.scope_id === s.scope_id ? ' active' : '')}
+              key={`${s.source}:${s.scope_id}`}
+              className={'panel-list-item' + (selectedScope?.scope_id === s.scope_id && selectedScope?.source === s.source ? ' active' : '')}
               onClick={() => { setSelectedScope(s); setShowForm(false); setForm(emptyForm) }}
             >
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
@@ -71,7 +75,14 @@ export default function DHCP() {
                 </span>
                 {s.name}
               </div>
-              <div className="panel-list-item-sub font-mono">{s.scope_id}</div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', marginTop: '2px' }}>
+                <span className="panel-list-item-sub font-mono">{s.scope_id}</span>
+                {s.source && (
+                  <span className="badge badge-gray" style={{ fontSize: '0.55rem' }}>
+                    {SOURCE_LABEL[s.source] ?? s.source}
+                  </span>
+                )}
+              </div>
             </div>
           ))}
           {scopes?.length === 0 && <p className="loading" style={{ padding: '0.75rem' }}>No scopes found.</p>}
@@ -82,7 +93,14 @@ export default function DHCP() {
             <>
               <div className="page-header">
                 <div>
-                  <h1>{selectedScope.name}</h1>
+                  <h1 style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    {selectedScope.name}
+                    {selectedScope.source && (
+                      <span className="badge badge-gray" style={{ fontSize: '0.65rem', fontWeight: 400 }}>
+                        {SOURCE_LABEL[selectedScope.source] ?? selectedScope.source}
+                      </span>
+                    )}
+                  </h1>
                   <p style={{ fontSize: '0.775rem', marginTop: '2px' }}>
                     <span className="font-mono">{selectedScope.scope_id}</span>
                     {selectedScope.ip_version === 4 && selectedScope.start_range &&
