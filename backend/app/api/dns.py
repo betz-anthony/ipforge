@@ -17,14 +17,14 @@ def _utcnow():
 
 @router.get("/zones")
 def list_zones(db: Session = Depends(get_db)):
-    rows = db.query(CachedDNSZone).all()
-    seen: set[str] = set()
-    zones: list[str] = []
-    for r in rows:
-        if r.zone not in seen:
-            seen.add(r.zone)
-            zones.append(r.zone)
-    return zones
+    seen: set[tuple] = set()
+    result: list[dict] = []
+    for r in db.query(CachedDNSZone).order_by(CachedDNSZone.zone).all():
+        key = (r.zone, r.source)
+        if key not in seen:
+            seen.add(key)
+            result.append({"zone": r.zone, "source": r.source})
+    return result
 
 
 @router.get("/zones/{zone}/records")
