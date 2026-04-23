@@ -4,149 +4,267 @@ import { Eye, EyeOff, Save } from 'lucide-react'
 import { settingsApi, type AppSettingsUpdate } from '../api/client'
 
 const TRANSPORT_OPTIONS = ['ntlm', 'kerberos', 'basic', 'certificate', 'credssp']
+const TSIG_ALGORITHMS   = ['hmac-sha256', 'hmac-sha512', 'hmac-sha1', 'hmac-md5']
+
+type FormState = AppSettingsUpdate & {
+  _ms_password:    string
+  _pihole_password: string
+  _bind_secret:    string
+  _kea_secret:     string
+}
+
+const defaults: FormState = {
+  dns_provider: 'msdns', dhcp_provider: 'msdhcp',
+  ms_winrm_host: '', ms_winrm_user: '', ms_winrm_port: 5985,
+  ms_winrm_transport: 'ntlm', ms_dns_server: '', ms_dhcp_server: '',
+  pihole_url: '',
+  bind_host: '', bind_port: 53, bind_tsig_key_name: '',
+  bind_tsig_algorithm: 'hmac-sha256', bind_zones: '',
+  kea_url: '',
+  _ms_password: '', _pihole_password: '', _bind_secret: '', _kea_secret: '',
+}
+
+function Field({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
+  return (
+    <div className="form-field">
+      <label>{label}{hint && <span style={{ color: 'var(--accent)', marginLeft: '0.375rem', fontSize: '0.7rem' }}>{hint}</span>}</label>
+      {children}
+    </div>
+  )
+}
+
+function SecretField({
+  label, value, onChange, placeholder, isSet,
+}: {
+  label: string; value: string; onChange: (v: string) => void
+  placeholder?: string; isSet?: boolean
+}) {
+  const [show, setShow] = useState(false)
+  return (
+    <Field label={label} hint={isSet ? '● set' : undefined}>
+      <div className="password-wrap">
+        <input
+          type={show ? 'text' : 'password'}
+          value={value}
+          onChange={e => onChange(e.target.value)}
+          placeholder={isSet ? 'Leave blank to keep' : (placeholder ?? 'Enter value')}
+        />
+        <button type="button" className="btn-ghost btn-sm" onClick={() => setShow(s => !s)}>
+          {show ? <EyeOff size={13} /> : <Eye size={13} />}
+        </button>
+      </div>
+    </Field>
+  )
+}
+
+function SectionTitle({ children }: { children: React.ReactNode }) {
+  return <div className="settings-section-title">{children}</div>
+}
 
 export default function SettingsPage() {
   const qc = useQueryClient()
   const { data, isLoading } = useQuery({ queryKey: ['settings'], queryFn: settingsApi.get })
-
-  const [form, setForm] = useState<AppSettingsUpdate & { _password: string }>({
-    dns_provider:       'msdns',
-    dhcp_provider:      'msdhcp',
-    ms_winrm_host:      '',
-    ms_winrm_user:      '',
-    _password:          '',
-    ms_winrm_port:      5985,
-    ms_winrm_transport: 'ntlm',
-    ms_dns_server:      '',
-    ms_dhcp_server:     '',
-  })
-  const [showPw, setShowPw] = useState(false)
-  const [saved, setSaved]   = useState(false)
+  const [form, setForm] = useState<FormState>(defaults)
+  const [saved, setSaved] = useState(false)
 
   useEffect(() => {
-    if (data) setForm(f => ({
+    if (!data) return
+    setForm(f => ({
       ...f,
-      dns_provider:       data.dns_provider,
-      dhcp_provider:      data.dhcp_provider,
-      ms_winrm_host:      data.ms_winrm_host,
-      ms_winrm_user:      data.ms_winrm_user,
-      ms_winrm_port:      data.ms_winrm_port,
-      ms_winrm_transport: data.ms_winrm_transport,
-      ms_dns_server:      data.ms_dns_server,
-      ms_dhcp_server:     data.ms_dhcp_server,
+      dns_provider:        data.dns_provider,
+      dhcp_provider:       data.dhcp_provider,
+      ms_winrm_host:       data.ms_winrm_host,
+      ms_winrm_user:       data.ms_winrm_user,
+      ms_winrm_port:       data.ms_winrm_port,
+      ms_winrm_transport:  data.ms_winrm_transport,
+      ms_dns_server:       data.ms_dns_server,
+      ms_dhcp_server:      data.ms_dhcp_server,
+      pihole_url:          data.pihole_url,
+      bind_host:           data.bind_host,
+      bind_port:           data.bind_port,
+      bind_tsig_key_name:  data.bind_tsig_key_name,
+      bind_tsig_algorithm: data.bind_tsig_algorithm,
+      bind_zones:          data.bind_zones,
+      kea_url:             data.kea_url,
     }))
   }, [data])
 
   const mutation = useMutation({
     mutationFn: () => {
       const payload: AppSettingsUpdate = {
-        dns_provider:       form.dns_provider,
-        dhcp_provider:      form.dhcp_provider,
-        ms_winrm_host:      form.ms_winrm_host,
-        ms_winrm_user:      form.ms_winrm_user,
-        ms_winrm_port:      form.ms_winrm_port,
-        ms_winrm_transport: form.ms_winrm_transport,
-        ms_dns_server:      form.ms_dns_server,
-        ms_dhcp_server:     form.ms_dhcp_server,
+        dns_provider:        form.dns_provider,
+        dhcp_provider:       form.dhcp_provider,
+        ms_winrm_host:       form.ms_winrm_host,
+        ms_winrm_user:       form.ms_winrm_user,
+        ms_winrm_port:       form.ms_winrm_port,
+        ms_winrm_transport:  form.ms_winrm_transport,
+        ms_dns_server:       form.ms_dns_server,
+        ms_dhcp_server:      form.ms_dhcp_server,
+        pihole_url:          form.pihole_url,
+        bind_host:           form.bind_host,
+        bind_port:           form.bind_port,
+        bind_tsig_key_name:  form.bind_tsig_key_name,
+        bind_tsig_algorithm: form.bind_tsig_algorithm,
+        bind_zones:          form.bind_zones,
+        kea_url:             form.kea_url,
       }
-      if (form._password) payload.ms_winrm_password = form._password
+      if (form._ms_password)    payload.ms_winrm_password  = form._ms_password
+      if (form._pihole_password) payload.pihole_password   = form._pihole_password
+      if (form._bind_secret)    payload.bind_tsig_key_secret = form._bind_secret
+      if (form._kea_secret)     payload.kea_secret         = form._kea_secret
       return settingsApi.update(payload)
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['settings'] })
-      setForm(f => ({ ...f, _password: '' }))
+      setForm(f => ({ ...f, _ms_password: '', _pihole_password: '', _bind_secret: '', _kea_secret: '' }))
       setSaved(true)
       setTimeout(() => setSaved(false), 3000)
     },
   })
 
-  const set = (key: keyof typeof form) =>
+  const s = <K extends keyof FormState>(key: K) =>
     (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
-      setForm(f => ({ ...f, [key]: key === 'ms_winrm_port' ? Number(e.target.value) : e.target.value }))
+      setForm(f => ({ ...f, [key]: (key === 'ms_winrm_port' || key === 'bind_port') ? Number(e.target.value) : e.target.value }))
+
+  const needsWinRM = form.dns_provider === 'msdns' || form.dhcp_provider === 'msdhcp'
+  const needsPihole = form.dns_provider === 'pihole' || form.dhcp_provider === 'pihole'
 
   if (isLoading) return <p className="loading">Loading…</p>
 
   return (
-    <div style={{ maxWidth: '720px' }}>
-      <div className="page-header">
-        <h1>Settings</h1>
-      </div>
+    <div style={{ maxWidth: '760px' }}>
+      <div className="page-header"><h1>Settings</h1></div>
 
       <form onSubmit={e => { e.preventDefault(); mutation.mutate() }}>
 
+        {/* ── Provider selection ── */}
         <div className="settings-section">
-          <div className="settings-section-title">WinRM Connection</div>
+          <SectionTitle>Providers</SectionTitle>
           <div className="form-grid">
-            <div className="form-field">
-              <label>Host</label>
-              <input value={form.ms_winrm_host ?? ''} onChange={set('ms_winrm_host')} placeholder="dc.domain.local" />
+            <Field label="DNS Provider">
+              <select value={form.dns_provider ?? 'msdns'} onChange={s('dns_provider')}>
+                <option value="msdns">Microsoft DNS</option>
+                <option value="pihole">Pi-hole v6</option>
+                <option value="bind">BIND (dnspython)</option>
+              </select>
+            </Field>
+            <Field label="DHCP Provider">
+              <select value={form.dhcp_provider ?? 'msdhcp'} onChange={s('dhcp_provider')}>
+                <option value="msdhcp">Microsoft DHCP</option>
+                <option value="pihole">Pi-hole v6</option>
+                <option value="keadhcp">ISC Kea</option>
+              </select>
+            </Field>
+          </div>
+        </div>
+
+        {/* ── Microsoft WinRM ── */}
+        {needsWinRM && (
+          <div className="settings-section">
+            <SectionTitle>WinRM Connection</SectionTitle>
+            <div className="form-grid">
+              <Field label="Host">
+                <input value={form.ms_winrm_host ?? ''} onChange={s('ms_winrm_host')} placeholder="dc.domain.local" />
+              </Field>
+              <Field label="Username">
+                <input value={form.ms_winrm_user ?? ''} onChange={s('ms_winrm_user')} placeholder="DOMAIN\svcaccount" />
+              </Field>
+              <SecretField
+                label="Password" value={form._ms_password}
+                onChange={v => setForm(f => ({ ...f, _ms_password: v }))}
+                isSet={data?.ms_winrm_password_set}
+              />
+              <Field label="Port">
+                <input type="number" value={form.ms_winrm_port ?? 5985} onChange={s('ms_winrm_port')} />
+              </Field>
+              <Field label="Transport">
+                <select value={form.ms_winrm_transport ?? 'ntlm'} onChange={s('ms_winrm_transport')}>
+                  {TRANSPORT_OPTIONS.map(t => <option key={t} value={t}>{t}</option>)}
+                </select>
+              </Field>
+              {form.dns_provider === 'msdns' && (
+                <Field label="DNS Server">
+                  <input value={form.ms_dns_server ?? ''} onChange={s('ms_dns_server')} placeholder="dns.domain.local" />
+                </Field>
+              )}
+              {form.dhcp_provider === 'msdhcp' && (
+                <Field label="DHCP Server">
+                  <input value={form.ms_dhcp_server ?? ''} onChange={s('ms_dhcp_server')} placeholder="dhcp.domain.local" />
+                </Field>
+              )}
             </div>
-            <div className="form-field">
-              <label>Username</label>
-              <input value={form.ms_winrm_user ?? ''} onChange={set('ms_winrm_user')} placeholder="DOMAIN\svcaccount" />
+          </div>
+        )}
+
+        {/* ── Pi-hole ── */}
+        {needsPihole && (
+          <div className="settings-section">
+            <SectionTitle>Pi-hole v6</SectionTitle>
+            <div className="form-grid">
+              <Field label="URL">
+                <input value={form.pihole_url ?? ''} onChange={s('pihole_url')} placeholder="http://192.168.1.1" />
+              </Field>
+              <SecretField
+                label="Admin Password" value={form._pihole_password}
+                onChange={v => setForm(f => ({ ...f, _pihole_password: v }))}
+                isSet={data?.pihole_password_set}
+              />
             </div>
-            <div className="form-field">
-              <label>
-                Password{data?.ms_winrm_password_set
-                  ? <span style={{ color: 'var(--accent)', marginLeft: '0.375rem', fontSize: '0.7rem' }}>● set</span>
-                  : null}
-              </label>
-              <div className="password-wrap">
+          </div>
+        )}
+
+        {/* ── BIND ── */}
+        {form.dns_provider === 'bind' && (
+          <div className="settings-section">
+            <SectionTitle>BIND DNS</SectionTitle>
+            <div className="form-grid">
+              <Field label="Nameserver Host">
+                <input value={form.bind_host ?? ''} onChange={s('bind_host')} placeholder="ns1.domain.local" />
+              </Field>
+              <Field label="Port">
+                <input type="number" value={form.bind_port ?? 53} onChange={s('bind_port')} />
+              </Field>
+              <Field label="TSIG Key Name">
+                <input value={form.bind_tsig_key_name ?? ''} onChange={s('bind_tsig_key_name')} placeholder="ipam-key" />
+              </Field>
+              <SecretField
+                label="TSIG Key Secret (base64)" value={form._bind_secret}
+                onChange={v => setForm(f => ({ ...f, _bind_secret: v }))}
+                isSet={data?.bind_tsig_key_secret_set}
+              />
+              <Field label="TSIG Algorithm">
+                <select value={form.bind_tsig_algorithm ?? 'hmac-sha256'} onChange={s('bind_tsig_algorithm')}>
+                  {TSIG_ALGORITHMS.map(a => <option key={a} value={a}>{a}</option>)}
+                </select>
+              </Field>
+              <Field label="Zones (comma-separated)" hint="required">
                 <input
-                  type={showPw ? 'text' : 'password'}
-                  value={form._password}
-                  onChange={e => setForm(f => ({ ...f, _password: e.target.value }))}
-                  placeholder={data?.ms_winrm_password_set ? 'Leave blank to keep' : 'Enter password'}
+                  value={form.bind_zones ?? ''}
+                  onChange={s('bind_zones')}
+                  placeholder="example.com, 1.168.192.in-addr.arpa"
                 />
-                <button type="button" className="btn-ghost btn-sm" onClick={() => setShowPw(s => !s)}>
-                  {showPw ? <EyeOff size={13} /> : <Eye size={13} />}
-                </button>
-              </div>
-            </div>
-            <div className="form-field">
-              <label>Port</label>
-              <input type="number" value={form.ms_winrm_port ?? 5985} onChange={set('ms_winrm_port')} />
-            </div>
-            <div className="form-field">
-              <label>Transport</label>
-              <select value={form.ms_winrm_transport ?? 'ntlm'} onChange={set('ms_winrm_transport')}>
-                {TRANSPORT_OPTIONS.map(t => <option key={t} value={t}>{t}</option>)}
-              </select>
+              </Field>
             </div>
           </div>
-        </div>
+        )}
 
-        <div className="settings-section">
-          <div className="settings-section-title">DNS</div>
-          <div className="form-grid">
-            <div className="form-field">
-              <label>Provider</label>
-              <select value={form.dns_provider ?? 'msdns'} onChange={set('dns_provider')}>
-                <option value="msdns">msdns — Microsoft DNS</option>
-              </select>
-            </div>
-            <div className="form-field">
-              <label>DNS Server</label>
-              <input value={form.ms_dns_server ?? ''} onChange={set('ms_dns_server')} placeholder="dns.domain.local" />
-            </div>
-          </div>
-        </div>
-
-        <div className="settings-section">
-          <div className="settings-section-title">DHCP</div>
-          <div className="form-grid">
-            <div className="form-field">
-              <label>Provider</label>
-              <select value={form.dhcp_provider ?? 'msdhcp'} onChange={set('dhcp_provider')}>
-                <option value="msdhcp">msdhcp — Microsoft DHCP</option>
-              </select>
-            </div>
-            <div className="form-field">
-              <label>DHCP Server</label>
-              <input value={form.ms_dhcp_server ?? ''} onChange={set('ms_dhcp_server')} placeholder="dhcp.domain.local" />
+        {/* ── ISC Kea ── */}
+        {form.dhcp_provider === 'keadhcp' && (
+          <div className="settings-section">
+            <SectionTitle>ISC Kea Control Agent</SectionTitle>
+            <div className="form-grid">
+              <Field label="Control Agent URL">
+                <input value={form.kea_url ?? ''} onChange={s('kea_url')} placeholder="http://kea-host:8000" />
+              </Field>
+              <SecretField
+                label="API Secret (if auth enabled)" value={form._kea_secret}
+                onChange={v => setForm(f => ({ ...f, _kea_secret: v }))}
+                isSet={data?.kea_secret_set}
+                placeholder="Leave blank if no auth"
+              />
             </div>
           </div>
-        </div>
+        )}
 
         <div className="form-actions">
           <button type="submit" className="btn-primary" disabled={mutation.isPending}>
@@ -155,9 +273,7 @@ export default function SettingsPage() {
           </button>
           {saved && <span className="feedback-success">Saved.</span>}
           {mutation.isError && (
-            <span className="feedback-error">
-              {String((mutation.error as Error).message)}
-            </span>
+            <span className="feedback-error">{String((mutation.error as Error).message)}</span>
           )}
         </div>
       </form>
