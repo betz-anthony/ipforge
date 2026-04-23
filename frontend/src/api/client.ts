@@ -95,6 +95,7 @@ export const dnsApi = {
 export interface AppSettings {
   dns_provider: string
   dhcp_provider: string
+  // MS
   ms_winrm_host: string
   ms_winrm_user: string
   ms_winrm_password_set: boolean
@@ -102,11 +103,25 @@ export interface AppSettings {
   ms_winrm_transport: string
   ms_dns_server: string
   ms_dhcp_server: string
+  // Pi-hole
+  pihole_url: string
+  pihole_password_set: boolean
+  // BIND
+  bind_host: string
+  bind_port: number
+  bind_tsig_key_name: string
+  bind_tsig_key_secret_set: boolean
+  bind_tsig_algorithm: string
+  bind_zones: string
+  // Kea
+  kea_url: string
+  kea_secret_set: boolean
 }
 
 export interface AppSettingsUpdate {
   dns_provider?: string
   dhcp_provider?: string
+  // MS
   ms_winrm_host?: string
   ms_winrm_user?: string
   ms_winrm_password?: string
@@ -114,6 +129,19 @@ export interface AppSettingsUpdate {
   ms_winrm_transport?: string
   ms_dns_server?: string
   ms_dhcp_server?: string
+  // Pi-hole
+  pihole_url?: string
+  pihole_password?: string
+  // BIND
+  bind_host?: string
+  bind_port?: number
+  bind_tsig_key_name?: string
+  bind_tsig_key_secret?: string
+  bind_tsig_algorithm?: string
+  bind_zones?: string
+  // Kea
+  kea_url?: string
+  kea_secret?: string
 }
 
 export const settingsApi = {
