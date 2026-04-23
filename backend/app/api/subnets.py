@@ -8,7 +8,7 @@ from app.schemas.subnet import SubnetCreate, SubnetRead, SubnetUpdate
 router = APIRouter()
 
 
-@router.get("/", response_model=list[SubnetRead])
+@router.get("", response_model=list[SubnetRead])
 def list_subnets(
     ip_version: int | None = Query(None, description="Filter by IP version (4 or 6)"),
     db: Session = Depends(get_db),
@@ -19,7 +19,7 @@ def list_subnets(
     return q.all()
 
 
-@router.post("/", response_model=SubnetRead, status_code=201)
+@router.post("", response_model=SubnetRead, status_code=201)
 def create_subnet(data: SubnetCreate, db: Session = Depends(get_db)):
     try:
         network = ipaddress.ip_network(data.cidr, strict=False)
