@@ -139,7 +139,10 @@ export default function DHCP() {
           ) : (
             [...groupedScopes.entries()].map(([src, scopeList]) => (
               <div key={src}>
-                <div className="panel-list-group-label">{SOURCE_LABEL[src] ?? src}</div>
+                <div className="panel-server-header">
+                  <span>{SOURCE_LABEL[src] ?? src}</span>
+                  <span className="panel-server-count">{scopeList.length}</span>
+                </div>
                 {scopeList.map(s => renderScopeItem(s))}
               </div>
             ))

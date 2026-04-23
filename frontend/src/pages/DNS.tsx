@@ -137,7 +137,15 @@ export default function DNS() {
   })
 
   const dnsProviders = providers?.dns ?? []
-  const multiProvider = dnsProviders.length > 1
+
+  // Derive from actual record sources as primary signal; providers API as fallback.
+  // Records are the ground truth — if two providers have synced data for this zone,
+  // show the toggle even if the providers API hasn't refreshed yet.
+  const recordSources = useMemo(
+    () => [...new Set((records ?? []).map(r => r.source).filter(Boolean))],
+    [records]
+  )
+  const multiProvider = recordSources.length > 1 || dnsProviders.length > 1
 
   const renderTable = (recs: DNSRecord[]) => (
     <div className="table-wrap">
@@ -343,10 +351,12 @@ export default function DNS() {
               ) : (
                 <>
                   {[...groupedByServer.entries()].map(([src, recs]) => (
-                    <div key={src} style={{ marginBottom: '1rem' }}>
-                      <div className="source-group-label">
+                    <div key={src} className="server-group">
+                      <div className="server-group-header">
                         <span>{SOURCE_LABEL[src] ?? src}</span>
-                        <span>{recs.length} record{recs.length !== 1 ? 's' : ''}</span>
+                        <span style={{ fontSize: '0.7rem', fontWeight: 500, letterSpacing: 0, textTransform: 'none', color: 'var(--text-muted)' }}>
+                          {recs.length} record{recs.length !== 1 ? 's' : ''}
+                        </span>
                       </div>
                       {renderTable(recs)}
                     </div>

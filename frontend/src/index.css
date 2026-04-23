@@ -417,28 +417,47 @@ th.sortable.sorted .sort-arrow { opacity: 1; color: var(--accent); }
 .view-toggle button.active { background: var(--surface-2); color: var(--text-subtle); }
 .view-toggle button:hover:not(.active) { background: rgba(255,255,255,0.03); color: var(--text-muted); }
 
-/* ── Source group header ─────────────────────────────── */
-.source-group-label {
-  display: flex; align-items: center; justify-content: space-between;
-  padding: 0.4rem 0; margin: 0.875rem 0 0.375rem;
-  font-size: 0.65rem; text-transform: uppercase;
-  letter-spacing: 0.07em; font-weight: 700; color: var(--text-muted);
-  border-bottom: 1px solid var(--border);
-}
-.source-group-label:first-child { margin-top: 0; }
-
 /* ── Clickable table rows ────────────────────────────── */
 tbody tr.clickable { cursor: pointer; }
 
-/* ── Panel list group label ──────────────────────────── */
-.panel-list-group-label {
-  padding: 0.5rem 0.75rem 0.25rem;
-  font-size: 0.6rem; text-transform: uppercase;
-  letter-spacing: 0.08em; font-weight: 700;
-  color: var(--text-muted);
-  border-top: 1px solid var(--border);
+/* ── DNS records: by-server group ────────────────────── */
+.server-group { margin-bottom: 1.25rem; }
+.server-group:last-child { margin-bottom: 0; }
+.server-group-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 0.55rem 1rem;
+  background: var(--surface-2);
+  border: 1px solid var(--border-2);
+  border-radius: var(--radius) var(--radius) 0 0;
+  font-size: 0.7rem; font-weight: 700;
+  color: var(--text-subtle);
+  text-transform: uppercase; letter-spacing: 0.05em;
 }
-.panel-list-group-label:first-child { border-top: none; }
+.server-group-header + .table-wrap {
+  border-top: none;
+  border-radius: 0 0 var(--radius) var(--radius);
+}
+
+/* ── DHCP scopes: by-server panel group ──────────────── */
+.panel-server-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 0.45rem 0.875rem;
+  background: var(--surface-2);
+  border-top: 2px solid var(--border-2);
+  border-bottom: 1px solid var(--border);
+  font-size: 0.65rem; font-weight: 700;
+  color: var(--text-subtle);
+  text-transform: uppercase; letter-spacing: 0.06em;
+}
+.panel-server-header:first-child { border-top: none; }
+.panel-server-count {
+  font-size: 0.65rem; font-weight: 500; letter-spacing: 0;
+  text-transform: none;
+  background: rgba(100,116,139,0.18);
+  color: var(--text-muted);
+  padding: 0.1rem 0.45rem;
+  border-radius: 99px;
+}
 
 /* ── Detail panel ────────────────────────────────────── */
 @keyframes slide-in-right {
