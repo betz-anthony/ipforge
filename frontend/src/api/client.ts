@@ -154,3 +154,16 @@ export const settingsApi = {
   get: () => api.get<AppSettings>('/settings').then(r => r.data),
   update: (data: AppSettingsUpdate) => api.put<AppSettings>('/settings', data).then(r => r.data),
 }
+
+export interface SyncInfo {
+  synced_at: string | null
+  age_seconds: number | null
+  status: 'ok' | 'error' | 'running' | 'never'
+  error: string | null
+}
+
+export const syncApi = {
+  status: () => api.get<{ dns: SyncInfo; dhcp: SyncInfo }>('/sync/status').then(r => r.data),
+  trigger: (type?: 'dns' | 'dhcp') =>
+    api.post('/sync/trigger', null, { params: type ? { type } : {} }).then(r => r.data),
+}

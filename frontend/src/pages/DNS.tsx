@@ -2,6 +2,7 @@ import { useState, useMemo } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { SlidersHorizontal, Plus, X, Trash2 } from 'lucide-react'
 import { dnsApi, providersApi, type DNSRecord } from '../api/client'
+import SyncBar from '../components/SyncBar'
 
 const RECORD_TYPES = ['A', 'AAAA', 'CNAME', 'PTR', 'MX', 'TXT', 'NS']
 
@@ -120,7 +121,10 @@ export default function DNS() {
 
   return (
     <div>
-      <div className="page-header"><h1>DNS</h1></div>
+      <div className="page-header">
+        <h1>DNS</h1>
+        <SyncBar type="dns" />
+      </div>
 
       <div className="two-panel">
         <div className="panel-list">
