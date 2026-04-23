@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { SlidersHorizontal, Plus, X, Trash2 } from 'lucide-react'
 import { dnsApi, type DNSRecord } from '../api/client'
@@ -15,11 +15,26 @@ const TYPE_BADGE: Record<string, string> = {
   NS:    'badge-gray',
 }
 
+type SortCol = 'name' | 'record_type' | 'value' | 'ttl'
+type SortDir = 'asc' | 'desc'
+
 const emptyForm = { name: '', record_type: 'A', value: '', ttl: 3600 }
+
+function SortArrow({ col, sortCol, sortDir }: { col: SortCol; sortCol: SortCol | null; sortDir: SortDir }) {
+  const active = col === sortCol
+  return (
+    <span className="sort-arrow">
+      {active ? (sortDir === 'asc' ? '▲' : '▼') : '⇅'}
+    </span>
+  )
+}
 
 export default function DNS() {
   const [selectedZone, setSelectedZone] = useState<string | null>(null)
   const [filter, setFilter]             = useState('')
+  const [typeFilter, setTypeFilter]     = useState<string>('')
+  const [sortCol, setSortCol]           = useState<SortCol | null>(null)
+  const [sortDir, setSortDir]           = useState<SortDir>('asc')
   const [showForm, setShowForm]         = useState(false)
   const [form, setForm]                 = useState(emptyForm)
   const qc = useQueryClient()
@@ -49,20 +64,52 @@ export default function DNS() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ['dns-records', selectedZone] }),
   })
 
-  const q = filter.toLowerCase()
-  const filtered: DNSRecord[] = records?.filter(r =>
-    !q || r.name.toLowerCase().includes(q) || r.value.toLowerCase().includes(q) || r.record_type.toLowerCase().includes(q)
-  ) ?? []
+  // unique types present in zone for chip row
+  const presentTypes = useMemo(
+    () => [...new Set((records ?? []).map(r => r.record_type))].sort(),
+    [records]
+  )
+
+  const handleSort = (col: SortCol) => {
+    if (sortCol === col) setSortDir(d => d === 'asc' ? 'desc' : 'asc')
+    else { setSortCol(col); setSortDir('asc') }
+  }
+
+  const processed = useMemo(() => {
+    const q = filter.toLowerCase()
+    let result = (records ?? []).filter(r =>
+      (!q || r.name.toLowerCase().includes(q) || r.value.toLowerCase().includes(q)) &&
+      (!typeFilter || r.record_type === typeFilter)
+    )
+    if (sortCol) {
+      result = [...result].sort((a, b) => {
+        const av = sortCol === 'ttl' ? a.ttl : a[sortCol].toLowerCase()
+        const bv = sortCol === 'ttl' ? b.ttl : b[sortCol].toLowerCase()
+        return av < bv ? (sortDir === 'asc' ? -1 : 1)
+             : av > bv ? (sortDir === 'asc' ?  1 : -1)
+             : 0
+      })
+    }
+    return result
+  }, [records, filter, typeFilter, sortCol, sortDir])
 
   const set = (key: keyof typeof emptyForm) =>
     (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
       setForm(f => ({ ...f, [key]: key === 'ttl' ? Number(e.target.value) : e.target.value }))
 
+  const resetZone = (z: string) => {
+    setSelectedZone(z); setFilter(''); setTypeFilter('')
+    setSortCol(null); setShowForm(false)
+  }
+
+  const thProps = (col: SortCol) => ({
+    className: 'sortable' + (sortCol === col ? ' sorted' : ''),
+    onClick: () => handleSort(col),
+  })
+
   return (
     <div>
-      <div className="page-header">
-        <h1>DNS</h1>
-      </div>
+      <div className="page-header"><h1>DNS</h1></div>
 
       <div className="two-panel">
         <div className="panel-list">
@@ -72,7 +119,7 @@ export default function DNS() {
             <div
               key={z}
               className={'panel-list-item' + (selectedZone === z ? ' active' : '')}
-              onClick={() => { setSelectedZone(z); setFilter(''); setShowForm(false) }}
+              onClick={() => resetZone(z)}
             >
               {z}
             </div>
@@ -89,7 +136,7 @@ export default function DNS() {
                   <div className="filter-bar" style={{ margin: 0 }}>
                     <SlidersHorizontal size={14} style={{ color: 'var(--text-muted)', flexShrink: 0 }} />
                     <input
-                      placeholder="Filter records…"
+                      placeholder="Filter name or value…"
                       value={filter}
                       onChange={e => setFilter(e.target.value)}
                       style={{ width: '200px' }}
@@ -102,6 +149,26 @@ export default function DNS() {
                   )}
                 </div>
               </div>
+
+              {presentTypes.length > 0 && (
+                <div className="type-chips">
+                  <button
+                    className={'type-chip' + (!typeFilter ? ' active' : '')}
+                    onClick={() => setTypeFilter('')}
+                  >
+                    All ({(records ?? []).length})
+                  </button>
+                  {presentTypes.map(t => (
+                    <button
+                      key={t}
+                      className={'type-chip' + (typeFilter === t ? ' active' : '')}
+                      onClick={() => setTypeFilter(typeFilter === t ? '' : t)}
+                    >
+                      {t} ({(records ?? []).filter(r => r.record_type === t).length})
+                    </button>
+                  ))}
+                </div>
+              )}
 
               {showForm && (
                 <div className="inline-form">
@@ -152,18 +219,22 @@ export default function DNS() {
                   <table>
                     <thead>
                       <tr>
-                        <th>Name</th>
-                        <th>Type</th>
-                        <th>Value</th>
-                        <th>TTL</th>
+                        <th {...thProps('name')}>Name <SortArrow col="name" sortCol={sortCol} sortDir={sortDir} /></th>
+                        <th {...thProps('record_type')}>Type <SortArrow col="record_type" sortCol={sortCol} sortDir={sortDir} /></th>
+                        <th {...thProps('value')}>Value <SortArrow col="value" sortCol={sortCol} sortDir={sortDir} /></th>
+                        <th {...thProps('ttl')}>TTL <SortArrow col="ttl" sortCol={sortCol} sortDir={sortDir} /></th>
                         <th></th>
                       </tr>
                     </thead>
                     <tbody>
-                      {filtered.length === 0 && (
-                        <tr><td colSpan={5} className="empty-state">No records{filter ? ' matching filter' : ''}.</td></tr>
+                      {processed.length === 0 && (
+                        <tr>
+                          <td colSpan={5} className="empty-state">
+                            No records{filter || typeFilter ? ' matching filters' : ''}.
+                          </td>
+                        </tr>
                       )}
-                      {filtered.map((r, i) => (
+                      {processed.map((r, i) => (
                         <tr key={i}>
                           <td><span className="font-mono">{r.name}</span></td>
                           <td>
