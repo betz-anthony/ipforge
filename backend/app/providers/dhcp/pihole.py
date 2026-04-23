@@ -1,9 +1,11 @@
 import requests
+from urllib.parse import quote
 from app.config import settings
 from app.providers.dhcp.base import DHCPProvider, DHCPScope, DHCPReservation
 
 # Pi-hole v6 DHCP provider.
-# Static reservations are managed via PATCH /api/config (dhcp.hosts array).
+# Static reservations: PUT/DELETE /api/config/dhcp/hosts/{mac,ip[,name]}
+# Active leases:       GET /api/dhcp/leases  (field: hwaddr, not mac)
 
 
 class PiholeDHCPProvider(DHCPProvider):
@@ -21,8 +23,7 @@ class PiholeDHCPProvider(DHCPProvider):
         r = requests.post(
             f"{self._base}/api/auth",
             json={"password": settings.pihole_password},
-            verify=False,
-            timeout=10,
+            verify=False, timeout=10,
         )
         r.raise_for_status()
         return r.json()["session"]["sid"]
@@ -41,14 +42,15 @@ class PiholeDHCPProvider(DHCPProvider):
         r.raise_for_status()
         return r
 
-    def _dhcp_config(self) -> dict:
-        return self._req("GET", "/config/dhcp").json().get("config", {}).get("dhcp", {})
+    def _dhcp_cfg(self) -> dict:
+        data = self._req("GET", "/config/dhcp").json()
+        return data.get("config", {}).get("dhcp", {})
 
-    def _static_hosts(self) -> list[dict]:
-        return self._dhcp_config().get("hosts", {}).get("v", [])
+    def _static_hosts_raw(self) -> list[str]:
+        return self._dhcp_cfg().get("hosts", {}).get("v", [])
 
     def get_scopes(self) -> list[DHCPScope]:
-        cfg = self._dhcp_config()
+        cfg = self._dhcp_cfg()
         return [DHCPScope(
             scope_id=self.SCOPE_ID,
             name="Pi-hole DHCP",
@@ -65,21 +67,22 @@ class PiholeDHCPProvider(DHCPProvider):
             DHCPReservation(
                 scope_id=scope_id,
                 ip_address=l.get("ip", ""),
-                mac_address=l.get("mac", ""),
+                mac_address=l.get("hwaddr", ""),
                 name=l.get("name", "") or l.get("hostname", ""),
             )
             for l in leases
         ]
 
     def add_reservation(self, reservation: DHCPReservation) -> None:
-        hosts = self._static_hosts()
-        hosts.append({
-            "ip": reservation.ip_address,
-            "mac": reservation.mac_address,
-            "name": reservation.name,
-        })
-        self._req("PATCH", "/config", json={"dhcp": {"hosts": hosts}})
+        entry = f"{reservation.mac_address},{reservation.ip_address}"
+        if reservation.name:
+            entry += f",{reservation.name}"
+        self._req("PUT", f"/config/dhcp/hosts/{quote(entry, safe='')}")
 
     def delete_reservation(self, scope_id: str, ip_address: str) -> None:
-        hosts = [h for h in self._static_hosts() if h.get("ip") != ip_address]
-        self._req("PATCH", "/config", json={"dhcp": {"hosts": hosts}})
+        for entry in self._static_hosts_raw():
+            parts = entry.split(",")
+            if len(parts) >= 2 and parts[1] == ip_address:
+                self._req("DELETE", f"/config/dhcp/hosts/{quote(entry, safe='')}")
+                return
+        raise RuntimeError(f"No static reservation found for {ip_address}")
