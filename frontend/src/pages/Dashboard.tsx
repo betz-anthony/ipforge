@@ -1,96 +1,69 @@
 import { useQuery } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
+import { Network, List, Server, Globe, Search } from 'lucide-react'
 import { subnetsApi, addressesApi } from '../api/client'
 
-interface StatCardProps {
-  label: string
-  value: number | string
-}
+const TILES = [
+  { to: '/subnets',   icon: Network, title: 'Subnets',   desc: 'Manage IP subnets and CIDRs' },
+  { to: '/addresses', icon: List,    title: 'Addresses', desc: 'Track IP address assignments' },
+  { to: '/dhcp',      icon: Server,  title: 'DHCP',      desc: 'Scopes, leases, and reservations' },
+  { to: '/dns',       icon: Globe,   title: 'DNS',        desc: 'Zones and resource records' },
+  { to: '/search',    icon: Search,  title: 'Search',    desc: 'Find by IP, MAC, or hostname' },
+]
 
-function StatCard({ label, value }: StatCardProps) {
-  return (
-    <div style={{
-      border: '1px solid #e0e0e0',
-      borderRadius: '6px',
-      padding: '1rem 1.25rem',
-      minWidth: '120px',
-      background: '#fafafa',
-    }}>
-      <div style={{ fontSize: '1.75rem', fontWeight: 700 }}>{value}</div>
-      <div style={{ fontSize: '0.8rem', color: '#666', marginTop: '2px' }}>{label}</div>
-    </div>
-  )
-}
-
-interface NavTileProps {
-  to: string
-  title: string
-  desc: string
-}
-
-function NavTile({ to, title, desc }: NavTileProps) {
-  return (
-    <Link to={to} style={{ textDecoration: 'none', color: 'inherit' }}>
-      <div style={{
-        border: '1px solid #e0e0e0',
-        borderRadius: '6px',
-        padding: '1.25rem',
-        cursor: 'pointer',
-        background: '#fff',
-        transition: 'border-color 0.15s',
-      }}
-        onMouseEnter={e => (e.currentTarget.style.borderColor = '#999')}
-        onMouseLeave={e => (e.currentTarget.style.borderColor = '#e0e0e0')}
-      >
-        <div style={{ fontWeight: 600, marginBottom: '0.25rem' }}>{title}</div>
-        <div style={{ fontSize: '0.85rem', color: '#666' }}>{desc}</div>
-      </div>
-    </Link>
-  )
+function count(val: number | undefined) {
+  return val === undefined ? '—' : val
 }
 
 export default function Dashboard() {
-  const { data: subnets } = useQuery({
-    queryKey: ['subnets'],
-    queryFn: subnetsApi.list,
-  })
+  const { data: subnets }   = useQuery({ queryKey: ['subnets'],   queryFn: subnetsApi.list })
+  const { data: addresses } = useQuery({ queryKey: ['addresses'], queryFn: () => addressesApi.list() })
 
-  const { data: addresses } = useQuery({
-    queryKey: ['addresses'],
-    queryFn: () => addressesApi.list(),
-  })
-
-  const statusCount = (status: string) =>
-    addresses?.filter(a => a.status === status).length ?? '—'
+  const byStatus = (s: string) => addresses?.filter(a => a.status === s).length
 
   return (
     <div>
-      <h1 style={{ fontSize: '1.5rem', marginBottom: '0.25rem' }}>IPAM</h1>
-      <p style={{ color: '#888', marginBottom: '1.5rem', fontSize: '0.9rem' }}>
-        IP Address Management
-      </p>
-
-      <h2 style={{ fontSize: '0.9rem', textTransform: 'uppercase', letterSpacing: '0.05em', color: '#888', marginBottom: '0.75rem' }}>
-        Overview
-      </h2>
-      <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', marginBottom: '2rem' }}>
-        <StatCard label="Subnets" value={subnets?.length ?? '—'} />
-        <StatCard label="Total Addresses" value={addresses?.length ?? '—'} />
-        <StatCard label="Available" value={statusCount('available')} />
-        <StatCard label="Assigned" value={statusCount('assigned')} />
-        <StatCard label="Reserved" value={statusCount('reserved')} />
-        <StatCard label="Deprecated" value={statusCount('deprecated')} />
+      <div className="page-header">
+        <h1>Dashboard</h1>
       </div>
 
-      <h2 style={{ fontSize: '0.9rem', textTransform: 'uppercase', letterSpacing: '0.05em', color: '#888', marginBottom: '0.75rem' }}>
-        Sections
-      </h2>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: '0.75rem' }}>
-        <NavTile to="/subnets"  title="Subnets"    desc="Manage IP subnets and CIDRs" />
-        <NavTile to="/addresses" title="Addresses"  desc="Track IP address assignments" />
-        <NavTile to="/dhcp"     title="DHCP"        desc="Scopes, leases, and reservations" />
-        <NavTile to="/dns"      title="DNS"         desc="Zones and resource records" />
-        <NavTile to="/search"   title="Search"      desc="Find by IP, MAC, or hostname" />
+      <p className="section-label">Overview</p>
+      <div className="stats-grid">
+        <div className="stat-card">
+          <div className="stat-value">{count(subnets?.length)}</div>
+          <div className="stat-label">Subnets</div>
+        </div>
+        <div className="stat-card">
+          <div className="stat-value">{count(addresses?.length)}</div>
+          <div className="stat-label">Total Addresses</div>
+        </div>
+        <div className="stat-card">
+          <div className="stat-value accent">{count(byStatus('available'))}</div>
+          <div className="stat-label">Available</div>
+        </div>
+        <div className="stat-card">
+          <div className="stat-value">{count(byStatus('assigned'))}</div>
+          <div className="stat-label">Assigned</div>
+        </div>
+        <div className="stat-card">
+          <div className="stat-value">{count(byStatus('reserved'))}</div>
+          <div className="stat-label">Reserved</div>
+        </div>
+        <div className="stat-card">
+          <div className="stat-value">{count(byStatus('deprecated'))}</div>
+          <div className="stat-label">Deprecated</div>
+        </div>
+      </div>
+
+      <p className="section-label">Sections</p>
+      <div className="nav-tiles">
+        {TILES.map(({ to, icon: Icon, title, desc }) => (
+          <Link key={to} to={to} className="nav-tile">
+            <div className="nav-tile-icon"><Icon size={18} strokeWidth={1.75} /></div>
+            <div className="nav-tile-title">{title}</div>
+            <div className="nav-tile-desc">{desc}</div>
+          </Link>
+        ))}
       </div>
     </div>
   )
