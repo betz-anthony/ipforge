@@ -362,6 +362,40 @@ select option { background: var(--surface-2); }
 .password-wrap input { flex: 1; }
 .password-wrap button { flex-shrink: 0; width: auto; }
 
+/* ── Sortable table headers ──────────────────────────── */
+th.sortable {
+  cursor: pointer; user-select: none;
+  white-space: nowrap;
+}
+th.sortable:hover { color: var(--text-subtle); }
+th.sortable .sort-arrow {
+  display: inline-block; margin-left: 0.3rem;
+  opacity: 0.35; font-size: 0.65rem;
+  transition: opacity 0.12s;
+}
+th.sortable.sorted .sort-arrow { opacity: 1; color: var(--accent); }
+
+/* ── Type filter chips ───────────────────────────────── */
+.type-chips {
+  display: flex; flex-wrap: wrap; gap: 0.3rem;
+  margin-bottom: 0.875rem;
+}
+.type-chip {
+  display: inline-flex; align-items: center;
+  padding: 0.2rem 0.6rem;
+  border-radius: 99px;
+  font-size: 0.6875rem; font-weight: 500;
+  text-transform: uppercase; letter-spacing: 0.04em;
+  cursor: pointer; border: 1px solid var(--border-2);
+  background: transparent; color: var(--text-muted);
+  transition: all 0.12s;
+}
+.type-chip:hover { border-color: var(--text-muted); color: var(--text-subtle); }
+.type-chip.active {
+  background: var(--accent-dim); color: var(--accent);
+  border-color: rgba(34,197,94,0.3);
+}
+
 /* ── Scrollbar ───────────────────────────────────────── */
 ::-webkit-scrollbar { width: 6px; height: 6px; }
 ::-webkit-scrollbar-track { background: transparent; }
