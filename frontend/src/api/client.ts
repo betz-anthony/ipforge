@@ -51,12 +51,15 @@ export interface DHCPScope {
   end_range: string
   description: string
   active: boolean
+  ip_version: number
 }
 
 export interface DHCPReservation {
   scope_id: string
   ip_address: string
-  mac_address: string
+  mac_address: string  // IPv4
+  client_duid: string  // IPv6
+  iaid: number         // IPv6
   name: string
   description: string
 }
