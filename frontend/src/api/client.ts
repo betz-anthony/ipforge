@@ -63,6 +63,7 @@ export interface DHCPReservation {
   iaid: number         // IPv6
   name: string
   description: string
+  synced_at?: string | null
 }
 
 export interface DNSRecord {
@@ -72,6 +73,21 @@ export interface DNSRecord {
   zone: string
   ttl: number
   source: string
+  synced_at?: string | null
+}
+
+export interface PingResult {
+  host: string
+  reachable: boolean
+  min_ms: number | null
+  avg_ms: number | null
+  max_ms: number | null
+  loss_pct: number
+}
+
+export const toolsApi = {
+  ping: (host: string) =>
+    api.get<PingResult>('/tools/ping', { params: { host } }).then(r => r.data),
 }
 
 export const dhcpApi = {

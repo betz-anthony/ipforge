@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { SlidersHorizontal, Plus, X, Trash2 } from 'lucide-react'
 import { dnsApi, providersApi, type DNSRecord } from '../api/client'
 import SyncBar from '../components/SyncBar'
+import DetailPanel from '../components/DetailPanel'
 
 const RECORD_TYPES = ['A', 'AAAA', 'CNAME', 'PTR', 'MX', 'TXT', 'NS']
 
@@ -20,8 +21,12 @@ const SOURCE_LABEL: Record<string, string> = {
   msdns: 'MS DNS', pihole: 'Pi-hole', bind: 'BIND',
 }
 
+// Record types with a pingable IP/hostname in their value field
+const PINGABLE = new Set(['A', 'AAAA', 'CNAME', 'PTR'])
+
 type SortCol = 'name' | 'record_type' | 'value' | 'ttl'
 type SortDir = 'asc' | 'desc'
+type ViewMode = 'combined' | 'by-server'
 
 const emptyForm = { name: '', record_type: 'A', value: '', ttl: 3600, source: '' }
 
@@ -35,13 +40,15 @@ function SortArrow({ col, sortCol, sortDir }: { col: SortCol; sortCol: SortCol |
 }
 
 export default function DNS() {
-  const [selectedZone, setSelectedZone] = useState<string | null>(null)
-  const [filter, setFilter]             = useState('')
-  const [typeFilter, setTypeFilter]     = useState<string>('')
-  const [sortCol, setSortCol]           = useState<SortCol | null>(null)
-  const [sortDir, setSortDir]           = useState<SortDir>('asc')
-  const [showForm, setShowForm]         = useState(false)
-  const [form, setForm]                 = useState(emptyForm)
+  const [selectedZone, setSelectedZone]   = useState<string | null>(null)
+  const [filter, setFilter]               = useState('')
+  const [typeFilter, setTypeFilter]       = useState<string>('')
+  const [sortCol, setSortCol]             = useState<SortCol | null>(null)
+  const [sortDir, setSortDir]             = useState<SortDir>('asc')
+  const [showForm, setShowForm]           = useState(false)
+  const [form, setForm]                   = useState(emptyForm)
+  const [viewMode, setViewMode]           = useState<ViewMode>('combined')
+  const [selectedRecord, setSelectedRecord] = useState<DNSRecord | null>(null)
   const qc = useQueryClient()
 
   const { data: zones, isLoading: loadingZones } = useQuery({
@@ -71,7 +78,10 @@ export default function DNS() {
 
   const deleteMutation = useMutation({
     mutationFn: (record: DNSRecord) => dnsApi.deleteRecord(selectedZone!, record),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['dns-records', selectedZone] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['dns-records', selectedZone] })
+      setSelectedRecord(null)
+    },
   })
 
   const presentTypes = useMemo(
@@ -102,13 +112,23 @@ export default function DNS() {
     return result
   }, [records, filter, typeFilter, sortCol, sortDir])
 
+  const groupedByServer = useMemo(() => {
+    const groups = new Map<string, DNSRecord[]>()
+    for (const r of processed) {
+      const src = r.source || 'unknown'
+      if (!groups.has(src)) groups.set(src, [])
+      groups.get(src)!.push(r)
+    }
+    return groups
+  }, [processed])
+
   const set = (key: keyof typeof emptyForm) =>
     (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
       setForm(f => ({ ...f, [key]: key === 'ttl' ? Number(e.target.value) : e.target.value }))
 
   const resetZone = (z: string) => {
     setSelectedZone(z); setFilter(''); setTypeFilter('')
-    setSortCol(null); setShowForm(false)
+    setSortCol(null); setShowForm(false); setSelectedRecord(null)
   }
 
   const thProps = (col: SortCol) => ({
@@ -118,6 +138,69 @@ export default function DNS() {
 
   const dnsProviders = providers?.dns ?? []
   const multiProvider = dnsProviders.length > 1
+
+  const renderTable = (recs: DNSRecord[]) => (
+    <div className="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th {...thProps('name')}>Name <SortArrow col="name" sortCol={sortCol} sortDir={sortDir} /></th>
+            <th {...thProps('record_type')}>Type <SortArrow col="record_type" sortCol={sortCol} sortDir={sortDir} /></th>
+            <th {...thProps('value')}>Value <SortArrow col="value" sortCol={sortCol} sortDir={sortDir} /></th>
+            <th {...thProps('ttl')}>TTL <SortArrow col="ttl" sortCol={sortCol} sortDir={sortDir} /></th>
+            {multiProvider && <th>Source</th>}
+            <th style={{ width: '2.5rem' }}></th>
+          </tr>
+        </thead>
+        <tbody>
+          {recs.length === 0 && (
+            <tr>
+              <td colSpan={multiProvider ? 6 : 5} className="empty-state">
+                No records{filter || typeFilter ? ' matching filters' : ''}.
+              </td>
+            </tr>
+          )}
+          {recs.map((r, i) => (
+            <tr
+              key={i}
+              className="clickable"
+              onClick={() => setSelectedRecord(r)}
+            >
+              <td><span className="font-mono">{r.name}</span></td>
+              <td>
+                <span className={`badge ${TYPE_BADGE[r.record_type] ?? 'badge-gray'}`}>
+                  {r.record_type}
+                </span>
+              </td>
+              <td><span className="font-mono">{r.value}</span></td>
+              <td><span className="text-muted">{r.ttl}</span></td>
+              {multiProvider && (
+                <td>
+                  {r.source && (
+                    <span className="badge badge-gray" style={{ fontSize: '0.65rem' }}>
+                      {SOURCE_LABEL[r.source] ?? r.source}
+                    </span>
+                  )}
+                </td>
+              )}
+              <td onClick={e => e.stopPropagation()}>
+                <button
+                  className="btn-danger btn-sm"
+                  onClick={() =>
+                    window.confirm(`Delete ${r.record_type} record "${r.name}"?`) &&
+                    deleteMutation.mutate(r)
+                  }
+                  disabled={deleteMutation.isPending}
+                >
+                  <Trash2 size={12} />
+                </button>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  )
 
   return (
     <div>
@@ -157,6 +240,22 @@ export default function DNS() {
                       style={{ width: '200px' }}
                     />
                   </div>
+                  {multiProvider && (
+                    <div className="view-toggle">
+                      <button
+                        className={viewMode === 'combined' ? 'active' : ''}
+                        onClick={() => setViewMode('combined')}
+                      >
+                        Combined
+                      </button>
+                      <button
+                        className={viewMode === 'by-server' ? 'active' : ''}
+                        onClick={() => setViewMode('by-server')}
+                      >
+                        By Server
+                      </button>
+                    </div>
+                  )}
                   {!showForm && (
                     <button className="btn-primary btn-sm" onClick={() => setShowForm(true)}>
                       <Plus size={13} /> Add Record
@@ -239,60 +338,21 @@ export default function DNS() {
 
               {loadingRecords ? (
                 <p className="loading">Loading records…</p>
+              ) : viewMode === 'combined' ? (
+                renderTable(processed)
               ) : (
-                <div className="table-wrap">
-                  <table>
-                    <thead>
-                      <tr>
-                        <th {...thProps('name')}>Name <SortArrow col="name" sortCol={sortCol} sortDir={sortDir} /></th>
-                        <th {...thProps('record_type')}>Type <SortArrow col="record_type" sortCol={sortCol} sortDir={sortDir} /></th>
-                        <th {...thProps('value')}>Value <SortArrow col="value" sortCol={sortCol} sortDir={sortDir} /></th>
-                        <th {...thProps('ttl')}>TTL <SortArrow col="ttl" sortCol={sortCol} sortDir={sortDir} /></th>
-                        {multiProvider && <th>Source</th>}
-                        <th></th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {processed.length === 0 && (
-                        <tr>
-                          <td colSpan={multiProvider ? 6 : 5} className="empty-state">
-                            No records{filter || typeFilter ? ' matching filters' : ''}.
-                          </td>
-                        </tr>
-                      )}
-                      {processed.map((r, i) => (
-                        <tr key={i}>
-                          <td><span className="font-mono">{r.name}</span></td>
-                          <td>
-                            <span className={`badge ${TYPE_BADGE[r.record_type] ?? 'badge-gray'}`}>
-                              {r.record_type}
-                            </span>
-                          </td>
-                          <td><span className="font-mono">{r.value}</span></td>
-                          <td><span className="text-muted">{r.ttl}</span></td>
-                          {multiProvider && (
-                            <td>
-                              {r.source && (
-                                <span className="badge badge-gray" style={{ fontSize: '0.65rem' }}>
-                                  {SOURCE_LABEL[r.source] ?? r.source}
-                                </span>
-                              )}
-                            </td>
-                          )}
-                          <td>
-                            <button
-                              className="btn-danger btn-sm"
-                              onClick={() => window.confirm(`Delete ${r.record_type} record "${r.name}"?`) && deleteMutation.mutate(r)}
-                              disabled={deleteMutation.isPending}
-                            >
-                              <Trash2 size={12} />
-                            </button>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+                <>
+                  {[...groupedByServer.entries()].map(([src, recs]) => (
+                    <div key={src} style={{ marginBottom: '1rem' }}>
+                      <div className="source-group-label">
+                        <span>{SOURCE_LABEL[src] ?? src}</span>
+                        <span>{recs.length} record{recs.length !== 1 ? 's' : ''}</span>
+                      </div>
+                      {renderTable(recs)}
+                    </div>
+                  ))}
+                  {groupedByServer.size === 0 && renderTable([])}
+                </>
               )}
             </>
           ) : (
@@ -300,6 +360,24 @@ export default function DNS() {
           )}
         </div>
       </div>
+
+      {selectedRecord && (
+        <DetailPanel
+          title={selectedRecord.name}
+          subtitle={`${selectedRecord.record_type} · ${selectedRecord.zone}`}
+          pingTarget={PINGABLE.has(selectedRecord.record_type) ? selectedRecord.value : undefined}
+          fields={[
+            { label: 'Name',   value: <span className="font-mono">{selectedRecord.name}</span> },
+            { label: 'Type',   value: <span className={`badge ${TYPE_BADGE[selectedRecord.record_type] ?? 'badge-gray'}`}>{selectedRecord.record_type}</span> },
+            { label: 'Value',  value: <span className="font-mono">{selectedRecord.value}</span> },
+            { label: 'TTL',    value: `${selectedRecord.ttl}s` },
+            { label: 'Zone',   value: selectedRecord.zone },
+            { label: 'Source', value: (SOURCE_LABEL[selectedRecord.source] ?? selectedRecord.source) || '—' },
+          ]}
+          syncedAt={selectedRecord.synced_at}
+          onClose={() => setSelectedRecord(null)}
+        />
+      )}
     </div>
   )
 }

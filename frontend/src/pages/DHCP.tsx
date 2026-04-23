@@ -1,12 +1,15 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Plus, X } from 'lucide-react'
-import { dhcpApi, type DHCPScope } from '../api/client'
+import { dhcpApi, type DHCPReservation, type DHCPScope } from '../api/client'
 import SyncBar from '../components/SyncBar'
+import DetailPanel from '../components/DetailPanel'
 
 const SOURCE_LABEL: Record<string, string> = {
   msdhcp: 'MS DHCP', pihole: 'Pi-hole', keadhcp: 'Kea',
 }
+
+type ViewMode = 'combined' | 'by-server'
 
 const emptyForm = {
   ip_address: '', mac_address: '', client_duid: '', iaid: 0,
@@ -17,6 +20,8 @@ export default function DHCP() {
   const [selectedScope, setSelectedScope] = useState<DHCPScope | null>(null)
   const [showForm, setShowForm]           = useState(false)
   const [form, setForm]                   = useState(emptyForm)
+  const [viewMode, setViewMode]           = useState<ViewMode>('combined')
+  const [selectedLease, setSelectedLease] = useState<DHCPReservation | null>(null)
   const qc = useQueryClient()
 
   const isV6 = (scope: DHCPScope | null) => scope ? scope.ip_version === 6 : false
@@ -43,8 +48,27 @@ export default function DHCP() {
 
   const deleteMutation = useMutation({
     mutationFn: (ip: string) => dhcpApi.deleteReservation(selectedScope!.scope_id, ip, selectedScope!.source),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['dhcp-leases', selectedScope?.scope_id, selectedScope?.source] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['dhcp-leases', selectedScope?.scope_id, selectedScope?.source] })
+      setSelectedLease(null)
+    },
   })
+
+  const uniqueSources = useMemo(
+    () => [...new Set((scopes ?? []).map(s => s.source).filter(Boolean))],
+    [scopes]
+  )
+  const multiProvider = uniqueSources.length > 1
+
+  const groupedScopes = useMemo(() => {
+    const groups = new Map<string, DHCPScope[]>()
+    for (const s of scopes ?? []) {
+      const src = s.source || 'unknown'
+      if (!groups.has(src)) groups.set(src, [])
+      groups.get(src)!.push(s)
+    }
+    return groups
+  }, [scopes])
 
   const set = (key: keyof typeof emptyForm) =>
     (e: React.ChangeEvent<HTMLInputElement>) =>
@@ -54,39 +78,72 @@ export default function DHCP() {
     isV6(selectedScope) ? form.client_duid : form.mac_address
   )
 
+  const renderScopeItem = (s: DHCPScope) => (
+    <div
+      key={`${s.source}:${s.scope_id}`}
+      className={'panel-list-item' + (
+        selectedScope?.scope_id === s.scope_id && selectedScope?.source === s.source ? ' active' : ''
+      )}
+      onClick={() => { setSelectedScope(s); setShowForm(false); setForm(emptyForm); setSelectedLease(null) }}
+    >
+      <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+        <span className={`badge ${s.ip_version === 6 ? 'badge-blue' : 'badge-green'}`} style={{ fontSize: '0.6rem' }}>
+          IPv{s.ip_version}
+        </span>
+        {s.name}
+      </div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', marginTop: '2px' }}>
+        <span className="panel-list-item-sub font-mono">{s.scope_id}</span>
+        {s.source && viewMode === 'combined' && (
+          <span className="badge badge-gray" style={{ fontSize: '0.55rem' }}>
+            {SOURCE_LABEL[s.source] ?? s.source}
+          </span>
+        )}
+      </div>
+    </div>
+  )
+
   return (
     <div>
       <div className="page-header">
         <h1>DHCP</h1>
-        <SyncBar type="dhcp" />
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.625rem' }}>
+          <SyncBar type="dhcp" />
+        </div>
       </div>
 
       <div className="two-panel">
         <div className="panel-list">
-          <div className="panel-list-header">Scopes</div>
+          <div className="panel-list-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span>Scopes</span>
+            {multiProvider && (
+              <div className="view-toggle">
+                <button
+                  className={viewMode === 'combined' ? 'active' : ''}
+                  onClick={() => setViewMode('combined')}
+                >
+                  All
+                </button>
+                <button
+                  className={viewMode === 'by-server' ? 'active' : ''}
+                  onClick={() => setViewMode('by-server')}
+                >
+                  By Server
+                </button>
+              </div>
+            )}
+          </div>
           {loadingScopes && <p className="loading" style={{ padding: '0.75rem' }}>Loading…</p>}
-          {scopes?.map(s => (
-            <div
-              key={`${s.source}:${s.scope_id}`}
-              className={'panel-list-item' + (selectedScope?.scope_id === s.scope_id && selectedScope?.source === s.source ? ' active' : '')}
-              onClick={() => { setSelectedScope(s); setShowForm(false); setForm(emptyForm) }}
-            >
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                <span className={`badge ${s.ip_version === 6 ? 'badge-blue' : 'badge-green'}`} style={{ fontSize: '0.6rem' }}>
-                  IPv{s.ip_version}
-                </span>
-                {s.name}
+          {viewMode === 'combined' ? (
+            scopes?.map(s => renderScopeItem(s))
+          ) : (
+            [...groupedScopes.entries()].map(([src, scopeList]) => (
+              <div key={src}>
+                <div className="panel-list-group-label">{SOURCE_LABEL[src] ?? src}</div>
+                {scopeList.map(s => renderScopeItem(s))}
               </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', marginTop: '2px' }}>
-                <span className="panel-list-item-sub font-mono">{s.scope_id}</span>
-                {s.source && (
-                  <span className="badge badge-gray" style={{ fontSize: '0.55rem' }}>
-                    {SOURCE_LABEL[s.source] ?? s.source}
-                  </span>
-                )}
-              </div>
-            </div>
-          ))}
+            ))
+          )}
           {scopes?.length === 0 && <p className="loading" style={{ padding: '0.75rem' }}>No scopes found.</p>}
         </div>
 
@@ -211,19 +268,32 @@ export default function DHCP() {
                     </thead>
                     <tbody>
                       {leases?.length === 0 && (
-                        <tr><td colSpan={isV6(selectedScope) ? 6 : 5} className="empty-state">No leases in this scope.</td></tr>
+                        <tr>
+                          <td colSpan={isV6(selectedScope) ? 6 : 5} className="empty-state">
+                            No leases in this scope.
+                          </td>
+                        </tr>
                       )}
                       {leases?.map(l => (
-                        <tr key={l.ip_address}>
+                        <tr
+                          key={l.ip_address}
+                          className="clickable"
+                          onClick={() => setSelectedLease(l)}
+                        >
                           <td><span className="font-mono">{l.ip_address}</span></td>
                           <td><span className="font-mono">{isV6(selectedScope) ? l.client_duid : l.mac_address}</span></td>
-                          {isV6(selectedScope) && <td><span className="font-mono">{l.iaid || <span className="text-muted">—</span>}</span></td>}
+                          {isV6(selectedScope) && (
+                            <td><span className="font-mono">{l.iaid || <span className="text-muted">—</span>}</span></td>
+                          )}
                           <td>{l.name || <span className="text-muted">—</span>}</td>
                           <td>{l.description || <span className="text-muted">—</span>}</td>
-                          <td>
+                          <td onClick={e => e.stopPropagation()}>
                             <button
                               className="btn-danger btn-sm"
-                              onClick={() => window.confirm(`Delete reservation for ${l.ip_address}?`) && deleteMutation.mutate(l.ip_address)}
+                              onClick={() =>
+                                window.confirm(`Delete reservation for ${l.ip_address}?`) &&
+                                deleteMutation.mutate(l.ip_address)
+                              }
                               disabled={deleteMutation.isPending}
                             >
                               Delete
@@ -241,6 +311,29 @@ export default function DHCP() {
           )}
         </div>
       </div>
+
+      {selectedLease && selectedScope && (
+        <DetailPanel
+          title={selectedLease.ip_address}
+          subtitle={`${selectedScope.name} · ${selectedScope.source ? (SOURCE_LABEL[selectedScope.source] ?? selectedScope.source) : ''}`}
+          pingTarget={selectedLease.ip_address}
+          fields={[
+            { label: 'IP Address', value: <span className="font-mono">{selectedLease.ip_address}</span> },
+            isV6(selectedScope)
+              ? { label: 'Client DUID', value: <span className="font-mono">{selectedLease.client_duid || '—'}</span> }
+              : { label: 'MAC',         value: <span className="font-mono">{selectedLease.mac_address || '—'}</span> },
+            ...(isV6(selectedScope)
+              ? [{ label: 'IAID', value: selectedLease.iaid ? String(selectedLease.iaid) : '—' }]
+              : []),
+            { label: 'Hostname',    value: selectedLease.name || '—' },
+            { label: 'Description', value: selectedLease.description || '—' },
+            { label: 'Scope',       value: <span className="font-mono">{selectedScope.scope_id}</span> },
+            { label: 'Source',      value: (SOURCE_LABEL[selectedScope.source] ?? selectedScope.source) || '—' },
+          ]}
+          syncedAt={selectedLease.synced_at}
+          onClose={() => setSelectedLease(null)}
+        />
+      )}
     </div>
   )
 }

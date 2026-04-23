@@ -27,12 +27,15 @@ def list_zones(db: Session = Depends(get_db)):
     return zones
 
 
-@router.get("/zones/{zone}/records", response_model=list[DNSRecord])
+@router.get("/zones/{zone}/records")
 def list_records(zone: str, db: Session = Depends(get_db)):
     rows = db.query(CRow).filter_by(zone=zone).all()
     return [
-        DNSRecord(name=r.name, record_type=r.record_type, value=r.value,
-                  zone=r.zone, ttl=r.ttl, source=r.source)
+        {
+            "name": r.name, "record_type": r.record_type, "value": r.value,
+            "zone": r.zone, "ttl": r.ttl, "source": r.source,
+            "synced_at": r.synced_at.isoformat() + "Z" if r.synced_at else None,
+        }
         for r in rows
     ]
 
