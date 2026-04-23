@@ -1,4 +1,5 @@
 import json
+import threading
 import winrm
 from winrm.exceptions import WinRMTransportError
 from app.config import settings
@@ -16,6 +17,7 @@ class MSDNSProvider(DNSProvider):
 
     def __init__(self):
         self._session = None
+        self._lock = threading.Lock()
 
     @property
     def session(self):
@@ -28,14 +30,15 @@ class MSDNSProvider(DNSProvider):
         return self._session
 
     def _run(self, ps: str) -> str:
-        try:
-            result = self.session.run_ps(ps)
-        except _WINRM_RETRY:
-            self._session = None
-            result = self.session.run_ps(ps)
-        if result.status_code != 0:
-            raise RuntimeError(result.std_err.decode())
-        return result.std_out.decode()
+        with self._lock:
+            try:
+                result = self.session.run_ps(ps)
+            except _WINRM_RETRY:
+                self._session = None
+                result = self.session.run_ps(ps)
+            if result.status_code != 0:
+                raise RuntimeError(result.std_err.decode())
+            return result.std_out.decode()
 
     def get_zones(self) -> list[str]:
         out = self._run(
