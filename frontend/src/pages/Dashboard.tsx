@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
 import { Network, List, Server, Globe, Search } from 'lucide-react'
-import { subnetsApi, addressesApi } from '../api/client'
+import { statsApi } from '../api/client'
 
 const TILES = [
   { to: '/subnets',   icon: Network, title: 'Subnets',   desc: 'Manage IP subnets and CIDRs' },
@@ -12,14 +12,11 @@ const TILES = [
 ]
 
 function count(val: number | undefined) {
-  return val === undefined ? '—' : val
+  return val === undefined ? '—' : val.toLocaleString()
 }
 
 export default function Dashboard() {
-  const { data: subnets }   = useQuery({ queryKey: ['subnets'],   queryFn: subnetsApi.list })
-  const { data: addresses } = useQuery({ queryKey: ['addresses'], queryFn: () => addressesApi.list() })
-
-  const byStatus = (s: string) => addresses?.filter(a => a.status === s).length
+  const { data: stats } = useQuery({ queryKey: ['stats'], queryFn: statsApi.get })
 
   return (
     <div>
@@ -30,28 +27,20 @@ export default function Dashboard() {
       <p className="section-label">Overview</p>
       <div className="stats-grid">
         <div className="stat-card">
-          <div className="stat-value">{count(subnets?.length)}</div>
-          <div className="stat-label">Subnets</div>
+          <div className="stat-value">{count(stats?.dns_zones)}</div>
+          <div className="stat-label">DNS Zones</div>
         </div>
         <div className="stat-card">
-          <div className="stat-value">{count(addresses?.length)}</div>
-          <div className="stat-label">Total Addresses</div>
+          <div className="stat-value">{count(stats?.dns_records)}</div>
+          <div className="stat-label">DNS Records</div>
         </div>
         <div className="stat-card">
-          <div className="stat-value accent">{count(byStatus('available'))}</div>
-          <div className="stat-label">Available</div>
+          <div className="stat-value">{count(stats?.dhcp_scopes)}</div>
+          <div className="stat-label">DHCP Scopes</div>
         </div>
         <div className="stat-card">
-          <div className="stat-value">{count(byStatus('assigned'))}</div>
-          <div className="stat-label">Assigned</div>
-        </div>
-        <div className="stat-card">
-          <div className="stat-value">{count(byStatus('reserved'))}</div>
-          <div className="stat-label">Reserved</div>
-        </div>
-        <div className="stat-card">
-          <div className="stat-value">{count(byStatus('deprecated'))}</div>
-          <div className="stat-label">Deprecated</div>
+          <div className="stat-value accent">{count(stats?.dhcp_leases)}</div>
+          <div className="stat-label">DHCP Leases</div>
         </div>
       </div>
 

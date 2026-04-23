@@ -23,6 +23,20 @@ const SOURCE_LABEL: Record<string, string> = {
 
 const PINGABLE = new Set(['A', 'AAAA', 'CNAME', 'PTR'])
 
+type ZoneType = 'forward' | 'reverse' | 'trust'
+
+const ZONE_GROUPS: { key: ZoneType; label: string }[] = [
+  { key: 'forward', label: 'Forward Lookup Zones' },
+  { key: 'reverse', label: 'Reverse Lookup Zones' },
+  { key: 'trust',   label: 'Trust Points' },
+]
+
+function classifyZone(zone: string): ZoneType {
+  if (zone === 'TrustAnchors') return 'trust'
+  if (zone.endsWith('.in-addr.arpa') || zone.endsWith('.ip6.arpa')) return 'reverse'
+  return 'forward'
+}
+
 type SortCol = 'name' | 'record_type' | 'value' | 'ttl'
 type SortDir = 'asc' | 'desc'
 type ViewMode = 'combined' | 'by-server'
@@ -48,6 +62,7 @@ export default function DNS() {
   const [form, setForm]                     = useState(emptyForm)
   const [viewMode, setViewMode]             = useState<ViewMode>('combined')
   const [selectedRecord, setSelectedRecord] = useState<DNSRecord | null>(null)
+  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set())
   const qc = useQueryClient()
 
   const { data: zones, isLoading: loadingZones } = useQuery({
@@ -250,6 +265,31 @@ export default function DNS() {
     </div>
   )
 
+  const toggleGroup = (key: string) =>
+    setCollapsedGroups(prev => {
+      const next = new Set(prev)
+      next.has(key) ? next.delete(key) : next.add(key)
+      return next
+    })
+
+  const renderZoneTypeGroups = (zoneList: DNSZone[], keyPrefix: string) =>
+    ZONE_GROUPS.map(({ key, label }) => {
+      const items = zoneList.filter(z => classifyZone(z.zone) === key)
+      if (items.length === 0) return null
+      const groupKey = `${keyPrefix}:${key}`
+      const collapsed = collapsedGroups.has(groupKey)
+      return (
+        <div key={groupKey}>
+          <div className="zone-type-header" onClick={() => toggleGroup(groupKey)}>
+            <span className="zone-type-arrow">{collapsed ? '▶' : '▼'}</span>
+            <span>{label}</span>
+            <span className="panel-server-count">{items.length}</span>
+          </div>
+          {!collapsed && items.map(z => renderZoneItem(z, `${keyPrefix}:${z.zone}`))}
+        </div>
+      )
+    })
+
   return (
     <div>
       <div className="page-header">
@@ -280,7 +320,7 @@ export default function DNS() {
           </div>
           {loadingZones && <p className="loading" style={{ padding: '0.75rem' }}>Loading…</p>}
           {viewMode === 'combined' ? (
-            combinedZones.map(z => renderZoneItem(z, z.zone))
+            renderZoneTypeGroups(combinedZones, 'combined')
           ) : (
             [...groupedZones.entries()].map(([src, zoneList]) => (
               <div key={src}>
@@ -288,11 +328,11 @@ export default function DNS() {
                   <span>{SOURCE_LABEL[src] ?? src}</span>
                   <span className="panel-server-count">{zoneList.length}</span>
                 </div>
-                {zoneList.map(z => renderZoneItem(z, `${src}:${z.zone}`))}
+                {renderZoneTypeGroups(zoneList, src)}
               </div>
             ))
           )}
-          {zones?.length === 0 && (
+          {filteredZones.length === 0 && !loadingZones && (
             <p className="loading" style={{ padding: '0.75rem' }}>No zones found.</p>
           )}
         </div>
