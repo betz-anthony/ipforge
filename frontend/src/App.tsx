@@ -29,7 +29,7 @@ export default function App() {
       <aside className="sidebar">
         <div className="sidebar-logo">
           <Network size={18} />
-          IPAM<span className="sidebar-logo-dot">.app</span>
+          IPAM Forge
         </div>
 
         <nav className="sidebar-nav">
