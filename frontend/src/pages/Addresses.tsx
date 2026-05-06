@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Plus, X } from 'lucide-react'
 import { addressesApi, subnetsApi, type IPAddress } from '../api/client'
+import DetailDrawer from '../components/DetailDrawer'
 
 const STATUS_BADGE: Record<string, string> = {
   available:  'badge-green',
@@ -17,10 +18,16 @@ const emptyForm = {
   mac_address: '', description: '',
 }
 
+const emptyEditForm = {
+  hostname: '', status: 'assigned', mac_address: '', description: '', notes: '',
+}
+
 export default function Addresses() {
-  const [showForm, setShowForm]     = useState(false)
-  const [form, setForm]             = useState(emptyForm)
-  const [filterStatus, setFilter]   = useState('')
+  const [showForm, setShowForm]               = useState(false)
+  const [form, setForm]                       = useState(emptyForm)
+  const [filterStatus, setFilter]             = useState('')
+  const [selectedAddress, setSelectedAddress] = useState<IPAddress | null>(null)
+  const [editForm, setEditForm]               = useState(emptyEditForm)
   const qc = useQueryClient()
 
   const { data, isLoading, error } = useQuery({
@@ -41,12 +48,24 @@ export default function Addresses() {
       status:      form.status as IPAddress['status'],
       mac_address: form.mac_address || null,
       description: form.description || null,
+      notes:       null,
     }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['addresses'] })
       setForm(emptyForm)
       setShowForm(false)
     },
+  })
+
+  const updateMutation = useMutation({
+    mutationFn: () => addressesApi.update(selectedAddress!.id, {
+      hostname:    editForm.hostname    || null,
+      status:      editForm.status      as IPAddress['status'],
+      mac_address: editForm.mac_address || null,
+      description: editForm.description || null,
+      notes:       editForm.notes       || null,
+    }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['addresses'] }),
   })
 
   const deleteMutation = useMutation({
@@ -57,6 +76,21 @@ export default function Addresses() {
   const set = (key: keyof typeof emptyForm) =>
     (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
       setForm(f => ({ ...f, [key]: e.target.value }))
+
+  const setEdit = (key: keyof typeof emptyEditForm) =>
+    (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) =>
+      setEditForm(f => ({ ...f, [key]: e.target.value }))
+
+  const openDrawer = (a: IPAddress) => {
+    setSelectedAddress(a)
+    setEditForm({
+      hostname:    a.hostname    ?? '',
+      status:      a.status,
+      mac_address: a.mac_address ?? '',
+      description: a.description ?? '',
+      notes:       a.notes       ?? '',
+    })
+  }
 
   const filtered = filterStatus
     ? (data ?? []).filter(a => a.status === filterStatus)
@@ -161,7 +195,7 @@ export default function Addresses() {
                 </td></tr>
               )}
               {filtered.map((a: IPAddress) => (
-                <tr key={a.id}>
+                <tr key={a.id} className="clickable" onClick={() => openDrawer(a)}>
                   <td><span className="font-mono">{a.address}</span></td>
                   <td>{a.hostname ?? <span className="text-muted">—</span>}</td>
                   <td>
@@ -171,7 +205,7 @@ export default function Addresses() {
                   </td>
                   <td><span className="font-mono">{a.mac_address ?? <span className="text-muted">—</span>}</span></td>
                   <td>{a.description ?? <span className="text-muted">—</span>}</td>
-                  <td>
+                  <td onClick={e => e.stopPropagation()}>
                     <button
                       className="btn-danger btn-sm"
                       onClick={() =>
@@ -188,6 +222,51 @@ export default function Addresses() {
             </tbody>
           </table>
         </div>
+      )}
+
+      {selectedAddress && (
+        <DetailDrawer
+          title={selectedAddress.address}
+          subtitle={selectedAddress.hostname ?? undefined}
+          fields={[
+            { label: 'Address',     value: <span className="font-mono">{selectedAddress.address}</span> },
+            { label: 'Status',      value: <span className={`badge ${STATUS_BADGE[selectedAddress.status]}`}>{selectedAddress.status}</span> },
+            { label: 'MAC',         value: selectedAddress.mac_address ? <span className="font-mono">{selectedAddress.mac_address}</span> : <span className="text-muted">—</span> },
+            { label: 'Description', value: selectedAddress.description ?? <span className="text-muted">—</span> },
+            { label: 'Notes',       value: selectedAddress.notes ?? <span className="text-muted">—</span> },
+          ]}
+          onSave={() => updateMutation.mutate()}
+          isSaving={updateMutation.isPending}
+          onClose={() => setSelectedAddress(null)}
+        >
+          <div className="form-field">
+            <label>Hostname</label>
+            <input value={editForm.hostname} onChange={setEdit('hostname')} />
+          </div>
+          <div className="form-field">
+            <label>Status</label>
+            <select value={editForm.status} onChange={setEdit('status')}>
+              {STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
+            </select>
+          </div>
+          <div className="form-field">
+            <label>MAC Address</label>
+            <input value={editForm.mac_address} onChange={setEdit('mac_address')} />
+          </div>
+          <div className="form-field">
+            <label>Description</label>
+            <input value={editForm.description} onChange={setEdit('description')} />
+          </div>
+          <div className="form-field" style={{ gridColumn: '1 / -1' }}>
+            <label>Notes</label>
+            <textarea
+              value={editForm.notes}
+              onChange={setEdit('notes')}
+              rows={4}
+              style={{ resize: 'vertical', width: '100%' }}
+            />
+          </div>
+        </DetailDrawer>
       )}
     </div>
   )
