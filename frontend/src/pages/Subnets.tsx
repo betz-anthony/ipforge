@@ -2,12 +2,17 @@ import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Plus, X } from 'lucide-react'
 import { subnetsApi, type Subnet } from '../api/client'
+import DetailDrawer from '../components/DetailDrawer'
 
 const emptyForm = { name: '', cidr: '', vlan_id: '', description: '' }
 
+const emptyEditForm = { name: '', vlan_id: '', description: '', notes: '' }
+
 export default function Subnets() {
-  const [showForm, setShowForm] = useState(false)
-  const [form, setForm]         = useState(emptyForm)
+  const [showForm, setShowForm]             = useState(false)
+  const [form, setForm]                     = useState(emptyForm)
+  const [selectedSubnet, setSelectedSubnet] = useState<Subnet | null>(null)
+  const [editForm, setEditForm]             = useState(emptyEditForm)
   const qc = useQueryClient()
 
   const { data, isLoading, error } = useQuery({
@@ -21,13 +26,24 @@ export default function Subnets() {
       cidr:        form.cidr,
       vlan_id:     form.vlan_id ? Number(form.vlan_id) : null,
       description: form.description || null,
-      ip_version:  4,  // derived by backend from CIDR
+      ip_version:  4,
+      notes:       null,
     }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['subnets'] })
       setForm(emptyForm)
       setShowForm(false)
     },
+  })
+
+  const updateMutation = useMutation({
+    mutationFn: () => subnetsApi.update(selectedSubnet!.id, {
+      name:        editForm.name        || undefined,
+      vlan_id:     editForm.vlan_id ? Number(editForm.vlan_id) : null,
+      description: editForm.description || null,
+      notes:       editForm.notes       || null,
+    }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['subnets'] }),
   })
 
   const deleteMutation = useMutation({
@@ -38,6 +54,20 @@ export default function Subnets() {
   const set = (key: keyof typeof emptyForm) =>
     (e: React.ChangeEvent<HTMLInputElement>) =>
       setForm(f => ({ ...f, [key]: e.target.value }))
+
+  const setEdit = (key: keyof typeof emptyEditForm) =>
+    (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
+      setEditForm(f => ({ ...f, [key]: e.target.value }))
+
+  const openDrawer = (s: Subnet) => {
+    setSelectedSubnet(s)
+    setEditForm({
+      name:        s.name,
+      vlan_id:     s.vlan_id != null ? String(s.vlan_id) : '',
+      description: s.description ?? '',
+      notes:       s.notes       ?? '',
+    })
+  }
 
   return (
     <div>
@@ -113,13 +143,13 @@ export default function Subnets() {
                 <tr><td colSpan={6} className="empty-state">No subnets defined. Add one above.</td></tr>
               )}
               {data.map((s: Subnet) => (
-                <tr key={s.id}>
+                <tr key={s.id} className="clickable" onClick={() => openDrawer(s)}>
                   <td>{s.name}</td>
                   <td><span className="font-mono">{s.cidr}</span></td>
                   <td><span className="badge badge-blue">IPv{s.ip_version}</span></td>
                   <td>{s.vlan_id ?? <span className="text-muted">—</span>}</td>
                   <td>{s.description ?? <span className="text-muted">—</span>}</td>
-                  <td>
+                  <td onClick={e => e.stopPropagation()}>
                     <button
                       className="btn-danger btn-sm"
                       onClick={() =>
@@ -136,6 +166,46 @@ export default function Subnets() {
             </tbody>
           </table>
         </div>
+      )}
+
+      {selectedSubnet && (
+        <DetailDrawer
+          title={selectedSubnet.name}
+          subtitle={selectedSubnet.cidr}
+          fields={[
+            { label: 'Name',        value: selectedSubnet.name },
+            { label: 'CIDR',        value: <span className="font-mono">{selectedSubnet.cidr}</span> },
+            { label: 'IP Version',  value: <span className="badge badge-blue">IPv{selectedSubnet.ip_version}</span> },
+            { label: 'VLAN',        value: selectedSubnet.vlan_id ?? <span className="text-muted">—</span> },
+            { label: 'Description', value: selectedSubnet.description ?? <span className="text-muted">—</span> },
+            { label: 'Notes',       value: selectedSubnet.notes ?? <span className="text-muted">—</span> },
+          ]}
+          onSave={() => updateMutation.mutate()}
+          isSaving={updateMutation.isPending}
+          onClose={() => setSelectedSubnet(null)}
+        >
+          <div className="form-field">
+            <label>Name</label>
+            <input value={editForm.name} onChange={setEdit('name')} />
+          </div>
+          <div className="form-field">
+            <label>VLAN ID</label>
+            <input type="number" value={editForm.vlan_id} onChange={setEdit('vlan_id')} />
+          </div>
+          <div className="form-field">
+            <label>Description</label>
+            <input value={editForm.description} onChange={setEdit('description')} />
+          </div>
+          <div className="form-field" style={{ gridColumn: '1 / -1' }}>
+            <label>Notes</label>
+            <textarea
+              value={editForm.notes}
+              onChange={setEdit('notes')}
+              rows={4}
+              style={{ resize: 'vertical', width: '100%' }}
+            />
+          </div>
+        </DetailDrawer>
       )}
     </div>
   )
