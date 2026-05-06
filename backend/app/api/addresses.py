@@ -32,6 +32,14 @@ def create_address(data: AddressCreate, db: Session = Depends(get_db)):
     return address
 
 
+@router.get("/by-ip/{address}", response_model=AddressRead)
+def get_address_by_ip(address: str, db: Session = Depends(get_db)):
+    record = db.query(IPAddress).filter(IPAddress.address == address).first()
+    if not record:
+        raise HTTPException(404, "Address not found")
+    return record
+
+
 @router.get("/{address_id}", response_model=AddressRead)
 def get_address(address_id: int, db: Session = Depends(get_db)):
     address = db.get(IPAddress, address_id)
