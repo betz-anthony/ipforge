@@ -22,6 +22,7 @@ class IPAddress(Base):
     status: Mapped[AddressStatus] = mapped_column(Enum(AddressStatus), default=AddressStatus.available)
     mac_address: Mapped[str | None] = mapped_column(String(17), nullable=True)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 

@@ -13,6 +13,7 @@ class Subnet(Base):
     ip_version: Mapped[int] = mapped_column(Integer, default=4)
     vlan_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
     addresses: Mapped[list["IPAddress"]] = relationship(

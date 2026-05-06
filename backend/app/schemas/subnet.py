@@ -7,12 +7,14 @@ class SubnetCreate(BaseModel):
     cidr: str
     vlan_id: int | None = None
     description: str | None = None
+    notes: str | None = None
 
 
 class SubnetUpdate(BaseModel):
     name: str | None = None
     vlan_id: int | None = None
     description: str | None = None
+    notes: str | None = None
 
 
 class SubnetRead(SubnetCreate):
