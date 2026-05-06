@@ -1,16 +1,21 @@
 import os
-os.environ["DATABASE_URL"] = "sqlite:///./test_ipam.db"
+os.environ["DATABASE_URL"] = "sqlite:///:memory:"
 
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
+from sqlalchemy.pool import StaticPool
 
 from app.main import app
 from app.database import Base, get_db
 
-TEST_DB_URL = "sqlite:///./test_ipam.db"
-test_engine = create_engine(TEST_DB_URL, connect_args={"check_same_thread": False})
+TEST_DB_URL = "sqlite:///:memory:"
+test_engine = create_engine(
+    TEST_DB_URL,
+    connect_args={"check_same_thread": False},
+    poolclass=StaticPool,
+)
 TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=test_engine)
 
 
@@ -27,6 +32,7 @@ def db():
     try:
         yield session
     finally:
+        session.rollback()
         session.close()
 
 
