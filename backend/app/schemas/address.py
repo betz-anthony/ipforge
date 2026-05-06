@@ -20,6 +20,7 @@ class AddressCreate(BaseModel):
     status: AddressStatus = AddressStatus.available
     mac_address: str | None = None
     description: str | None = None
+    notes: str | None = None
 
 
 class AddressUpdate(BaseModel):
@@ -27,6 +28,7 @@ class AddressUpdate(BaseModel):
     status: AddressStatus | None = None
     mac_address: str | None = None
     description: str | None = None
+    notes: str | None = None
 
 
 class AddressRead(AddressCreate):
