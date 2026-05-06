@@ -1,7 +1,7 @@
 import { useState, useMemo } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { SlidersHorizontal, Plus, X, Trash2 } from 'lucide-react'
-import { dnsApi, providersApi, type DNSRecord, type DNSZone } from '../api/client'
+import { dnsApi, providersApi, addressesApi, type DNSRecord, type DNSZone } from '../api/client'
 import SyncBar from '../components/SyncBar'
 import DetailPanel from '../components/DetailPanel'
 
@@ -98,6 +98,13 @@ export default function DNS() {
       qc.invalidateQueries({ queryKey: ['dns-records', selectedZone] })
       setSelectedRecord(null)
     },
+  })
+
+  const ipamQuery = useQuery({
+    queryKey: ['ipam-address', selectedRecord?.value],
+    queryFn: () => addressesApi.byIp(selectedRecord!.value),
+    enabled: !!selectedRecord && ['A', 'AAAA'].includes(selectedRecord.record_type),
+    retry: false,
   })
 
   // Only show zones from configured providers
@@ -471,6 +478,15 @@ export default function DNS() {
             { label: 'TTL',    value: `${selectedRecord.ttl}s` },
             { label: 'Zone',   value: selectedRecord.zone },
             { label: 'Source', value: (SOURCE_LABEL[selectedRecord.source] ?? selectedRecord.source) || '—' },
+            ...(ipamQuery.data?.notes ? [{
+              label: 'Notes',
+              value: (
+                <>
+                  <span className="badge badge-gray" style={{ fontSize: '0.65rem', marginRight: '0.4rem' }}>IPAM</span>
+                  {ipamQuery.data.notes}
+                </>
+              ),
+            }] : []),
           ]}
           syncedAt={selectedRecord.synced_at}
           onClose={() => setSelectedRecord(null)}
