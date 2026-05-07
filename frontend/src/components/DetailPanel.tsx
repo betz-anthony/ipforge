@@ -22,11 +22,12 @@ interface Props {
   subtitle?: string
   pingTarget?: string
   fields: DetailField[]
+  extra?: React.ReactNode
   syncedAt?: string | null
   onClose: () => void
 }
 
-export default function DetailPanel({ title, subtitle, pingTarget, fields, syncedAt, onClose }: Props) {
+export default function DetailPanel({ title, subtitle, pingTarget, fields, extra, syncedAt, onClose }: Props) {
   useEffect(() => {
     const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
     window.addEventListener('keydown', handler)
@@ -116,6 +117,8 @@ export default function DetailPanel({ title, subtitle, pingTarget, fields, synce
               </div>
             )}
           </div>
+
+          {extra}
 
           <div>
             <div className="detail-section-title">Record Info</div>

@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { SlidersHorizontal, Plus, X, Trash2 } from 'lucide-react'
 import { dnsApi, providersApi, addressesApi, type DNSRecord, type DNSZone } from '../api/client'
@@ -63,6 +63,8 @@ export default function DNS() {
   const [viewMode, setViewMode]             = useState<ViewMode>('combined')
   const [selectedRecord, setSelectedRecord] = useState<DNSRecord | null>(null)
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set())
+  const [editingNotes, setEditingNotes]       = useState(false)
+  const [notesValue, setNotesValue]           = useState('')
   const qc = useQueryClient()
 
   const { data: zones, isLoading: loadingZones } = useQuery({
@@ -106,6 +108,19 @@ export default function DNS() {
     enabled: !!selectedRecord && ['A', 'AAAA'].includes(selectedRecord.record_type),
     retry: false,
   })
+
+  const updateNotesMutation = useMutation({
+    mutationFn: () => addressesApi.update(ipamQuery.data!.id, { notes: notesValue || null }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['ipam-address', selectedRecord?.value] })
+      setEditingNotes(false)
+    },
+  })
+
+  useEffect(() => {
+    setNotesValue(ipamQuery.data?.notes ?? '')
+    setEditingNotes(false)
+  }, [ipamQuery.data])
 
   // Only show zones from configured providers
   const filteredZones = useMemo(
@@ -478,18 +493,55 @@ export default function DNS() {
             { label: 'TTL',    value: `${selectedRecord.ttl}s` },
             { label: 'Zone',   value: selectedRecord.zone },
             { label: 'Source', value: (SOURCE_LABEL[selectedRecord.source] ?? selectedRecord.source) || '—' },
-            ...(ipamQuery.data ? [{
-              label: 'Notes',
-              value: (
-                <>
-                  <span className="badge badge-gray" style={{ fontSize: '0.65rem', marginRight: '0.4rem' }}>IPAM</span>
-                  {ipamQuery.data.notes ?? <span className="text-muted">—</span>}
-                </>
-              ),
-            }] : []),
           ]}
+          extra={['A', 'AAAA'].includes(selectedRecord.record_type) ? (
+            <div>
+              <div className="detail-section-title" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                IPAM Notes
+                <span className="badge badge-gray" style={{ fontSize: '0.6rem' }}>IPAM</span>
+              </div>
+              {ipamQuery.isLoading ? (
+                <p className="loading" style={{ fontSize: '0.8rem' }}>Loading…</p>
+              ) : !ipamQuery.data ? (
+                <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', margin: '0.5rem 0' }}>Not tracked in IPAM.</p>
+              ) : editingNotes ? (
+                <div>
+                  <textarea
+                    value={notesValue}
+                    onChange={e => setNotesValue(e.target.value)}
+                    rows={4}
+                    autoFocus
+                    style={{ resize: 'vertical', width: '100%', marginBottom: '0.5rem' }}
+                  />
+                  <div className="form-actions">
+                    <button
+                      className="btn-primary btn-sm"
+                      onClick={() => updateNotesMutation.mutate()}
+                      disabled={updateNotesMutation.isPending}
+                    >
+                      {updateNotesMutation.isPending ? 'Saving…' : 'Save'}
+                    </button>
+                    <button className="btn-ghost btn-sm" onClick={() => setEditingNotes(false)}>Cancel</button>
+                  </div>
+                </div>
+              ) : (
+                <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'flex-start' }}>
+                  <span style={{ flex: 1, fontSize: '0.82rem', color: notesValue ? 'inherit' : 'var(--text-muted)', whiteSpace: 'pre-wrap' }}>
+                    {notesValue || '—'}
+                  </span>
+                  <button
+                    className="btn-ghost btn-sm"
+                    onClick={() => setEditingNotes(true)}
+                    style={{ fontSize: '0.7rem', fontWeight: 500, flexShrink: 0 }}
+                  >
+                    Edit
+                  </button>
+                </div>
+              )}
+            </div>
+          ) : undefined}
           syncedAt={selectedRecord.synced_at}
-          onClose={() => setSelectedRecord(null)}
+          onClose={() => { setSelectedRecord(null); setEditingNotes(false) }}
         />
       )}
     </div>
