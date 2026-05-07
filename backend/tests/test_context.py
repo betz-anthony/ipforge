@@ -1,9 +1,9 @@
-from datetime import datetime
+from datetime import datetime, timezone
 from app.models.cache import CachedDNSRecord, CachedDHCPScope, CachedDHCPLease
 
 
 def _now():
-    return datetime.utcnow()
+    return datetime.now(timezone.utc).replace(tzinfo=None)
 
 
 # ── DNS by-IP ──────────────────────────────────────────────────────────────
@@ -50,12 +50,6 @@ def test_dns_by_ip_returns_multiple_records(client, db):
 # ── DHCP by-IP ─────────────────────────────────────────────────────────────
 
 def test_dhcp_by_ip_returns_matching_leases(client, db):
-    db.add(CachedDHCPScope(
-        scope_id="192.168.1.0", name="LAN", subnet_mask="255.255.255.0",
-        start_range="192.168.1.100", end_range="192.168.1.200",
-        description="", active=True, ip_version=4, source="msdhcp",
-        synced_at=_now(),
-    ))
     db.add(CachedDHCPLease(
         scope_id="192.168.1.0", ip_address="192.168.1.105",
         mac_address="AA-BB-CC-DD-EE-FF", client_duid="", iaid=0,
