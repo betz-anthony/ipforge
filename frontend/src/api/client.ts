@@ -107,6 +107,8 @@ export const dhcpApi = {
     api.post<DHCPReservation>(`/dhcp/scopes/${scope_id}/reservations`, data, { params: { source } }).then(r => r.data),
   deleteReservation: (scope_id: string, ip_address: string, source: string) =>
     api.delete(`/dhcp/scopes/${scope_id}/reservations/${ip_address}`, { params: { source } }),
+  byIp: (address: string) =>
+    api.get<DHCPReservation[]>(`/dhcp/by-ip/${encodeURIComponent(address)}`).then(r => r.data),
 }
 
 export const providersApi = {
@@ -121,6 +123,8 @@ export const dnsApi = {
     api.post<DNSRecord>(`/dns/zones/${zone}/records`, data).then(r => r.data),
   deleteRecord: (zone: string, record: DNSRecord) =>
     api.delete(`/dns/zones/${zone}/records`, { data: record }),
+  byIp: (address: string) =>
+    api.get<DNSRecord[]>(`/dns/by-ip/${encodeURIComponent(address)}`).then(r => r.data),
 }
 
 export interface AppSettings {
