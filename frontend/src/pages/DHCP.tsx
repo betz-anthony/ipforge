@@ -1,7 +1,7 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Plus, X } from 'lucide-react'
-import { dhcpApi, providersApi, type DHCPReservation, type DHCPScope } from '../api/client'
+import { dhcpApi, providersApi, addressesApi, type DHCPReservation, type DHCPScope } from '../api/client'
 import { rangeSize } from '../utils/ip'
 import SyncBar from '../components/SyncBar'
 import DetailPanel from '../components/DetailPanel'
@@ -23,6 +23,8 @@ export default function DHCP() {
   const [form, setForm]                   = useState(emptyForm)
   const [viewMode, setViewMode]           = useState<ViewMode>('combined')
   const [selectedLease, setSelectedLease] = useState<DHCPReservation | null>(null)
+  const [editingNotes, setEditingNotes]   = useState(false)
+  const [notesValue, setNotesValue]       = useState('')
   const qc = useQueryClient()
 
   const isV6 = (scope: DHCPScope | null) => scope ? scope.ip_version === 6 : false
@@ -61,6 +63,26 @@ export default function DHCP() {
       setSelectedLease(null)
     },
   })
+
+  const ipamQuery = useQuery({
+    queryKey: ['ipam-address', selectedLease?.ip_address],
+    queryFn: () => addressesApi.byIp(selectedLease!.ip_address),
+    enabled: !!selectedLease,
+    retry: false,
+  })
+
+  const updateNotesMutation = useMutation({
+    mutationFn: () => addressesApi.update(ipamQuery.data!.id, { notes: notesValue || null }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['ipam-address', selectedLease?.ip_address] })
+      setEditingNotes(false)
+    },
+  })
+
+  useEffect(() => {
+    setNotesValue(ipamQuery.data?.notes ?? '')
+    setEditingNotes(false)
+  }, [ipamQuery.data])
 
   const filteredScopes = useMemo(
     () => dhcpProviders.length
@@ -380,8 +402,54 @@ export default function DHCP() {
             { label: 'Scope',       value: <span className="font-mono">{selectedScope.scope_id}</span> },
             { label: 'Source',      value: (SOURCE_LABEL[selectedScope.source] ?? selectedScope.source) || '—' },
           ]}
+          extra={(
+            <div>
+              <div className="detail-section-title" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                IPAM Notes
+                <span className="badge badge-gray" style={{ fontSize: '0.6rem' }}>IPAM</span>
+              </div>
+              {ipamQuery.isLoading ? (
+                <p className="loading" style={{ fontSize: '0.8rem' }}>Loading…</p>
+              ) : !ipamQuery.data ? (
+                <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', margin: '0.5rem 0' }}>Not tracked in IPAM.</p>
+              ) : editingNotes ? (
+                <div>
+                  <textarea
+                    value={notesValue}
+                    onChange={e => setNotesValue(e.target.value)}
+                    rows={4}
+                    autoFocus
+                    style={{ resize: 'vertical', width: '100%', marginBottom: '0.5rem' }}
+                  />
+                  <div className="form-actions">
+                    <button
+                      className="btn-primary btn-sm"
+                      onClick={() => updateNotesMutation.mutate()}
+                      disabled={updateNotesMutation.isPending}
+                    >
+                      {updateNotesMutation.isPending ? 'Saving…' : 'Save'}
+                    </button>
+                    <button className="btn-ghost btn-sm" onClick={() => setEditingNotes(false)}>Cancel</button>
+                  </div>
+                </div>
+              ) : (
+                <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'flex-start' }}>
+                  <span style={{ flex: 1, fontSize: '0.82rem', color: notesValue ? 'inherit' : 'var(--text-muted)', whiteSpace: 'pre-wrap' }}>
+                    {notesValue || '—'}
+                  </span>
+                  <button
+                    className="btn-ghost btn-sm"
+                    onClick={() => setEditingNotes(true)}
+                    style={{ fontSize: '0.7rem', fontWeight: 500, flexShrink: 0 }}
+                  >
+                    Edit
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
           syncedAt={selectedLease.synced_at}
-          onClose={() => setSelectedLease(null)}
+          onClose={() => { setSelectedLease(null); setEditingNotes(false) }}
         />
       )}
     </div>
