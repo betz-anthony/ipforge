@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Plus, X } from 'lucide-react'
-import { addressesApi, subnetsApi, type IPAddress } from '../api/client'
+import { addressesApi, subnetsApi, dnsApi, dhcpApi, type IPAddress } from '../api/client'
 import DetailDrawer from '../components/DetailDrawer'
 
 const STATUS_BADGE: Record<string, string> = {
@@ -29,6 +29,20 @@ export default function Addresses() {
   const [selectedAddress, setSelectedAddress] = useState<IPAddress | null>(null)
   const [editForm, setEditForm]               = useState(emptyEditForm)
   const qc = useQueryClient()
+
+  const { data: ipDnsRecords } = useQuery({
+    queryKey: ['dns-by-ip', selectedAddress?.address],
+    queryFn: () => dnsApi.byIp(selectedAddress!.address),
+    enabled: !!selectedAddress,
+    retry: false,
+  })
+
+  const { data: ipDhcpLeases } = useQuery({
+    queryKey: ['dhcp-by-ip', selectedAddress?.address],
+    queryFn: () => dhcpApi.byIp(selectedAddress!.address),
+    enabled: !!selectedAddress,
+    retry: false,
+  })
 
   const { data, isLoading, error } = useQuery({
     queryKey: ['addresses'],
@@ -95,6 +109,88 @@ export default function Addresses() {
   const filtered = filterStatus
     ? (data ?? []).filter(a => a.status === filterStatus)
     : (data ?? [])
+
+  const SOURCE_LABEL: Record<string, string> = {
+    msdhcp: 'MS DHCP', pihole: 'Pi-hole', keadhcp: 'Kea',
+    msdns: 'MS DNS', bind: 'BIND',
+  }
+
+  const addressViewExtra = selectedAddress ? (
+    <>
+      <div style={{ marginTop: '1rem' }}>
+        <div className="detail-section-title">DNS Records</div>
+        {!ipDnsRecords ? (
+          <p className="loading">Loading…</p>
+        ) : ipDnsRecords.length === 0 ? (
+          <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', margin: '0.5rem 0' }}>
+            No DNS records found for this IP.
+          </p>
+        ) : (
+          <div className="detail-fields" style={{ marginTop: '0.5rem' }}>
+            {ipDnsRecords.map((r, i) => (
+              <div key={i} className="detail-field">
+                <span className="detail-field-label">
+                  <span className="badge badge-gray" style={{ fontSize: '0.6rem', marginRight: '0.3rem' }}>
+                    {r.record_type}
+                  </span>
+                  {r.zone}
+                </span>
+                <span className="detail-field-value font-mono">{r.name}</span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div style={{ marginTop: '1rem' }}>
+        <div className="detail-section-title">DHCP</div>
+        {!ipDhcpLeases ? (
+          <p className="loading">Loading…</p>
+        ) : ipDhcpLeases.length === 0 ? (
+          <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', margin: '0.5rem 0' }}>
+            No DHCP reservation found for this IP.
+          </p>
+        ) : (
+          <div className="detail-fields" style={{ marginTop: '0.5rem' }}>
+            {ipDhcpLeases.map((l, i) => (
+              <div key={i} style={{ marginBottom: i < ipDhcpLeases.length - 1 ? '0.75rem' : 0 }}>
+                <div className="detail-field">
+                  <span className="detail-field-label">Scope</span>
+                  <span className="detail-field-value font-mono">{l.scope_id}</span>
+                </div>
+                {l.mac_address && (
+                  <div className="detail-field">
+                    <span className="detail-field-label">MAC</span>
+                    <span className="detail-field-value font-mono">{l.mac_address}</span>
+                  </div>
+                )}
+                {l.client_duid && (
+                  <div className="detail-field">
+                    <span className="detail-field-label">DUID</span>
+                    <span className="detail-field-value font-mono">{l.client_duid}</span>
+                  </div>
+                )}
+                {l.name && (
+                  <div className="detail-field">
+                    <span className="detail-field-label">Name</span>
+                    <span className="detail-field-value">{l.name}</span>
+                  </div>
+                )}
+                <div className="detail-field">
+                  <span className="detail-field-label">Source</span>
+                  <span className="detail-field-value">
+                    <span className="badge badge-gray" style={{ fontSize: '0.65rem' }}>
+                      {SOURCE_LABEL[l.scope_id] ?? l.scope_id}
+                    </span>
+                  </span>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </>
+  ) : null
 
   return (
     <div>
@@ -228,6 +324,7 @@ export default function Addresses() {
         <DetailDrawer
           title={selectedAddress.address}
           subtitle={selectedAddress.hostname ?? undefined}
+          viewExtra={addressViewExtra}
           fields={[
             { label: 'Address',     value: <span className="font-mono">{selectedAddress.address}</span> },
             { label: 'Status',      value: <span className={`badge ${STATUS_BADGE[selectedAddress.status]}`}>{selectedAddress.status}</span> },
