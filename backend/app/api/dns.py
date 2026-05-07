@@ -40,6 +40,19 @@ def list_records(zone: str, db: Session = Depends(get_db)):
     ]
 
 
+@router.get("/by-ip/{address}")
+def get_records_by_ip(address: str, db: Session = Depends(get_db)):
+    rows = db.query(CRow).filter(CRow.value == address).all()
+    return [
+        {
+            "name": r.name, "record_type": r.record_type, "value": r.value,
+            "zone": r.zone, "ttl": r.ttl, "source": r.source,
+            "synced_at": r.synced_at.isoformat() + "Z" if r.synced_at else None,
+        }
+        for r in rows
+    ]
+
+
 @router.post("/zones/{zone}/records", response_model=DNSRecord, status_code=201)
 def create_record(zone: str, record: DNSRecord, db: Session = Depends(get_db)):
     record.zone = zone
