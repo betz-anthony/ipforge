@@ -64,8 +64,9 @@ export default function DNS() {
   const [viewMode, setViewMode]             = useState<ViewMode>('combined')
   const [selectedRecord, setSelectedRecord] = useState<DNSRecord | null>(null)
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set())
-  const [editingNotes, setEditingNotes]       = useState(false)
-  const [notesValue, setNotesValue]           = useState('')
+  const [editingNotes, setEditingNotes]           = useState(false)
+  const [notesValue, setNotesValue]               = useState('')
+  const [selectedAddSubnetId, setSelectedAddSubnetId] = useState<number | null>(null)
   const qc = useQueryClient()
 
   const { data: zones, isLoading: loadingZones } = useQuery({
@@ -117,10 +118,12 @@ export default function DNS() {
     return subnets.find(s => ipInCidr(selectedRecord.value, s.cidr)) ?? null
   }, [selectedRecord, subnets])
 
+  const effectiveSubnetId = matchingSubnet?.id ?? selectedAddSubnetId
+
   const createIpamMutation = useMutation({
     mutationFn: () => addressesApi.create({
       address: selectedRecord!.value,
-      subnet_id: matchingSubnet!.id,
+      subnet_id: effectiveSubnetId!,
       status: 'assigned',
       hostname: selectedRecord!.name || null,
       mac_address: null,
@@ -144,6 +147,7 @@ export default function DNS() {
   useEffect(() => {
     setNotesValue(ipamQuery.data?.notes ?? '')
     setEditingNotes(false)
+    setSelectedAddSubnetId(null)
   }, [ipamQuery.data])
 
   // Only show zones from configured providers
@@ -527,18 +531,28 @@ export default function DNS() {
               {ipamQuery.isLoading ? (
                 <p className="loading" style={{ fontSize: '0.8rem' }}>Loading…</p>
               ) : !ipamQuery.data ? (
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', margin: '0.5rem 0' }}>
-                  <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Not tracked in IPAM.</span>
-                  {matchingSubnet && (
-                    <button
-                      className="btn-ghost btn-sm"
-                      onClick={() => createIpamMutation.mutate()}
-                      disabled={createIpamMutation.isPending}
-                      style={{ fontSize: '0.7rem' }}
+                <div style={{ margin: '0.5rem 0' }}>
+                  <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '0.4rem' }}>Not tracked in IPAM.</div>
+                  {!matchingSubnet && subnets && subnets.length > 0 && (
+                    <select
+                      value={selectedAddSubnetId ?? ''}
+                      onChange={e => setSelectedAddSubnetId(Number(e.target.value) || null)}
+                      style={{ fontSize: '0.75rem', marginBottom: '0.4rem', width: '100%' }}
                     >
-                      {createIpamMutation.isPending ? 'Adding…' : 'Add to IPAM'}
-                    </button>
+                      <option value="">Select subnet…</option>
+                      {subnets.map(s => (
+                        <option key={s.id} value={s.id}>{s.name} ({s.cidr})</option>
+                      ))}
+                    </select>
                   )}
+                  <button
+                    className="btn-ghost btn-sm"
+                    onClick={() => createIpamMutation.mutate()}
+                    disabled={createIpamMutation.isPending || !effectiveSubnetId}
+                    style={{ fontSize: '0.7rem' }}
+                  >
+                    {createIpamMutation.isPending ? 'Adding…' : 'Add to IPAM'}
+                  </button>
                 </div>
               ) : editingNotes ? (
                 <div>
