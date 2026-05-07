@@ -54,6 +54,7 @@ def get_leases_by_ip(address: str, db: Session = Depends(get_db)):
             "scope_id": r.scope_id, "ip_address": r.ip_address,
             "mac_address": r.mac_address, "client_duid": r.client_duid,
             "iaid": r.iaid, "name": r.name, "description": r.description,
+            "source": r.source,
             "synced_at": r.synced_at.isoformat() + "Z" if r.synced_at else None,
         }
         for r in rows
