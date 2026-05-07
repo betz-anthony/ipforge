@@ -46,6 +46,20 @@ def list_leases(scope_id: str, source: str = Query(""), db: Session = Depends(ge
     ]
 
 
+@router.get("/by-ip/{address}")
+def get_leases_by_ip(address: str, db: Session = Depends(get_db)):
+    rows = db.query(CachedDHCPLease).filter(CachedDHCPLease.ip_address == address).all()
+    return [
+        {
+            "scope_id": r.scope_id, "ip_address": r.ip_address,
+            "mac_address": r.mac_address, "client_duid": r.client_duid,
+            "iaid": r.iaid, "name": r.name, "description": r.description,
+            "synced_at": r.synced_at.isoformat() + "Z" if r.synced_at else None,
+        }
+        for r in rows
+    ]
+
+
 @router.post("/scopes/{scope_id}/reservations", response_model=DHCPReservation, status_code=201)
 def add_reservation(scope_id: str, reservation: DHCPReservation, source: str = Query(""),
                     db: Session = Depends(get_db)):
