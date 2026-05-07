@@ -478,12 +478,12 @@ export default function DNS() {
             { label: 'TTL',    value: `${selectedRecord.ttl}s` },
             { label: 'Zone',   value: selectedRecord.zone },
             { label: 'Source', value: (SOURCE_LABEL[selectedRecord.source] ?? selectedRecord.source) || '—' },
-            ...(ipamQuery.data?.notes ? [{
+            ...(ipamQuery.data ? [{
               label: 'Notes',
               value: (
                 <>
                   <span className="badge badge-gray" style={{ fontSize: '0.65rem', marginRight: '0.4rem' }}>IPAM</span>
-                  {ipamQuery.data.notes}
+                  {ipamQuery.data.notes ?? <span className="text-muted">—</span>}
                 </>
               ),
             }] : []),
