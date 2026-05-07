@@ -11,13 +11,14 @@ interface Props {
   subtitle?: string
   fields: DetailField[]
   children: React.ReactNode
+  viewExtra?: React.ReactNode
   onSave: () => void
   isSaving?: boolean
   onClose: () => void
 }
 
 export default function DetailDrawer({
-  title, subtitle, fields, children, onSave, isSaving, onClose,
+  title, subtitle, fields, children, viewExtra, onSave, isSaving, onClose,
 }: Props) {
   const [editing, setEditing] = useState(false)
 
@@ -88,6 +89,7 @@ export default function DetailDrawer({
                   </div>
                 ))}
               </div>
+              {viewExtra}
             </div>
           )}
         </div>
