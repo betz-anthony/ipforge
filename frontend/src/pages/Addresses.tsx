@@ -26,6 +26,7 @@ export default function Addresses() {
   const [showForm, setShowForm]               = useState(false)
   const [form, setForm]                       = useState(emptyForm)
   const [filterStatus, setFilter]             = useState('')
+  const [filterSubnet, setFilterSubnet]       = useState<number | ''>('')
   const [selectedAddress, setSelectedAddress] = useState<IPAddress | null>(null)
   const [editForm, setEditForm]               = useState(emptyEditForm)
   const qc = useQueryClient()
@@ -106,9 +107,10 @@ export default function Addresses() {
     })
   }
 
-  const filtered = filterStatus
-    ? (data ?? []).filter(a => a.status === filterStatus)
-    : (data ?? [])
+  const filtered = (data ?? []).filter(a =>
+    (filterStatus === '' || a.status === filterStatus) &&
+    (filterSubnet === '' || a.subnet_id === filterSubnet)
+  )
 
   const SOURCE_LABEL: Record<string, string> = {
     msdhcp: 'MS DHCP', pihole: 'Pi-hole', keadhcp: 'Kea',
@@ -205,6 +207,16 @@ export default function Addresses() {
             <option value="">All statuses</option>
             {STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
           </select>
+          <select
+            value={filterSubnet}
+            onChange={e => setFilterSubnet(e.target.value === '' ? '' : Number(e.target.value))}
+            style={{ fontSize: '0.8rem' }}
+          >
+            <option value="">All subnets</option>
+            {(subnets ?? []).map(s => (
+              <option key={s.id} value={s.id}>{s.name} ({s.cidr})</option>
+            ))}
+          </select>
           {!showForm && (
             <button className="btn-primary btn-sm" onClick={() => setShowForm(true)}>
               <Plus size={13} /> Add Address
@@ -287,7 +299,7 @@ export default function Addresses() {
             <tbody>
               {filtered.length === 0 && (
                 <tr><td colSpan={6} className="empty-state">
-                  {data.length === 0 ? 'No addresses tracked. Add one above.' : 'No addresses match filter.'}
+                  {data?.length === 0 ? 'No addresses tracked. Add one above.' : 'No addresses match filters.'}
                 </td></tr>
               )}
               {filtered.map((a: IPAddress) => (
