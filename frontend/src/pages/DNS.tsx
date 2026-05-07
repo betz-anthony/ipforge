@@ -1,7 +1,8 @@
 import { useState, useMemo, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { SlidersHorizontal, Plus, X, Trash2 } from 'lucide-react'
-import { dnsApi, providersApi, addressesApi, type DNSRecord, type DNSZone } from '../api/client'
+import { dnsApi, providersApi, addressesApi, subnetsApi, type DNSRecord, type DNSZone } from '../api/client'
+import { ipInCidr } from '../utils/ip'
 import SyncBar from '../components/SyncBar'
 import DetailPanel from '../components/DetailPanel'
 
@@ -107,6 +108,29 @@ export default function DNS() {
     queryFn: () => addressesApi.byIp(selectedRecord!.value),
     enabled: !!selectedRecord && ['A', 'AAAA'].includes(selectedRecord.record_type),
     retry: false,
+  })
+
+  const { data: subnets } = useQuery({ queryKey: ['subnets'], queryFn: subnetsApi.list })
+
+  const matchingSubnet = useMemo(() => {
+    if (!selectedRecord || !subnets || !['A', 'AAAA'].includes(selectedRecord.record_type)) return null
+    return subnets.find(s => ipInCidr(selectedRecord.value, s.cidr)) ?? null
+  }, [selectedRecord, subnets])
+
+  const createIpamMutation = useMutation({
+    mutationFn: () => addressesApi.create({
+      address: selectedRecord!.value,
+      subnet_id: matchingSubnet!.id,
+      status: 'assigned',
+      hostname: selectedRecord!.name || null,
+      mac_address: null,
+      description: null,
+      notes: null,
+    }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['ipam-address', selectedRecord?.value] })
+      setEditingNotes(true)
+    },
   })
 
   const updateNotesMutation = useMutation({
@@ -503,7 +527,19 @@ export default function DNS() {
               {ipamQuery.isLoading ? (
                 <p className="loading" style={{ fontSize: '0.8rem' }}>Loading…</p>
               ) : !ipamQuery.data ? (
-                <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', margin: '0.5rem 0' }}>Not tracked in IPAM.</p>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', margin: '0.5rem 0' }}>
+                  <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Not tracked in IPAM.</span>
+                  {matchingSubnet && (
+                    <button
+                      className="btn-ghost btn-sm"
+                      onClick={() => createIpamMutation.mutate()}
+                      disabled={createIpamMutation.isPending}
+                      style={{ fontSize: '0.7rem' }}
+                    >
+                      {createIpamMutation.isPending ? 'Adding…' : 'Add to IPAM'}
+                    </button>
+                  )}
+                </div>
               ) : editingNotes ? (
                 <div>
                   <textarea
