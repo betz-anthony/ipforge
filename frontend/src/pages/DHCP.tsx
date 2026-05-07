@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Plus, X } from 'lucide-react'
 import { dhcpApi, providersApi, type DHCPReservation, type DHCPScope } from '../api/client'
+import { rangeSize } from '../utils/ip'
 import SyncBar from '../components/SyncBar'
 import DetailPanel from '../components/DetailPanel'
 
@@ -265,6 +266,38 @@ export default function DHCP() {
                       </span>
                     )}
                   </div>
+                </div>
+              )}
+
+              {!loadingLeases && leases && (
+                <div style={{
+                  display: 'flex', flexWrap: 'wrap', gap: '1.5rem',
+                  padding: '0.5rem 0', marginBottom: '0.75rem',
+                  fontSize: '0.8rem', borderBottom: '1px solid var(--border)',
+                }}>
+                  <span>
+                    <strong>{leases.length}</strong> reservation{leases.length !== 1 ? 's' : ''}
+                  </span>
+                  {selectedScope.ip_version === 4 && selectedScope.start_range && selectedScope.end_range && (() => {
+                    const size = rangeSize(selectedScope.start_range, selectedScope.end_range)
+                    const pct  = size > 0 ? Math.round(leases.length / size * 100) : 0
+                    return (
+                      <>
+                        <span>
+                          Pool: <span className="font-mono">
+                            {selectedScope.start_range} – {selectedScope.end_range}
+                          </span>
+                        </span>
+                        <span>Size: <strong>{size}</strong></span>
+                        <span>Utilization: <strong>{pct}%</strong></span>
+                      </>
+                    )
+                  })()}
+                  <span>
+                    <span className={`badge ${selectedScope.active ? 'badge-green' : 'badge-gray'}`}>
+                      {selectedScope.active ? 'Active' : 'Inactive'}
+                    </span>
+                  </span>
                 </div>
               )}
 
