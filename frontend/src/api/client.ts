@@ -67,6 +67,7 @@ export interface DHCPReservation {
   iaid: number         // IPv6
   name: string
   description: string
+  source?: string
   synced_at?: string | null
 }
 

@@ -182,7 +182,7 @@ export default function Addresses() {
                   <span className="detail-field-label">Source</span>
                   <span className="detail-field-value">
                     <span className="badge badge-gray" style={{ fontSize: '0.65rem' }}>
-                      {SOURCE_LABEL[l.scope_id] ?? l.scope_id}
+                      {SOURCE_LABEL[l.source ?? ''] ?? l.source ?? l.scope_id}
                     </span>
                   </span>
                 </div>
