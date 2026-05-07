@@ -1,3 +1,4 @@
+import ipaddress as _ipaddress
 import logging
 import threading
 import time
@@ -15,6 +16,79 @@ logger = logging.getLogger(__name__)
 
 _dns_lock  = threading.Lock()
 _dhcp_lock = threading.Lock()
+
+
+def _ip_in_cidr(ip: str, cidr: str) -> bool:
+    try:
+        return _ipaddress.ip_address(ip) in _ipaddress.ip_network(cidr, strict=False)
+    except ValueError:
+        return False
+
+
+def _auto_populate_from_cache(db) -> None:
+    """Upsert IPAM address records for IPs found in DNS/DHCP cache that match a known subnet."""
+    from app.models.address import IPAddress, AddressStatus
+    from app.models.subnet import Subnet
+
+    subnets = db.query(Subnet).all()
+    if not subnets:
+        return
+
+    existing_map: dict[str, IPAddress] = {
+        row.address: row for row in db.query(IPAddress).all()
+    }
+
+    # Collect candidates: {ip -> {hostname, mac_address}}
+    # DNS first, DHCP overwrites (richer data)
+    candidates: dict[str, dict] = {}
+    for r in db.query(CachedDNSRecord).filter(
+        CachedDNSRecord.record_type.in_(["A", "AAAA"])
+    ).all():
+        ip = r.value.strip()
+        if ip not in candidates:
+            candidates[ip] = {"hostname": r.name, "mac_address": None}
+
+    for l in db.query(CachedDHCPLease).all():
+        ip = l.ip_address.strip()
+        candidates[ip] = {
+            "hostname": l.name or candidates.get(ip, {}).get("hostname"),
+            "mac_address": l.mac_address,
+        }
+
+    now = _utcnow()
+    created = 0
+
+    for ip, meta in candidates.items():
+        if ip in existing_map:
+            addr = existing_map[ip]
+            changed = False
+            if not addr.hostname and meta["hostname"]:
+                addr.hostname = meta["hostname"]
+                changed = True
+            if not addr.mac_address and meta["mac_address"]:
+                addr.mac_address = meta["mac_address"]
+                changed = True
+            if changed:
+                addr.updated_at = now
+            continue
+
+        subnet = next((s for s in subnets if _ip_in_cidr(ip, s.cidr)), None)
+        if subnet is None:
+            continue
+
+        db.add(IPAddress(
+            address=ip,
+            subnet_id=subnet.id,
+            hostname=meta["hostname"],
+            mac_address=meta["mac_address"],
+            status=AddressStatus.assigned,
+        ))
+        existing_map[ip] = None  # type: ignore[assignment]  # prevent duplicate inserts
+        created += 1
+
+    db.commit()
+    if created:
+        logger.info("Auto-populated %d IPAM address records from DNS/DHCP cache", created)
 
 
 def _utcnow() -> datetime:
@@ -79,6 +153,7 @@ def sync_dns() -> None:
                         ))
                 db.commit()
 
+        _auto_populate_from_cache(db)
         _set_status(db, "dns", "ok")
     except Exception as e:
         logger.error("DNS sync failed: %s", e, exc_info=True)
@@ -143,6 +218,7 @@ def sync_dhcp() -> None:
                     ))
                 db.commit()
 
+        _auto_populate_from_cache(db)
         _set_status(db, "dhcp", "ok")
     except Exception as e:
         logger.error("DHCP sync failed: %s", e, exc_info=True)
