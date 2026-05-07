@@ -1,7 +1,8 @@
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Plus, X } from 'lucide-react'
-import { subnetsApi, type Subnet } from '../api/client'
+import { subnetsApi, dhcpApi, addressesApi, type Subnet, type DHCPScope } from '../api/client'
+import { ipInCidr } from '../utils/ip'
 import DetailDrawer from '../components/DetailDrawer'
 
 const emptyForm = { name: '', cidr: '', vlan_id: '', description: '' }
@@ -14,6 +15,26 @@ export default function Subnets() {
   const [selectedSubnet, setSelectedSubnet] = useState<Subnet | null>(null)
   const [editForm, setEditForm]             = useState(emptyEditForm)
   const qc = useQueryClient()
+
+  const { data: allScopes } = useQuery({
+    queryKey: ['dhcp-scopes'],
+    queryFn: dhcpApi.listScopes,
+  })
+
+  const { data: subnetAddresses } = useQuery({
+    queryKey: ['addresses', selectedSubnet?.id],
+    queryFn: () => addressesApi.list({ subnet_id: selectedSubnet!.id }),
+    enabled: !!selectedSubnet,
+  })
+
+  const matchedScopes = useMemo((): DHCPScope[] => {
+    if (!selectedSubnet || !allScopes) return []
+    return allScopes.filter(s =>
+      s.ip_version === selectedSubnet.ip_version &&
+      s.start_range &&
+      ipInCidr(s.start_range, selectedSubnet.cidr)
+    )
+  }, [selectedSubnet, allScopes])
 
   const { data, isLoading, error } = useQuery({
     queryKey: ['subnets'],
@@ -68,6 +89,89 @@ export default function Subnets() {
       notes:       s.notes       ?? '',
     })
   }
+
+  const subnetViewExtra = selectedSubnet ? (
+    <>
+      <div style={{ marginTop: '1rem' }}>
+        <div className="detail-section-title">IP Addresses</div>
+        {!subnetAddresses ? (
+          <p className="loading">Loading…</p>
+        ) : subnetAddresses.length === 0 ? (
+          <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', margin: '0.5rem 0' }}>
+            No addresses tracked in this subnet.
+          </p>
+        ) : (
+          <div className="table-wrap" style={{ marginTop: '0.5rem' }}>
+            <table>
+              <thead>
+                <tr>
+                  <th>Address</th>
+                  <th>Hostname</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {subnetAddresses.map(a => (
+                  <tr key={a.id}>
+                    <td><span className="font-mono">{a.address}</span></td>
+                    <td>{a.hostname ?? <span className="text-muted">—</span>}</td>
+                    <td>
+                      <span className={`badge ${
+                        a.status === 'assigned'   ? 'badge-blue'  :
+                        a.status === 'available'  ? 'badge-green' :
+                        a.status === 'reserved'   ? 'badge-yellow':
+                        'badge-gray'
+                      }`}>{a.status}</span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      <div style={{ marginTop: '1rem' }}>
+        <div className="detail-section-title">DHCP Scope</div>
+        {matchedScopes.length === 0 ? (
+          <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', margin: '0.5rem 0' }}>
+            No matching DHCP scope found.
+          </p>
+        ) : matchedScopes.map(s => (
+          <div key={`${s.source}:${s.scope_id}`} className="detail-fields" style={{ marginTop: '0.5rem' }}>
+            <div className="detail-field">
+              <span className="detail-field-label">Scope</span>
+              <span className="detail-field-value font-mono">{s.scope_id}</span>
+            </div>
+            <div className="detail-field">
+              <span className="detail-field-label">Name</span>
+              <span className="detail-field-value">{s.name || <span className="text-muted">—</span>}</span>
+            </div>
+            <div className="detail-field">
+              <span className="detail-field-label">Range</span>
+              <span className="detail-field-value font-mono">
+                {s.start_range} – {s.end_range}
+              </span>
+            </div>
+            <div className="detail-field">
+              <span className="detail-field-label">Status</span>
+              <span className="detail-field-value">
+                <span className={`badge ${s.active ? 'badge-green' : 'badge-gray'}`}>
+                  {s.active ? 'Active' : 'Inactive'}
+                </span>
+              </span>
+            </div>
+            {s.description && (
+              <div className="detail-field">
+                <span className="detail-field-label">Description</span>
+                <span className="detail-field-value">{s.description}</span>
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+    </>
+  ) : null
 
   return (
     <div>
@@ -172,6 +276,7 @@ export default function Subnets() {
         <DetailDrawer
           title={selectedSubnet.name}
           subtitle={selectedSubnet.cidr}
+          viewExtra={subnetViewExtra}
           fields={[
             { label: 'Name',        value: selectedSubnet.name },
             { label: 'CIDR',        value: <span className="font-mono">{selectedSubnet.cidr}</span> },
