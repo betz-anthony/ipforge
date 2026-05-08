@@ -1,9 +1,23 @@
 import { useState, useMemo } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Plus, X, Scan, AlertTriangle } from 'lucide-react'
-import { subnetsApi, dhcpApi, addressesApi, scanApi, type Subnet, type DHCPScope, type Collision } from '../api/client'
+import { subnetsApi, dhcpApi, addressesApi, scanApi, settingsApi, type Subnet, type DHCPScope, type Collision } from '../api/client'
 import { ipInCidr } from '../utils/ip'
 import DetailDrawer from '../components/DetailDrawer'
+
+function UtilBar({ pct, warn, critical }: { pct: number; warn: number; critical: number }) {
+  const color = pct >= critical ? 'var(--danger)' : pct >= warn ? '#fbbf24' : '#4ade80'
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+      <div style={{ width: '56px', height: '5px', background: 'var(--surface-2)', borderRadius: '3px', overflow: 'hidden' }}>
+        <div style={{ width: `${Math.min(100, pct)}%`, height: '100%', background: color, borderRadius: '3px' }} />
+      </div>
+      <span style={{ fontSize: '0.72rem', color, fontFamily: 'var(--font-mono)' }}>
+        {pct.toFixed(1)}%
+      </span>
+    </div>
+  )
+}
 
 const emptyForm = { name: '', cidr: '', vlan_id: '', description: '' }
 
@@ -76,6 +90,10 @@ export default function Subnets() {
     },
   })
 
+  const { data: settingsData } = useQuery({ queryKey: ['settings'], queryFn: settingsApi.get })
+  const warnAt     = settingsData?.util_warn_threshold     ?? 80
+  const criticalAt = settingsData?.util_critical_threshold ?? 95
+
   const { data, isLoading, error } = useQuery({
     queryKey: ['subnets'],
     queryFn: subnetsApi.list,
@@ -142,6 +160,17 @@ export default function Subnets() {
 
   const subnetViewExtra = selectedSubnet ? (
     <>
+      <div style={{ marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+        <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Utilization</span>
+        <UtilBar
+          pct={selectedSubnet.utilization_pct}
+          warn={warnAt}
+          critical={criticalAt}
+        />
+        <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>
+          {selectedSubnet.used_count} / {selectedSubnet.total_count} hosts
+        </span>
+      </div>
       <div style={{ marginTop: '1rem' }}>
         <div className="detail-section-title">IP Addresses</div>
         {!subnetAddresses ? (
@@ -405,12 +434,13 @@ export default function Subnets() {
                 <th>Version</th>
                 <th>VLAN</th>
                 <th>Description</th>
+                <th>Utilization</th>
                 <th style={{ width: '2.5rem' }}></th>
               </tr>
             </thead>
             <tbody>
               {data.length === 0 && (
-                <tr><td colSpan={6} className="empty-state">No subnets defined. Add one above.</td></tr>
+                <tr><td colSpan={7} className="empty-state">No subnets defined. Add one above.</td></tr>
               )}
               {data.map((s: Subnet) => {
                 const collisionCount = collisionCountForSubnet(s)
@@ -430,6 +460,9 @@ export default function Subnets() {
                   <td><span className="badge badge-blue">IPv{s.ip_version}</span></td>
                   <td>{s.vlan_id ?? <span className="text-muted">—</span>}</td>
                   <td>{s.description ?? <span className="text-muted">—</span>}</td>
+                  <td>
+                    <UtilBar pct={s.utilization_pct} warn={warnAt} critical={criticalAt} />
+                  </td>
                   <td onClick={e => e.stopPropagation()}>
                     <button
                       className="btn-danger btn-sm"
