@@ -10,6 +10,7 @@ class AddressStatus(str, enum.Enum):
     reserved = "reserved"
     assigned = "assigned"
     deprecated = "deprecated"
+    discovered = "discovered"
 
 
 class IPAddress(Base):
