@@ -257,8 +257,9 @@ def scan_subnet(
             db.close()
 
 
-def scan_all_eligible() -> None:
-    db = SessionLocal()
+def scan_all_eligible(_db=None) -> None:
+    own_db = _db is None
+    db = SessionLocal() if own_db else _db
     try:
         subnets = db.query(Subnet).filter(Subnet.ip_version == 4).all()
         for s in subnets:
@@ -266,4 +267,5 @@ def scan_all_eligible() -> None:
             if net.prefixlen >= 24:
                 scan_subnet(s.id, _db=db)
     finally:
-        db.close()
+        if own_db:
+            db.close()

@@ -227,6 +227,8 @@ def sync_all() -> None:
         f2 = ex.submit(sync_dhcp)
         f1.result()
         f2.result()
+    from app.scan import scan_all_eligible
+    scan_all_eligible()
 
 
 def start_background_sync(interval: int = 300) -> None:
