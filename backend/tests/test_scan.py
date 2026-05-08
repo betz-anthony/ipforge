@@ -346,3 +346,94 @@ def test_scan_all_eligible_skips_large_subnets(db):
     large = db.query(Subnet).filter_by(name="large").first()
     assert small.id in scanned_ids
     assert large.id not in scanned_ids
+
+
+# ---------------------------------------------------------------------------
+# API tests
+# ---------------------------------------------------------------------------
+
+def test_trigger_scan_returns_triggered(client, db):
+    subnet = _make_subnet(db, cidr="10.0.0.0/24")
+
+    with patch("app.api.scan.threading.Thread") as mock_thread:
+        mock_thread.return_value.start = lambda: None
+        r = client.post(f"/api/scan/subnets/{subnet.id}")
+
+    assert r.status_code == 200
+    assert r.json()["status"] == "triggered"
+
+
+def test_trigger_scan_404_for_missing_subnet(client):
+    r = client.post("/api/scan/subnets/9999")
+    assert r.status_code == 404
+
+
+def test_get_scan_status_never(client, db):
+    subnet = _make_subnet(db, cidr="10.0.0.0/24")
+    r = client.get(f"/api/scan/subnets/{subnet.id}")
+    assert r.status_code == 200
+    assert r.json()["status"] == "never"
+    assert r.json()["results"] == []
+
+
+def test_get_scan_status_with_results(client, db):
+    subnet = _make_subnet(db, cidr="10.0.0.0/24")
+    from app.scan import _utcnow
+    now = _utcnow()
+    db.add(ScanResult(subnet_id=subnet.id, ip_address="10.0.0.1",
+                      reachable=True, latency_ms=1.5, scanned_at=now))
+    db.add(SyncStatus(key=f"scan:{subnet.id}", synced_at=now, status="ok"))
+    db.commit()
+
+    r = client.get(f"/api/scan/subnets/{subnet.id}")
+    assert r.status_code == 200
+    data = r.json()
+    assert data["status"] == "ok"
+    assert len(data["results"]) == 1
+    assert data["results"][0]["ip"] == "10.0.0.1"
+    assert data["results"][0]["reachable"] is True
+
+
+def test_list_collisions_empty(client):
+    r = client.get("/api/scan/collisions")
+    assert r.status_code == 200
+    assert r.json() == []
+
+
+def test_list_collisions_returns_unresolved(client, db):
+    from app.scan import _utcnow
+    now = _utcnow()
+    db.add(Collision(ip_address="10.0.0.1", collision_type="active_but_available",
+                     details='{"ipam_status":"available"}', detected_at=now, resolved=False))
+    db.add(Collision(ip_address="10.0.0.2", collision_type="multi_dhcp_scope",
+                     details='{"sources":["a","b"]}', detected_at=now,
+                     resolved=True, resolved_at=now))
+    db.commit()
+
+    r = client.get("/api/scan/collisions")
+    assert r.status_code == 200
+    data = r.json()
+    assert len(data) == 1
+    assert data[0]["ip_address"] == "10.0.0.1"
+
+
+def test_resolve_collision(client, db):
+    from app.scan import _utcnow
+    c = Collision(ip_address="10.0.0.1", collision_type="active_but_available",
+                  details="{}", detected_at=_utcnow(), resolved=False)
+    db.add(c)
+    db.commit()
+    db.refresh(c)
+
+    r = client.put(f"/api/scan/collisions/{c.id}/resolve")
+    assert r.status_code == 200
+    assert r.json()["resolved"] is True
+
+    db.refresh(c)
+    assert c.resolved is True
+    assert c.resolved_at is not None
+
+
+def test_resolve_collision_404(client):
+    r = client.put("/api/scan/collisions/9999/resolve")
+    assert r.status_code == 404

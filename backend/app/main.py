@@ -54,6 +54,8 @@ app.include_router(settings_router.router, prefix="/api/settings", tags=["settin
 app.include_router(sync_router.router, prefix="/api/sync", tags=["sync"])
 app.include_router(tools_router.router, prefix="/api/tools", tags=["tools"])
 app.include_router(stats_router.router, prefix="/api/stats", tags=["stats"])
+from app.api import scan as scan_router_module
+app.include_router(scan_router_module.router, prefix="/api/scan", tags=["scan"])
 
 
 @app.get("/health", tags=["ops"])
