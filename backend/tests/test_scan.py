@@ -308,3 +308,41 @@ def test_collision_hostname_mismatch_via_dns(db):
     import json
     details = json.loads(c.details)
     assert details["dns"] == "webserver01"
+
+
+def test_scan_all_eligible_skips_ipv6(db):
+    _make_subnet(db, cidr="10.0.0.0/24", name="v4", ip_version=4)
+    _make_subnet(db, cidr="2001:db8::/32",  name="v6", ip_version=6)
+
+    scanned_ids = []
+
+    def _fake_scan(subnet_id, _db=None):
+        scanned_ids.append(subnet_id)
+
+    with patch("app.scan.scan_subnet", side_effect=_fake_scan):
+        from app.scan import scan_all_eligible
+        scan_all_eligible(_db=db)
+
+    v4 = db.query(Subnet).filter_by(name="v4").first()
+    v6 = db.query(Subnet).filter_by(name="v6").first()
+    assert v4.id in scanned_ids
+    assert v6.id not in scanned_ids
+
+
+def test_scan_all_eligible_skips_large_subnets(db):
+    _make_subnet(db, cidr="10.0.0.0/24", name="small", ip_version=4)
+    _make_subnet(db, cidr="10.1.0.0/16", name="large", ip_version=4)
+
+    scanned_ids = []
+
+    def _fake_scan(subnet_id, _db=None):
+        scanned_ids.append(subnet_id)
+
+    with patch("app.scan.scan_subnet", side_effect=_fake_scan):
+        from app.scan import scan_all_eligible
+        scan_all_eligible(_db=db)
+
+    small = db.query(Subnet).filter_by(name="small").first()
+    large = db.query(Subnet).filter_by(name="large").first()
+    assert small.id in scanned_ids
+    assert large.id not in scanned_ids
