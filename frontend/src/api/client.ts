@@ -18,7 +18,7 @@ export interface IPAddress {
   address: string
   subnet_id: number
   hostname: string | null
-  status: 'available' | 'reserved' | 'assigned' | 'deprecated'
+  status: 'available' | 'reserved' | 'assigned' | 'deprecated' | 'discovered'
   mac_address: string | null
   description: string | null
   notes: string | null
@@ -207,4 +207,39 @@ export interface AppStats {
 
 export const statsApi = {
   get: () => api.get<AppStats>('/stats').then(r => r.data),
+}
+
+export interface ScanHostResult {
+  ip: string
+  reachable: boolean
+  latency_ms: number | null
+}
+
+export interface ScanStatus {
+  status: 'ok' | 'error' | 'running' | 'never'
+  scanned_at: string | null
+  age_seconds: number | null
+  error: string | null
+  results: ScanHostResult[]
+}
+
+export interface Collision {
+  id: number
+  ip_address: string
+  collision_type: 'active_but_available' | 'multi_dhcp_scope' | 'hostname_mismatch'
+  details: string | null
+  detected_at: string
+  resolved: boolean
+  resolved_at: string | null
+}
+
+export const scanApi = {
+  trigger: (subnet_id: number, body?: { start_ip?: string; end_ip?: string }) =>
+    api.post<{ status: string }>(`/scan/subnets/${subnet_id}`, body ?? {}).then(r => r.data),
+  status: (subnet_id: number) =>
+    api.get<ScanStatus>(`/scan/subnets/${subnet_id}`).then(r => r.data),
+  collisions: (params?: { resolved?: boolean; subnet_id?: number }) =>
+    api.get<Collision[]>('/scan/collisions', { params }).then(r => r.data),
+  resolveCollision: (id: number) =>
+    api.put<{ id: number; resolved: boolean }>(`/scan/collisions/${id}/resolve`).then(r => r.data),
 }
