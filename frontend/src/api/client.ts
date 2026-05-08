@@ -11,6 +11,9 @@ export interface Subnet {
   description: string | null
   notes: string | null
   created_at: string
+  used_count: number
+  total_count: number
+  utilization_pct: number
 }
 
 export interface IPAddress {
@@ -28,7 +31,7 @@ export interface IPAddress {
 
 export const subnetsApi = {
   list: () => api.get<Subnet[]>('/subnets').then(r => r.data),
-  create: (data: Omit<Subnet, 'id' | 'created_at' | 'notes'> & { notes?: string | null }) =>
+  create: (data: Omit<Subnet, 'id' | 'created_at' | 'notes' | 'used_count' | 'total_count' | 'utilization_pct'> & { notes?: string | null }) =>
     api.post<Subnet>('/subnets', data).then(r => r.data),
   update: (id: number, data: Partial<Subnet>) =>
     api.put<Subnet>(`/subnets/${id}`, data).then(r => r.data),
@@ -152,6 +155,10 @@ export interface AppSettings {
   // Kea
   kea_url: string
   kea_secret_set: boolean
+  // Utilization
+  util_warn_threshold: number
+  util_critical_threshold: number
+  util_dashboard_top_n: number
 }
 
 export interface AppSettingsUpdate {
@@ -178,6 +185,10 @@ export interface AppSettingsUpdate {
   // Kea
   kea_url?: string
   kea_secret?: string
+  // Utilization
+  util_warn_threshold?: number
+  util_critical_threshold?: number
+  util_dashboard_top_n?: number
 }
 
 export const settingsApi = {
