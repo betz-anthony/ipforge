@@ -10,6 +10,7 @@ from app.api import sync as sync_router
 from app.api import tools as tools_router
 from app.api import stats as stats_router
 from app.api import scan as scan_router
+from app.api import search as search_router
 import app.models  # noqa: F401
 
 
@@ -56,6 +57,7 @@ app.include_router(sync_router.router, prefix="/api/sync", tags=["sync"])
 app.include_router(tools_router.router, prefix="/api/tools", tags=["tools"])
 app.include_router(stats_router.router, prefix="/api/stats", tags=["stats"])
 app.include_router(scan_router.router, prefix="/api/scan", tags=["scan"])
+app.include_router(search_router.router, prefix="/api/search", tags=["search"])
 
 
 @app.get("/health", tags=["ops"])
