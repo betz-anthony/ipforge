@@ -8,6 +8,8 @@ import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
 
+from sqlalchemy import func
+
 from app.database import SessionLocal
 from app.models.address import IPAddress, AddressStatus
 from app.models.cache import CachedDHCPLease, CachedDNSRecord, SyncStatus
@@ -150,7 +152,6 @@ def _detect_collisions(db, subnet_id: int) -> None:
             })
 
     # Pass 2: multi_dhcp_scope
-    from sqlalchemy import func
     rows = (
         db.query(CachedDHCPLease.ip_address,
                  func.count(CachedDHCPLease.source.distinct()).label("cnt"))
@@ -245,6 +246,10 @@ def scan_subnet(
 
     except Exception as e:
         logger.error("Scan failed for subnet %d: %s", subnet_id, e, exc_info=True)
+        try:
+            db.rollback()
+        except Exception:
+            pass
         _set_scan_status(db, subnet_id, "error", str(e))
     finally:
         lock.release()

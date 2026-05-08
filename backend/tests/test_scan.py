@@ -88,7 +88,11 @@ def test_scan_subnet_creates_scan_results(db):
 def test_scan_subnet_creates_discovered_ipaddress(db):
     subnet = _make_subnet(db, cidr="10.0.0.0/30")
 
-    with patch("app.scan._scan_host", return_value={"ip": "10.0.0.1", "reachable": True, "latency_ms": 2.0}):
+    mock_results = {
+        "10.0.0.1": {"ip": "10.0.0.1", "reachable": True,  "latency_ms": 2.0},
+        "10.0.0.2": {"ip": "10.0.0.2", "reachable": False, "latency_ms": None},
+    }
+    with patch("app.scan._scan_host", side_effect=_mock_scan(mock_results)):
         from app.scan import scan_subnet
         scan_subnet(subnet.id, _db=db)
 
@@ -96,6 +100,7 @@ def test_scan_subnet_creates_discovered_ipaddress(db):
     assert addr is not None
     assert addr.status == AddressStatus.discovered
     assert addr.subnet_id == subnet.id
+    assert db.query(IPAddress).filter_by(address="10.0.0.2").count() == 0
 
 
 def test_scan_subnet_does_not_duplicate_tracked_ip(db):
@@ -104,7 +109,11 @@ def test_scan_subnet_does_not_duplicate_tracked_ip(db):
     db.add(existing)
     db.commit()
 
-    with patch("app.scan._scan_host", return_value={"ip": "10.0.0.1", "reachable": True, "latency_ms": 1.0}):
+    mock_results = {
+        "10.0.0.1": {"ip": "10.0.0.1", "reachable": True,  "latency_ms": 1.0},
+        "10.0.0.2": {"ip": "10.0.0.2", "reachable": False, "latency_ms": None},
+    }
+    with patch("app.scan._scan_host", side_effect=_mock_scan(mock_results)):
         from app.scan import scan_subnet
         scan_subnet(subnet.id, _db=db)
 
@@ -114,7 +123,11 @@ def test_scan_subnet_does_not_duplicate_tracked_ip(db):
 def test_scan_subnet_sets_sync_status_ok(db):
     subnet = _make_subnet(db, cidr="10.0.0.0/30")
 
-    with patch("app.scan._scan_host", return_value={"ip": "10.0.0.1", "reachable": False, "latency_ms": None}):
+    mock_results = {
+        "10.0.0.1": {"ip": "10.0.0.1", "reachable": False, "latency_ms": None},
+        "10.0.0.2": {"ip": "10.0.0.2", "reachable": False, "latency_ms": None},
+    }
+    with patch("app.scan._scan_host", side_effect=_mock_scan(mock_results)):
         from app.scan import scan_subnet
         scan_subnet(subnet.id, _db=db)
 
