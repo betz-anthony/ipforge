@@ -1,7 +1,7 @@
 import { useState, useMemo } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Plus, X, Scan, AlertTriangle } from 'lucide-react'
-import { subnetsApi, dhcpApi, addressesApi, scanApi, type Subnet, type DHCPScope } from '../api/client'
+import { subnetsApi, dhcpApi, addressesApi, scanApi, type Subnet, type DHCPScope, type Collision } from '../api/client'
 import { ipInCidr } from '../utils/ip'
 import DetailDrawer from '../components/DetailDrawer'
 
@@ -131,7 +131,7 @@ export default function Subnets() {
 
   const collisionCountForSubnet = (subnet: Subnet): number => {
     if (!allUnresolvedCollisions) return 0
-    return allUnresolvedCollisions.filter(c => {
+    return allUnresolvedCollisions.filter((c: Collision) => {
       try {
         const [base, bits] = subnet.cidr.split('/')
         const prefixLen = parseInt(bits)
