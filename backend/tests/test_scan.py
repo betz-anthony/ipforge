@@ -194,9 +194,8 @@ def test_collision_active_but_available(db):
 
     _detect_collisions(db, subnet.id)
 
-    c = db.query(Collision).first()
+    c = db.query(Collision).filter_by(collision_type=CollisionType.active_but_available).first()
     assert c is not None
-    assert c.collision_type == CollisionType.active_but_available
     assert c.ip_address == "10.0.0.1"
     assert c.resolved is False
 
@@ -289,3 +288,23 @@ def test_collision_reopen_on_redetection(db):
     db.refresh(existing)
     assert existing.resolved is False
     assert existing.resolved_at is None
+
+
+def test_collision_hostname_mismatch_via_dns(db):
+    subnet = _make_subnet(db, cidr="10.0.0.0/24")
+    addr = IPAddress(address="10.0.0.10", subnet_id=subnet.id,
+                     status=AddressStatus.assigned, hostname="server01")
+    db.add(addr)
+    from app.scan import _utcnow
+    db.add(CachedDNSRecord(name="webserver01", record_type="A",
+                           value="10.0.0.10", zone="example.com",
+                           ttl=300, source="msdns", synced_at=_utcnow()))
+    _add_scan_result(db, subnet.id, "10.0.0.10")
+
+    _detect_collisions(db, subnet.id)
+
+    c = db.query(Collision).filter_by(collision_type=CollisionType.hostname_mismatch).first()
+    assert c is not None
+    import json
+    details = json.loads(c.details)
+    assert details["dns"] == "webserver01"
