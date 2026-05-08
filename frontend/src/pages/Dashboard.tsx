@@ -248,9 +248,9 @@ export default function Dashboard() {
                   </div>
                 </div>
               ))}
-              <a href="/subnets" style={{ fontSize: '0.8rem', color: 'var(--accent)', textDecoration: 'none' }}>
+              <Link to="/subnets" className="btn-ghost btn-sm" onClick={() => setOpenPanel(null)}>
                 View all subnets →
-              </a>
+              </Link>
             </div>
           )}
         </SlidePanel>
