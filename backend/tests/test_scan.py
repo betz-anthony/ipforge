@@ -4,7 +4,9 @@ from datetime import datetime, timezone
 from app.models.address import IPAddress, AddressStatus
 from app.models.scan import ScanResult
 from app.models.subnet import Subnet
-from app.models.cache import SyncStatus
+from app.models.cache import SyncStatus, CachedDHCPLease, CachedDNSRecord
+from app.models.scan import Collision, CollisionType
+from app.scan import _detect_collisions
 from app.utils import ip_in_cidr
 
 
@@ -170,3 +172,120 @@ def test_get_host_list_caps_at_1024(db):
     from app.scan import _get_host_list
     hosts = _get_host_list(subnet, "10.0.0.1", "10.0.10.254")
     assert len(hosts) == 1024
+
+
+def _add_scan_result(db, subnet_id, ip, reachable=True, latency_ms=1.0):
+    from app.scan import _utcnow
+    row = ScanResult(
+        subnet_id=subnet_id, ip_address=ip,
+        reachable=reachable, latency_ms=latency_ms,
+        scanned_at=_utcnow(),
+    )
+    db.add(row)
+    db.commit()
+    return row
+
+
+def test_collision_active_but_available(db):
+    subnet = _make_subnet(db, cidr="10.0.0.0/30")
+    addr = IPAddress(address="10.0.0.1", subnet_id=subnet.id, status=AddressStatus.available)
+    db.add(addr)
+    _add_scan_result(db, subnet.id, "10.0.0.1", reachable=True, latency_ms=1.2)
+
+    _detect_collisions(db, subnet.id)
+
+    c = db.query(Collision).first()
+    assert c is not None
+    assert c.collision_type == CollisionType.active_but_available
+    assert c.ip_address == "10.0.0.1"
+    assert c.resolved is False
+
+
+def test_collision_not_created_for_assigned_ip(db):
+    subnet = _make_subnet(db, cidr="10.0.0.0/30")
+    addr = IPAddress(address="10.0.0.1", subnet_id=subnet.id, status=AddressStatus.assigned)
+    db.add(addr)
+    _add_scan_result(db, subnet.id, "10.0.0.1", reachable=True)
+
+    _detect_collisions(db, subnet.id)
+
+    assert db.query(Collision).count() == 0
+
+
+def test_collision_multi_dhcp_scope(db):
+    subnet = _make_subnet(db, cidr="10.0.0.0/24")
+    from app.scan import _utcnow
+    now = _utcnow()
+    db.add(CachedDHCPLease(scope_id="10.0.0.0", ip_address="10.0.0.5",
+                           source="msdhcp", synced_at=now))
+    db.add(CachedDHCPLease(scope_id="10.0.0.0", ip_address="10.0.0.5",
+                           source="pihole", synced_at=now))
+    _add_scan_result(db, subnet.id, "10.0.0.5")
+
+    _detect_collisions(db, subnet.id)
+
+    c = db.query(Collision).filter_by(collision_type=CollisionType.multi_dhcp_scope).first()
+    assert c is not None
+    assert c.ip_address == "10.0.0.5"
+    import json
+    details = json.loads(c.details)
+    assert set(details["sources"]) == {"msdhcp", "pihole"}
+
+
+def test_collision_hostname_mismatch(db):
+    subnet = _make_subnet(db, cidr="10.0.0.0/24")
+    addr = IPAddress(address="10.0.0.10", subnet_id=subnet.id,
+                     status=AddressStatus.assigned, hostname="server01")
+    db.add(addr)
+    from app.scan import _utcnow
+    db.add(CachedDHCPLease(scope_id="10.0.0.0", ip_address="10.0.0.10",
+                           name="workstation01", source="msdhcp", synced_at=_utcnow()))
+    _add_scan_result(db, subnet.id, "10.0.0.10")
+
+    _detect_collisions(db, subnet.id)
+
+    c = db.query(Collision).filter_by(collision_type=CollisionType.hostname_mismatch).first()
+    assert c is not None
+    import json
+    details = json.loads(c.details)
+    assert details["ipam"] == "server01"
+    assert details["dhcp"] == "workstation01"
+
+
+def test_collision_no_mismatch_when_names_match(db):
+    subnet = _make_subnet(db, cidr="10.0.0.0/24")
+    addr = IPAddress(address="10.0.0.10", subnet_id=subnet.id,
+                     status=AddressStatus.assigned, hostname="server01")
+    db.add(addr)
+    from app.scan import _utcnow
+    db.add(CachedDHCPLease(scope_id="10.0.0.0", ip_address="10.0.0.10",
+                           name="SERVER01", source="msdhcp", synced_at=_utcnow()))
+    _add_scan_result(db, subnet.id, "10.0.0.10")
+
+    _detect_collisions(db, subnet.id)
+
+    assert db.query(Collision).count() == 0
+
+
+def test_collision_reopen_on_redetection(db):
+    subnet = _make_subnet(db, cidr="10.0.0.0/30")
+    addr = IPAddress(address="10.0.0.1", subnet_id=subnet.id, status=AddressStatus.available)
+    db.add(addr)
+    from app.scan import _utcnow
+    now = _utcnow()
+    existing = Collision(
+        ip_address="10.0.0.1",
+        collision_type=CollisionType.active_but_available,
+        details="{}",
+        detected_at=now,
+        resolved=True,
+        resolved_at=now,
+    )
+    db.add(existing)
+    _add_scan_result(db, subnet.id, "10.0.0.1", reachable=True)
+
+    _detect_collisions(db, subnet.id)
+
+    db.refresh(existing)
+    assert existing.resolved is False
+    assert existing.resolved_at is None
