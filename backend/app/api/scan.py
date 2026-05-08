@@ -1,5 +1,6 @@
 import threading
 from datetime import datetime, timezone
+from typing import Literal
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
@@ -8,6 +9,7 @@ from app.database import get_db
 from app.models.cache import SyncStatus
 from app.models.scan import Collision, ScanResult
 from app.models.subnet import Subnet
+from app.utils import ip_in_cidr
 
 router = APIRouter()
 
@@ -22,20 +24,66 @@ def _age(synced_at) -> int | None:
     return max(0, int((_utcnow() - synced_at).total_seconds()))
 
 
+# ── Request / response schemas ───────────────────────────────────────────────
+
 class ScanTriggerBody(BaseModel):
     start_ip: str | None = None
     end_ip:   str | None = None
 
 
-@router.post("/subnets/{subnet_id}")
+class TriggerResponse(BaseModel):
+    status: str
+
+
+class ScanHostResult(BaseModel):
+    ip: str
+    reachable: bool
+    latency_ms: float | None
+
+
+class ScanStatusResponse(BaseModel):
+    status: str
+    scanned_at: str | None
+    age_seconds: int | None
+    error: str | None
+    results: list[ScanHostResult]
+
+
+class CollisionResponse(BaseModel):
+    id: int
+    ip_address: str
+    collision_type: Literal["active_but_available", "multi_dhcp_scope", "hostname_mismatch"]
+    details: str | None
+    detected_at: str | None
+    resolved: bool
+    resolved_at: str | None
+
+
+class ResolveResponse(BaseModel):
+    id: int
+    resolved: bool
+
+
+# ── Endpoints ────────────────────────────────────────────────────────────────
+
+@router.post("/subnets/{subnet_id}", response_model=TriggerResponse)
 def trigger_scan(
     subnet_id: int,
-    body: ScanTriggerBody = ScanTriggerBody(),
+    body: ScanTriggerBody | None = None,
     db: Session = Depends(get_db),
 ):
     subnet = db.get(Subnet, subnet_id)
     if not subnet:
         raise HTTPException(404, "Subnet not found")
+
+    key = f"scan:{subnet_id}"
+    status_row = db.get(SyncStatus, key)
+    if status_row and status_row.status == "running":
+        raise HTTPException(409, "Scan already running for this subnet")
+
+    if body is None:
+        body = ScanTriggerBody()
+
     from app.scan import scan_subnet
     threading.Thread(
         target=scan_subnet,
@@ -43,10 +91,10 @@ def trigger_scan(
         kwargs={"start_ip": body.start_ip, "end_ip": body.end_ip},
         daemon=True,
     ).start()
-    return {"status": "triggered"}
+    return TriggerResponse(status="triggered")
 
 
-@router.get("/subnets/{subnet_id}")
+@router.get("/subnets/{subnet_id}", response_model=ScanStatusResponse)
 def get_scan_status(subnet_id: int, db: Session = Depends(get_db)):
     key = f"scan:{subnet_id}"
     status_row = db.get(SyncStatus, key)
@@ -57,27 +105,27 @@ def get_scan_status(subnet_id: int, db: Session = Depends(get_db)):
         .order_by(ScanResult.scanned_at.desc())
         .all()
     )
-    latest_results = []
+    latest_results: list[ScanHostResult] = []
     if all_results:
         latest_time = all_results[0].scanned_at
         latest_results = [
-            {"ip": r.ip_address, "reachable": r.reachable, "latency_ms": r.latency_ms}
+            ScanHostResult(ip=r.ip_address, reachable=r.reachable, latency_ms=r.latency_ms)
             for r in all_results
             if r.scanned_at == latest_time
         ]
 
-    return {
-        "status":      status_row.status    if status_row else "never",
-        "scanned_at":  status_row.synced_at.isoformat() + "Z" if (status_row and status_row.synced_at) else None,
-        "age_seconds": _age(status_row.synced_at) if status_row else None,
-        "error":       status_row.error     if status_row else None,
-        "results":     latest_results,
-    }
+    return ScanStatusResponse(
+        status=status_row.status if status_row else "never",
+        scanned_at=status_row.synced_at.isoformat() + "Z" if (status_row and status_row.synced_at) else None,
+        age_seconds=_age(status_row.synced_at) if status_row else None,
+        error=status_row.error if status_row else None,
+        results=latest_results,
+    )
 
 
-@router.get("/collisions")
+@router.get("/collisions", response_model=list[CollisionResponse])
 def list_collisions(
-    resolved:  bool      = Query(False),
+    resolved:  bool       = Query(False),
     subnet_id: int | None = Query(None),
     db: Session = Depends(get_db),
 ):
@@ -90,24 +138,23 @@ def list_collisions(
     if subnet_id is not None:
         subnet = db.get(Subnet, subnet_id)
         if subnet:
-            from app.utils import ip_in_cidr
             collisions = [c for c in collisions if ip_in_cidr(c.ip_address, subnet.cidr)]
 
     return [
-        {
-            "id":             c.id,
-            "ip_address":     c.ip_address,
-            "collision_type": c.collision_type,
-            "details":        c.details,
-            "detected_at":    c.detected_at.isoformat() + "Z" if c.detected_at else None,
-            "resolved":       c.resolved,
-            "resolved_at":    c.resolved_at.isoformat() + "Z" if c.resolved_at else None,
-        }
+        CollisionResponse(
+            id=c.id,
+            ip_address=c.ip_address,
+            collision_type=c.collision_type,
+            details=c.details,
+            detected_at=c.detected_at.isoformat() + "Z" if c.detected_at else None,
+            resolved=c.resolved,
+            resolved_at=c.resolved_at.isoformat() + "Z" if c.resolved_at else None,
+        )
         for c in collisions
     ]
 
 
-@router.put("/collisions/{collision_id}/resolve")
+@router.put("/collisions/{collision_id}/resolve", response_model=ResolveResponse)
 def resolve_collision(collision_id: int, db: Session = Depends(get_db)):
     c = db.get(Collision, collision_id)
     if not c:
@@ -115,4 +162,4 @@ def resolve_collision(collision_id: int, db: Session = Depends(get_db)):
     c.resolved    = True
     c.resolved_at = _utcnow()
     db.commit()
-    return {"id": c.id, "resolved": True}
+    return ResolveResponse(id=c.id, resolved=True)
