@@ -1,4 +1,3 @@
-import ipaddress as _ipaddress
 import logging
 import threading
 import time
@@ -11,18 +10,12 @@ from app.models.cache import (
     CachedDHCPScope, CachedDHCPLease,
     SyncStatus,
 )
+from app.utils import ip_in_cidr as _ip_in_cidr
 
 logger = logging.getLogger(__name__)
 
 _dns_lock  = threading.Lock()
 _dhcp_lock = threading.Lock()
-
-
-def _ip_in_cidr(ip: str, cidr: str) -> bool:
-    try:
-        return _ipaddress.ip_address(ip) in _ipaddress.ip_network(cidr, strict=False)
-    except ValueError:
-        return False
 
 
 def _auto_populate_from_cache(db) -> None:
