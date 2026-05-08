@@ -6,10 +6,12 @@ from app.models.cache import (
     CachedDHCPScope, CachedDHCPLease,
     SyncStatus,
 )
+from app.models.scan import ScanResult, Collision, CollisionType
 
 __all__ = [
     "Subnet", "IPAddress", "AppSetting",
     "CachedDNSZone", "CachedDNSRecord",
     "CachedDHCPScope", "CachedDHCPLease",
     "SyncStatus",
+    "ScanResult", "Collision", "CollisionType",
 ]
