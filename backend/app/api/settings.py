@@ -8,7 +8,10 @@ from app.providers.registry import get_dns_providers, get_dhcp_providers
 
 router = APIRouter()
 
-INT_KEYS = {"ms_winrm_port", "bind_port"}
+INT_KEYS = {
+    "ms_winrm_port", "bind_port",
+    "util_warn_threshold", "util_critical_threshold", "util_dashboard_top_n",
+}
 
 SETTING_KEYS = [
     "dns_provider", "dhcp_provider",
@@ -22,6 +25,8 @@ SETTING_KEYS = [
     "bind_tsig_key_secret", "bind_tsig_algorithm", "bind_zones",
     # Kea
     "kea_url", "kea_secret",
+    # Utilization
+    "util_warn_threshold", "util_critical_threshold", "util_dashboard_top_n",
 ]
 
 
@@ -49,6 +54,10 @@ class SettingsResponse(BaseModel):
     # Kea
     kea_url: str
     kea_secret_set: bool
+    # Utilization
+    util_warn_threshold: int
+    util_critical_threshold: int
+    util_dashboard_top_n: int
 
 
 class SettingsUpdate(BaseModel):
@@ -75,6 +84,10 @@ class SettingsUpdate(BaseModel):
     # Kea
     kea_url: str | None = None
     kea_secret: str | None = None
+    # Utilization
+    util_warn_threshold: int | None = None
+    util_critical_threshold: int | None = None
+    util_dashboard_top_n: int | None = None
 
 
 def apply_db_settings(db: Session) -> None:
@@ -117,6 +130,9 @@ def get_settings():
         bind_zones=settings.bind_zones,
         kea_url=settings.kea_url,
         kea_secret_set=bool(settings.kea_secret),
+        util_warn_threshold=settings.util_warn_threshold,
+        util_critical_threshold=settings.util_critical_threshold,
+        util_dashboard_top_n=settings.util_dashboard_top_n,
     )
 
 
