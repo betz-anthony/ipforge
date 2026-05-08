@@ -243,3 +243,40 @@ export const scanApi = {
   resolveCollision: (id: number) =>
     api.put<{ id: number; resolved: boolean }>(`/scan/collisions/${id}/resolve`).then(r => r.data),
 }
+
+export interface SearchResults {
+  subnets: Array<{
+    id: number
+    name: string
+    cidr: string
+    ip_version: number
+    description: string | null
+  }>
+  addresses: Array<{
+    id: number
+    address: string
+    hostname: string | null
+    status: string
+    mac_address: string | null
+    subnet_id: number
+  }>
+  leases: Array<{
+    ip_address: string
+    name: string | null
+    mac_address: string | null
+    scope_id: string
+    source: string
+  }>
+  records: Array<{
+    name: string
+    record_type: string
+    value: string
+    zone: string
+    source: string
+  }>
+}
+
+export const searchApi = {
+  search: (q: string) =>
+    api.get<SearchResults>('/search', { params: { q } }).then(r => r.data),
+}
