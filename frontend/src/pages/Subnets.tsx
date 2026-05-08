@@ -64,6 +64,7 @@ export default function Subnets() {
     onSuccess: () => {
       setShowRangePicker(false)
       refetchScan()
+      qc.invalidateQueries({ queryKey: ['addresses', selectedSubnet?.id] })
     },
   })
 
