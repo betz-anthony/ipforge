@@ -256,6 +256,7 @@ select option { background: var(--surface-2); }
 
 input[type="checkbox"] { margin: 0; flex-shrink: 0; cursor: pointer; vertical-align: middle; }
 .checkbox-label { display: flex; align-items: center; gap: 0.5rem; cursor: pointer; font-size: 0.85rem; color: var(--text); }
+.provider-group-label { font-size: 0.775rem; font-weight: 500; color: var(--text-subtle); margin-bottom: 0.5rem; }
 
 .form-field-wide { grid-column: 1 / -1; }
 
