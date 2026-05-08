@@ -57,8 +57,10 @@ export default function Subnets() {
   })
 
   const triggerScanMutation = useMutation({
-    mutationFn: (range?: { start_ip: string; end_ip: string }) =>
-      scanApi.trigger(selectedSubnet!.id, range),
+    mutationFn: (range?: { start_ip: string; end_ip: string }) => {
+      if (!selectedSubnet) return Promise.reject(new Error('No subnet selected'))
+      return scanApi.trigger(selectedSubnet.id, range)
+    },
     onSuccess: () => {
       setShowRangePicker(false)
       refetchScan()
@@ -131,19 +133,7 @@ export default function Subnets() {
 
   const collisionCountForSubnet = (subnet: Subnet): number => {
     if (!allUnresolvedCollisions) return 0
-    return allUnresolvedCollisions.filter((c: Collision) => {
-      try {
-        const [base, bits] = subnet.cidr.split('/')
-        const prefixLen = parseInt(bits)
-        const ipParts   = c.ip_address.split('.').map(Number)
-        const baseParts = base.split('.').map(Number)
-        const fullBytes = Math.floor(prefixLen / 8)
-        for (let i = 0; i < fullBytes; i++) {
-          if (ipParts[i] !== baseParts[i]) return false
-        }
-        return true
-      } catch { return false }
-    }).length
+    return allUnresolvedCollisions.filter(c => ipInCidr(c.ip_address, subnet.cidr)).length
   }
 
   const prefixLen     = selectedSubnet ? parseInt(selectedSubnet.cidr.split('/')[1]) : 0
@@ -323,7 +313,7 @@ export default function Subnets() {
             <div style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--warning, #f59e0b)', marginBottom: '0.4rem', display: 'flex', alignItems: 'center', gap: '4px' }}>
               <AlertTriangle size={12} /> {subnetCollisions.length} collision{subnetCollisions.length > 1 ? 's' : ''}
             </div>
-            {subnetCollisions.map(c => (
+            {subnetCollisions.map((c: Collision) => (
               <div key={c.id} style={{ fontSize: '0.75rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.25rem 0', borderBottom: '1px solid var(--border)' }}>
                 <span>
                   <span className="font-mono">{c.ip_address}</span>{' '}
@@ -419,14 +409,16 @@ export default function Subnets() {
               {data.length === 0 && (
                 <tr><td colSpan={6} className="empty-state">No subnets defined. Add one above.</td></tr>
               )}
-              {data.map((s: Subnet) => (
+              {data.map((s: Subnet) => {
+                const collisionCount = collisionCountForSubnet(s)
+                return (
                 <tr key={s.id} className="clickable" onClick={() => openDrawer(s)}>
                   <td>
                     <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                       {s.name}
-                      {collisionCountForSubnet(s) > 0 && (
+                      {collisionCount > 0 && (
                         <span style={{ fontSize: '0.65rem', fontWeight: 600, color: 'var(--warning, #f59e0b)', display: 'flex', alignItems: 'center', gap: '2px' }}>
-                          <AlertTriangle size={10} /> {collisionCountForSubnet(s)}
+                          <AlertTriangle size={10} /> {collisionCount}
                         </span>
                       )}
                     </span>
@@ -448,7 +440,7 @@ export default function Subnets() {
                     </button>
                   </td>
                 </tr>
-              ))}
+              )})}
             </tbody>
           </table>
         </div>
