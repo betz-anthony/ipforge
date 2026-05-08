@@ -45,6 +45,9 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    # NOTE: PostgreSQL does not support ALTER TYPE ... DROP VALUE, so the
+    # 'discovered' value added to addressstatus cannot be removed here.
+    # It is intentionally left in place.
     op.drop_index('ix_collisions_ip', 'collisions')
     op.drop_table('collisions')
     op.drop_index('ix_scan_results_ip', 'scan_results')
