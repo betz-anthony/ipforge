@@ -159,6 +159,16 @@ def resolve_collision(collision_id: int, db: Session = Depends(get_db)):
     c = db.get(Collision, collision_id)
     if not c:
         raise HTTPException(404, "Collision not found")
+
+    # TODO(enhancement/guided-resolve): dispatch type-specific remediation before marking resolved.
+    # active_but_available  → update IPAddress.status to 'assigned' via addresses API
+    # hostname_mismatch     → accept canonical name from request body; push update to DNS
+    #                         (DNSProvider.update_record) and DHCP (DHCPProvider — needs
+    #                         update_reservation_name, not yet implemented) and IPAM record
+    # multi_dhcp_scope      → accept target source to remove from request body; call
+    #                         DHCPProvider.delete_reservation(scope_id, ip) on that source
+    # See docs/enhancements.md — "Guided collision resolve"
+
     c.resolved    = True
     c.resolved_at = _utcnow()
     db.commit()
