@@ -165,9 +165,10 @@ export default function SettingsPage() {
         {/* ── Provider selection ── */}
         <div className="settings-section">
           <SectionTitle>Providers</SectionTitle>
-          <div className="form-grid">
-            <Field label="DNS Providers">
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', paddingTop: '0.25rem' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem' }}>
+            <div>
+              <div className="provider-group-label">DNS</div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
                 {DNS_OPTIONS.map(opt => (
                   <label key={opt.value} className="checkbox-label">
                     <input
@@ -179,9 +180,10 @@ export default function SettingsPage() {
                   </label>
                 ))}
               </div>
-            </Field>
-            <Field label="DHCP Providers">
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', paddingTop: '0.25rem' }}>
+            </div>
+            <div>
+              <div className="provider-group-label">DHCP</div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
                 {DHCP_OPTIONS.map(opt => (
                   <label key={opt.value} className="checkbox-label">
                     <input
@@ -193,7 +195,7 @@ export default function SettingsPage() {
                   </label>
                 ))}
               </div>
-            </Field>
+            </div>
           </div>
         </div>
 
