@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
 import { Network, List, Server, Globe, Search } from 'lucide-react'
-import { statsApi, dnsApi, dhcpApi, scanApi, type Collision } from '../api/client'
+import { statsApi, dnsApi, dhcpApi, scanApi } from '../api/client'
 import SlidePanel from '../components/SlidePanel'
 
 const TILES = [
@@ -216,13 +216,14 @@ export default function Dashboard() {
             </p>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-              {collisions.map((c: Collision) => (
+              {collisions.map(c => (
                 <div key={c.id} style={{ padding: '0.75rem', background: 'var(--surface-2)', borderRadius: '6px', border: '1px solid var(--border)' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.4rem' }}>
                     <span className="font-mono" style={{ fontSize: '0.85rem', fontWeight: 600 }}>{c.ip_address}</span>
                     <button
                       className="btn-ghost btn-sm"
                       onClick={() => resolveCollisionMutation.mutate(c.id)}
+                      disabled={resolveCollisionMutation.isPending}
                       style={{ fontSize: '0.65rem' }}
                     >
                       Resolve
@@ -237,14 +238,18 @@ export default function Dashboard() {
                       return (
                         <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: '0.4rem' }}>
                           {Object.entries(d).map(([k, v]) => (
-                            <span key={k} style={{ marginRight: '0.75rem' }}>{k}: <strong>{String(v)}</strong></span>
+                            <span key={k} style={{ marginRight: '0.75rem' }}>
+                              {k}: <strong>{typeof v === 'object' ? JSON.stringify(v) : String(v)}</strong>
+                            </span>
                           ))}
                         </div>
                       )
                     } catch { return null }
                   })()}
                   <div style={{ fontSize: '0.65rem', color: 'var(--text-muted)', marginTop: '0.25rem' }}>
-                    Detected {Math.floor((Date.now() - new Date(c.detected_at ?? '').getTime()) / 60000)}m ago
+                    {c.detected_at
+                      ? `Detected ${Math.floor((Date.now() - new Date(c.detected_at).getTime()) / 60000)}m ago`
+                      : 'Detected: unknown'}
                   </div>
                 </div>
               ))}
