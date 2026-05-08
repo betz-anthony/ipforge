@@ -23,3 +23,9 @@ class SubnetRead(SubnetCreate):
     created_at: datetime
 
     model_config = {"from_attributes": True}
+
+
+class SubnetWithStats(SubnetRead):
+    used_count: int
+    total_count: int
+    utilization_pct: float

@@ -1,14 +1,19 @@
 import ipaddress
 from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 from app.database import get_db
 from app.models.subnet import Subnet
-from app.schemas.subnet import SubnetCreate, SubnetRead, SubnetUpdate
+from app.models.address import IPAddress, AddressStatus
+from app.schemas.subnet import SubnetCreate, SubnetRead, SubnetUpdate, SubnetWithStats
 
 router = APIRouter()
 
 
-@router.get("", response_model=list[SubnetRead])
+_USED_STATUSES = [AddressStatus.assigned, AddressStatus.reserved, AddressStatus.discovered]
+
+
+@router.get("", response_model=list[SubnetWithStats])
 def list_subnets(
     ip_version: int | None = Query(None, description="Filter by IP version (4 or 6)"),
     db: Session = Depends(get_db),
@@ -16,7 +21,34 @@ def list_subnets(
     q = db.query(Subnet)
     if ip_version is not None:
         q = q.filter(Subnet.ip_version == ip_version)
-    return q.all()
+    subnets = q.all()
+
+    counts = (
+        db.query(IPAddress.subnet_id, func.count(IPAddress.id).label("used"))
+        .filter(IPAddress.status.in_(_USED_STATUSES))
+        .group_by(IPAddress.subnet_id)
+        .all()
+    )
+    count_map = {row.subnet_id: row.used for row in counts}
+
+    result = []
+    for s in subnets:
+        used = count_map.get(s.id, 0)
+        network = ipaddress.ip_network(s.cidr, strict=False)
+        if network.version == 6:
+            total = network.num_addresses
+        elif network.prefixlen >= 31:
+            total = network.num_addresses
+        else:
+            total = max(1, network.num_addresses - 2)
+        pct = min(100.0, round(used / total * 100, 1)) if total > 0 else 0.0
+        result.append(SubnetWithStats(
+            id=s.id, name=s.name, cidr=s.cidr, ip_version=s.ip_version,
+            vlan_id=s.vlan_id, description=s.description, notes=s.notes,
+            created_at=s.created_at,
+            used_count=used, total_count=total, utilization_pct=pct,
+        ))
+    return result
 
 
 @router.post("", response_model=SubnetRead, status_code=201)
