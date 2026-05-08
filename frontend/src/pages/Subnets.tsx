@@ -322,6 +322,8 @@ export default function Subnets() {
                     {c.collision_type.replace(/_/g, ' ')}
                   </span>
                 </span>
+                {/* TODO(enhancement/guided-resolve): replace direct mutate with CollisionResolveDialog.
+                    See docs/enhancements.md — "Guided collision resolve" */}
                 <button
                   className="btn-ghost btn-sm"
                   onClick={() => resolveCollisionMutation.mutate(c.id)}

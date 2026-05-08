@@ -220,6 +220,10 @@ export default function Dashboard() {
                 <div key={c.id} style={{ padding: '0.75rem', background: 'var(--surface-2)', borderRadius: '6px', border: '1px solid var(--border)' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.4rem' }}>
                     <span className="font-mono" style={{ fontSize: '0.85rem', fontWeight: 600 }}>{c.ip_address}</span>
+                    {/* TODO(enhancement/guided-resolve): replace direct mutate with a type-aware
+                        confirmation dialog (CollisionResolveDialog) that shows remediation
+                        options per collision_type and calls the appropriate server action.
+                        See docs/enhancements.md — "Guided collision resolve" */}
                     <button
                       className="btn-ghost btn-sm"
                       onClick={() => resolveCollisionMutation.mutate(c.id)}
