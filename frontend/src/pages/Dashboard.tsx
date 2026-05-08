@@ -1,8 +1,8 @@
 import { useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
 import { Network, List, Server, Globe, Search } from 'lucide-react'
-import { statsApi, dnsApi, dhcpApi } from '../api/client'
+import { statsApi, dnsApi, dhcpApi, scanApi, type Collision } from '../api/client'
 import SlidePanel from '../components/SlidePanel'
 
 const TILES = [
@@ -18,7 +18,7 @@ const SOURCE_LABEL: Record<string, string> = {
   msdns: 'MS DNS', bind: 'BIND',
 }
 
-type PanelKey = 'dns_zones' | 'dns_records' | 'dhcp_scopes' | 'dhcp_leases'
+type PanelKey = 'dns_zones' | 'dns_records' | 'dhcp_scopes' | 'dhcp_leases' | 'collisions'
 
 function count(val: number | undefined) {
   return val === undefined ? '—' : val.toLocaleString()
@@ -26,6 +26,7 @@ function count(val: number | undefined) {
 
 export default function Dashboard() {
   const [openPanel, setOpenPanel] = useState<PanelKey | null>(null)
+  const qc = useQueryClient()
 
   const { data: stats } = useQuery({ queryKey: ['stats'], queryFn: statsApi.get })
 
@@ -39,6 +40,16 @@ export default function Dashboard() {
     queryKey: ['dhcp-scopes'],
     queryFn: dhcpApi.listScopes,
     enabled: openPanel === 'dhcp_scopes' || openPanel === 'dhcp_leases',
+  })
+
+  const { data: collisions } = useQuery({
+    queryKey: ['collisions-dashboard'],
+    queryFn: () => scanApi.collisions({ resolved: false }),
+  })
+
+  const resolveCollisionMutation = useMutation({
+    mutationFn: (id: number) => scanApi.resolveCollision(id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['collisions-dashboard'] }),
   })
 
   const toggle = (key: PanelKey) =>
@@ -83,6 +94,20 @@ export default function Dashboard() {
         >
           <div className="stat-value accent">{count(stats?.dhcp_leases)}</div>
           <div className="stat-label">DHCP Leases</div>
+        </div>
+        <div
+          className="stat-card"
+          style={{ cursor: 'pointer' }}
+          onClick={() => toggle('collisions')}
+        >
+          <div
+            className="stat-value"
+            style={{ color: collisions && collisions.length > 0 ? 'var(--warning, #f59e0b)' : undefined }}
+          >
+            {collisions?.length ?? '—'}
+          </div>
+          <div className="stat-label">Collisions</div>
+          <div className="stat-sub">unresolved</div>
         </div>
       </div>
 
@@ -176,6 +201,58 @@ export default function Dashboard() {
               </Link>
             </div>
           </div>
+        </SlidePanel>
+      )}
+
+      {openPanel === 'collisions' && (
+        <SlidePanel
+          title="IP Collisions"
+          subtitle={`${collisions?.length ?? 0} unresolved`}
+          onClose={() => setOpenPanel(null)}
+        >
+          {!collisions || collisions.length === 0 ? (
+            <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', padding: '1rem 0' }}>
+              No unresolved collisions.
+            </p>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+              {collisions.map((c: Collision) => (
+                <div key={c.id} style={{ padding: '0.75rem', background: 'var(--surface-2)', borderRadius: '6px', border: '1px solid var(--border)' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.4rem' }}>
+                    <span className="font-mono" style={{ fontSize: '0.85rem', fontWeight: 600 }}>{c.ip_address}</span>
+                    <button
+                      className="btn-ghost btn-sm"
+                      onClick={() => resolveCollisionMutation.mutate(c.id)}
+                      style={{ fontSize: '0.65rem' }}
+                    >
+                      Resolve
+                    </button>
+                  </div>
+                  <span className="badge badge-yellow" style={{ fontSize: '0.6rem' }}>
+                    {c.collision_type.replace(/_/g, ' ')}
+                  </span>
+                  {c.details && (() => {
+                    try {
+                      const d = JSON.parse(c.details)
+                      return (
+                        <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: '0.4rem' }}>
+                          {Object.entries(d).map(([k, v]) => (
+                            <span key={k} style={{ marginRight: '0.75rem' }}>{k}: <strong>{String(v)}</strong></span>
+                          ))}
+                        </div>
+                      )
+                    } catch { return null }
+                  })()}
+                  <div style={{ fontSize: '0.65rem', color: 'var(--text-muted)', marginTop: '0.25rem' }}>
+                    Detected {Math.floor((Date.now() - new Date(c.detected_at ?? '').getTime()) / 60000)}m ago
+                  </div>
+                </div>
+              ))}
+              <a href="/subnets" style={{ fontSize: '0.8rem', color: 'var(--accent)', textDecoration: 'none' }}>
+                View all subnets →
+              </a>
+            </div>
+          )}
         </SlidePanel>
       )}
     </div>
