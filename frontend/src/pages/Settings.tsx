@@ -44,6 +44,9 @@ const defaults: FormState = {
   bind_host: '', bind_port: 53, bind_tsig_key_name: '',
   bind_tsig_algorithm: 'hmac-sha256', bind_zones: '',
   kea_url: '',
+  util_warn_threshold: 80,
+  util_critical_threshold: 95,
+  util_dashboard_top_n: 5,
   _ms_password: '', _pihole_password: '', _bind_secret: '', _kea_secret: '',
 }
 
@@ -109,6 +112,9 @@ export default function SettingsPage() {
       bind_tsig_algorithm: data.bind_tsig_algorithm,
       bind_zones:          data.bind_zones,
       kea_url:             data.kea_url,
+      util_warn_threshold:     data.util_warn_threshold,
+      util_critical_threshold: data.util_critical_threshold,
+      util_dashboard_top_n:    data.util_dashboard_top_n,
     }))
   }, [data])
 
@@ -130,6 +136,9 @@ export default function SettingsPage() {
         bind_tsig_algorithm: form.bind_tsig_algorithm,
         bind_zones:          form.bind_zones,
         kea_url:             form.kea_url,
+        util_warn_threshold:     form.util_warn_threshold,
+        util_critical_threshold: form.util_critical_threshold,
+        util_dashboard_top_n:    form.util_dashboard_top_n,
       }
       if (form._ms_password)    payload.ms_winrm_password  = form._ms_password
       if (form._pihole_password) payload.pihole_password   = form._pihole_password
@@ -147,7 +156,11 @@ export default function SettingsPage() {
 
   const s = <K extends keyof FormState>(key: K) =>
     (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
-      setForm(f => ({ ...f, [key]: (key === 'ms_winrm_port' || key === 'bind_port') ? Number(e.target.value) : e.target.value }))
+      setForm(f => ({ ...f, [key]: (
+        key === 'ms_winrm_port' || key === 'bind_port' ||
+        key === 'util_warn_threshold' || key === 'util_critical_threshold' ||
+        key === 'util_dashboard_top_n'
+      ) ? Number(e.target.value) : e.target.value }))
 
   const needsWinRM  = hasProvider(form.dns_provider ?? '', 'msdns')  || hasProvider(form.dhcp_provider ?? '', 'msdhcp')
   const needsPihole = hasProvider(form.dns_provider ?? '', 'pihole') || hasProvider(form.dhcp_provider ?? '', 'pihole')
@@ -306,6 +319,34 @@ export default function SettingsPage() {
             </div>
           </div>
         )}
+
+        {/* ── Utilization ── */}
+        <div className="settings-section">
+          <SectionTitle>Utilization Thresholds</SectionTitle>
+          <div className="form-grid">
+            <Field label="Warn threshold (%)" hint="default 80">
+              <input
+                type="number" min={1} max={99}
+                value={form.util_warn_threshold ?? 80}
+                onChange={s('util_warn_threshold')}
+              />
+            </Field>
+            <Field label="Critical threshold (%)" hint="default 95">
+              <input
+                type="number" min={1} max={100}
+                value={form.util_critical_threshold ?? 95}
+                onChange={s('util_critical_threshold')}
+              />
+            </Field>
+            <Field label="Dashboard top N subnets" hint="default 5">
+              <input
+                type="number" min={1} max={20}
+                value={form.util_dashboard_top_n ?? 5}
+                onChange={s('util_dashboard_top_n')}
+              />
+            </Field>
+          </div>
+        </div>
 
         <div className="form-actions">
           <button type="submit" className="btn-primary" disabled={mutation.isPending}>
