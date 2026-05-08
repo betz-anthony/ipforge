@@ -169,7 +169,7 @@ export default function SettingsPage() {
             <Field label="DNS Providers">
               <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', paddingTop: '0.25rem' }}>
                 {DNS_OPTIONS.map(opt => (
-                  <label key={opt.value} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', fontSize: '0.85rem' }}>
+                  <label key={opt.value} className="checkbox-label">
                     <input
                       type="checkbox"
                       checked={hasProvider(form.dns_provider ?? '', opt.value)}
@@ -183,7 +183,7 @@ export default function SettingsPage() {
             <Field label="DHCP Providers">
               <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', paddingTop: '0.25rem' }}>
                 {DHCP_OPTIONS.map(opt => (
-                  <label key={opt.value} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', fontSize: '0.85rem' }}>
+                  <label key={opt.value} className="checkbox-label">
                     <input
                       type="checkbox"
                       checked={hasProvider(form.dhcp_provider ?? '', opt.value)}

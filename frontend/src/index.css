@@ -252,7 +252,10 @@ select option { background: var(--surface-2); }
   gap: 0.75rem;
 }
 .form-field { display: flex; flex-direction: column; gap: 0.3125rem; }
-.form-field label { font-size: 0.775rem; font-weight: 500; color: var(--text-subtle); }
+.form-field > label { font-size: 0.775rem; font-weight: 500; color: var(--text-subtle); }
+
+input[type="checkbox"] { margin: 0; flex-shrink: 0; cursor: pointer; vertical-align: middle; }
+.checkbox-label { display: flex; align-items: center; gap: 0.5rem; cursor: pointer; font-size: 0.85rem; color: var(--text); }
 
 .form-field-wide { grid-column: 1 / -1; }
 
