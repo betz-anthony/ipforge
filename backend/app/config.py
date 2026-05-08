@@ -32,6 +32,11 @@ class Settings(BaseSettings):
     kea_url: str = ""           # e.g. http://kea-host:8000
     kea_secret: str = ""        # API key (if auth enabled)
 
+    # Utilization thresholds
+    util_warn_threshold: int = 80
+    util_critical_threshold: int = 95
+    util_dashboard_top_n: int = 5
+
     # Deployment mode: "background" (docker-compose) or "disabled" (K8s CronJob handles sync)
     sync_mode: str = "background"
 
