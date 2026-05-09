@@ -4,6 +4,7 @@ import { Link } from 'react-router-dom'
 import { Network, List, Server, Globe, Search } from 'lucide-react'
 import { statsApi, dnsApi, dhcpApi, scanApi, subnetsApi, settingsApi } from '../api/client'
 import SlidePanel from '../components/SlidePanel'
+import UtilBar from '../components/UtilBar'
 
 const TILES = [
   { to: '/subnets',   icon: Network, title: 'Subnets',   desc: 'Manage IP subnets and CIDRs' },
@@ -22,20 +23,6 @@ type PanelKey = 'dns_zones' | 'dns_records' | 'dhcp_scopes' | 'dhcp_leases' | 'c
 
 function count(val: number | undefined) {
   return val === undefined ? '—' : val.toLocaleString()
-}
-
-function UtilBar({ pct, warn, critical }: { pct: number; warn: number; critical: number }) {
-  const color = pct >= critical ? 'var(--danger)' : pct >= warn ? '#fbbf24' : '#4ade80'
-  return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-      <div style={{ width: '56px', height: '5px', background: 'var(--surface-2)', borderRadius: '3px', overflow: 'hidden' }}>
-        <div style={{ width: `${Math.min(100, pct)}%`, height: '100%', background: color, borderRadius: '3px' }} />
-      </div>
-      <span style={{ fontSize: '0.72rem', color, fontFamily: 'var(--font-mono)' }}>
-        {pct.toFixed(1)}%
-      </span>
-    </div>
-  )
 }
 
 export default function Dashboard() {
