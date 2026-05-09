@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
 import { Network, List, Server, Globe, Search } from 'lucide-react'
-import { statsApi, dnsApi, dhcpApi, scanApi } from '../api/client'
+import { statsApi, dnsApi, dhcpApi, scanApi, subnetsApi, settingsApi } from '../api/client'
 import SlidePanel from '../components/SlidePanel'
 
 const TILES = [
@@ -22,6 +22,20 @@ type PanelKey = 'dns_zones' | 'dns_records' | 'dhcp_scopes' | 'dhcp_leases' | 'c
 
 function count(val: number | undefined) {
   return val === undefined ? '—' : val.toLocaleString()
+}
+
+function UtilBar({ pct, warn, critical }: { pct: number; warn: number; critical: number }) {
+  const color = pct >= critical ? 'var(--danger)' : pct >= warn ? '#fbbf24' : '#4ade80'
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+      <div style={{ width: '56px', height: '5px', background: 'var(--surface-2)', borderRadius: '3px', overflow: 'hidden' }}>
+        <div style={{ width: `${Math.min(100, pct)}%`, height: '100%', background: color, borderRadius: '3px' }} />
+      </div>
+      <span style={{ fontSize: '0.72rem', color, fontFamily: 'var(--font-mono)' }}>
+        {pct.toFixed(1)}%
+      </span>
+    </div>
+  )
 }
 
 export default function Dashboard() {
@@ -46,6 +60,17 @@ export default function Dashboard() {
     queryKey: ['collisions-dashboard'],
     queryFn: () => scanApi.collisions({ resolved: false }),
   })
+
+  const { data: subnets }      = useQuery({ queryKey: ['subnets'],  queryFn: subnetsApi.list })
+  const { data: settingsData } = useQuery({ queryKey: ['settings'], queryFn: settingsApi.get })
+
+  const warnAt     = settingsData?.util_warn_threshold     ?? 80
+  const criticalAt = settingsData?.util_critical_threshold  ?? 95
+  const topN       = settingsData?.util_dashboard_top_n     ?? 5
+
+  const topSubnets = subnets
+    ? [...subnets].sort((a, b) => b.utilization_pct - a.utilization_pct).slice(0, topN)
+    : []
 
   const resolveCollisionMutation = useMutation({
     mutationFn: (id: number) => scanApi.resolveCollision(id),
@@ -121,6 +146,32 @@ export default function Dashboard() {
           </Link>
         ))}
       </div>
+
+      <p className="section-label">Subnet Utilization</p>
+      {!subnets ? (
+        <p className="loading">Loading…</p>
+      ) : topSubnets.length === 0 ? (
+        <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>No subnets defined.</p>
+      ) : (
+        <div className="stat-card" style={{ padding: '0.75rem 1rem' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
+            {topSubnets.map(s => (
+              <div key={s.id} style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                <span style={{ width: '120px', fontSize: '0.78rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: 'var(--text-subtle)' }}>
+                  {s.name}
+                </span>
+                <span className="font-mono" style={{ width: '110px', fontSize: '0.72rem', color: 'var(--text-muted)', flexShrink: 0 }}>
+                  {s.cidr}
+                </span>
+                <UtilBar pct={s.utilization_pct} warn={warnAt} critical={criticalAt} />
+                <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginLeft: 'auto' }}>
+                  {s.used_count}/{s.total_count}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {(openPanel === 'dns_zones' || openPanel === 'dns_records') && (
         <SlidePanel
