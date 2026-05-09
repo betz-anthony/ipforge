@@ -3,6 +3,7 @@ import dns.zone
 import dns.update
 import dns.tsigkeyring
 import dns.rdatatype
+import dns.rcode
 import dns.name
 from app.config import settings
 from app.providers.dns.base import DNSProvider, DNSRecord
@@ -64,15 +65,21 @@ class BINDDNSProvider(DNSProvider):
             kwargs = {"keyring": keyring, "keyalgorithm": algo}
         return dns.update.Update(zone, **kwargs), kwargs
 
+    def _send_update(self, update) -> None:
+        resp = dns.query.tcp(update, settings.bind_host, port=settings.bind_port)
+        rc = resp.rcode()
+        if rc != dns.rcode.NOERROR:
+            raise RuntimeError(f"BIND RFC 2136 update rejected: {dns.rcode.to_text(rc)}")
+
     def add_record(self, record: DNSRecord) -> None:
         update, _ = self._update(record.zone)
         update.add(record.name, record.ttl, record.record_type, record.value)
-        dns.query.tcp(update, settings.bind_host, port=settings.bind_port)
+        self._send_update(update)
 
     def delete_record(self, record: DNSRecord) -> None:
         update, _ = self._update(record.zone)
         update.delete(record.name, record.record_type, record.value)
-        dns.query.tcp(update, settings.bind_host, port=settings.bind_port)
+        self._send_update(update)
 
     def update_record(self, old: DNSRecord, new: DNSRecord) -> None:
         self.delete_record(old)
