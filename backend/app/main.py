@@ -3,7 +3,7 @@ import threading
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 
-logging.basicConfig(level=logging.INFO, format="%(levelname)s [%(name)s] %(message)s")
+logging.basicConfig(level=logging.INFO, format="%(levelname)s [%(name)s] %(message)s", force=True)
 from fastapi.middleware.cors import CORSMiddleware
 from app.database import SessionLocal
 from app.config import settings as app_settings
