@@ -2,7 +2,7 @@ import { useMemo, useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Plus, X } from 'lucide-react'
 import { dhcpApi, providersApi, addressesApi, subnetsApi, type DHCPReservation, type DHCPScope } from '../api/client'
-import { rangeSize, ipInCidr } from '../utils/ip'
+import { rangeSize, ipInCidr, ipToNum, isValidIPv4, isValidIPv6 } from '../utils/ip'
 import SyncBar from '../components/SyncBar'
 import DetailPanel from '../components/DetailPanel'
 
@@ -138,7 +138,21 @@ export default function DHCP() {
     (e: React.ChangeEvent<HTMLInputElement>) =>
       setForm(f => ({ ...f, [key]: key === 'iaid' ? Number(e.target.value) : e.target.value }))
 
-  const canSubmit = form.ip_address && form.name && (
+  const ipError = useMemo(() => {
+    const ip = form.ip_address
+    if (!ip) return null
+    const v6 = isV6(selectedScope)
+    if (v6 ? !isValidIPv6(ip) : !isValidIPv4(ip))
+      return `Invalid IPv${v6 ? 6 : 4} address`
+    if (!v6 && selectedScope?.scope_id.includes('/') && !ipInCidr(ip, selectedScope.scope_id))
+      return `IP not in scope ${selectedScope.scope_id}`
+    if (!v6 && selectedScope?.start_range && selectedScope.end_range &&
+        (ipToNum(ip) < ipToNum(selectedScope.start_range) || ipToNum(ip) > ipToNum(selectedScope.end_range)))
+      return `IP outside pool range (${selectedScope.start_range}–${selectedScope.end_range})`
+    return null
+  }, [form.ip_address, selectedScope])
+
+  const canSubmit = form.ip_address && !ipError && form.name && (
     isV6(selectedScope) ? form.client_duid : form.mac_address
   )
 
@@ -256,6 +270,7 @@ export default function DHCP() {
                         value={form.ip_address}
                         onChange={set('ip_address')}
                       />
+                      {ipError && <span className="feedback-error" style={{ fontSize: '0.72rem' }}>{ipError}</span>}
                     </div>
 
                     {isV6(selectedScope) ? (
