@@ -101,14 +101,19 @@ class KeaDHCPProvider(DHCPProvider):
         return list(results.values())
 
     def add_reservation(self, reservation: DHCPReservation) -> None:
-        self._cmd("reservation-add", arguments={
-            "reservation": {
-                "ip-address": reservation.ip_address,
-                "hw-address": reservation.mac_address,
-                "hostname": reservation.name,
-                "subnet-id": self._subnet_id(reservation.scope_id),
-            }
-        })
+        host: dict = {
+            "ip-address": reservation.ip_address,
+            "subnet-id": self._subnet_id(reservation.scope_id),
+        }
+        if reservation.mac_address:
+            host["hw-address"] = reservation.mac_address
+        if reservation.name:
+            host["hostname"] = reservation.name
+        if not reservation.mac_address:
+            raise RuntimeError(
+                "Kea requires a host identifier — enter a MAC address to create a reservation"
+            )
+        self._cmd("reservation-add", arguments={"reservation": host})
 
     def delete_reservation(self, scope_id: str, ip_address: str) -> None:
         self._cmd("reservation-del", arguments={
