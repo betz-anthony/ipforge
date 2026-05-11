@@ -2,7 +2,7 @@ import { useMemo, useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Plus, X } from 'lucide-react'
 import { dhcpApi, providersApi, addressesApi, subnetsApi, type DHCPReservation, type DHCPScope } from '../api/client'
-import { rangeSize, ipInCidr, ipToNum, isValidIPv4, isValidIPv6 } from '../utils/ip'
+import { rangeSize, ipInCidr, ipToNum, isValidIPv4, isValidIPv6, isValidEUI48, isValidEUI64 } from '../utils/ip'
 import SyncBar from '../components/SyncBar'
 import DetailPanel from '../components/DetailPanel'
 
@@ -152,7 +152,22 @@ export default function DHCP() {
     return null
   }, [form.ip_address, selectedScope])
 
-  const canSubmit = form.ip_address && !ipError && form.name && (
+  const macError = useMemo(() => {
+    if (isV6(selectedScope)) {
+      const duid = form.client_duid
+      if (!duid) return null
+      if (!isValidEUI48(duid) && !isValidEUI64(duid))
+        return 'Client DUID must be EUI-48 or EUI-64 format'
+    } else {
+      const mac = form.mac_address
+      if (!mac) return null
+      if (!isValidEUI48(mac))
+        return 'MAC must be EUI-48 (AA:BB:CC:DD:EE:FF, AA-BB-CC-DD-EE-FF, or AABB.CCDD.EEFF)'
+    }
+    return null
+  }, [form.mac_address, form.client_duid, selectedScope])
+
+  const canSubmit = form.ip_address && !ipError && form.name && !macError && (
     isV6(selectedScope) ? form.client_duid : form.mac_address
   )
 
@@ -278,10 +293,11 @@ export default function DHCP() {
                         <div className="form-field">
                           <label>Client DUID</label>
                           <input
-                            placeholder="00-01-00-01-12-34-56-78-AA-BB-CC-DD-EE-FF"
+                            placeholder="AA:BB:CC:DD:EE:FF or AA:BB:CC:DD:EE:FF:00:11"
                             value={form.client_duid}
                             onChange={set('client_duid')}
                           />
+                          {macError && <span className="feedback-error" style={{ fontSize: '0.72rem' }}>{macError}</span>}
                         </div>
                         <div className="form-field">
                           <label>IAID</label>
@@ -297,10 +313,11 @@ export default function DHCP() {
                       <div className="form-field">
                         <label>MAC Address</label>
                         <input
-                          placeholder="AA-BB-CC-DD-EE-FF"
+                          placeholder="AA:BB:CC:DD:EE:FF"
                           value={form.mac_address}
                           onChange={set('mac_address')}
                         />
+                        {macError && <span className="feedback-error" style={{ fontSize: '0.72rem' }}>{macError}</span>}
                       </div>
                     )}
 
