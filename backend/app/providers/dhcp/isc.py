@@ -63,17 +63,42 @@ class KeaDHCPProvider(DHCPProvider):
         return scopes
 
     def get_leases(self, scope_id: str) -> list[DHCPReservation]:
-        data = self._cmd("lease4-get-all")
-        leases = data.get("leases", [])
-        return [
-            DHCPReservation(
-                scope_id=scope_id,
-                ip_address=l.get("ip-address", ""),
-                mac_address=l.get("hw-address", ""),
-                name=l.get("hostname", ""),
-            )
-            for l in leases
-        ]
+        results: dict[str, DHCPReservation] = {}
+        subnet_id = self._subnet_id(scope_id)
+
+        # Static reservations — requires host_cmds hook or built-in (Kea 3+)
+        try:
+            data = self._cmd("reservation-get-all", arguments={"subnet-id": subnet_id})
+            for h in data.get("hosts", []):
+                ip = h.get("ip-address", "")
+                if ip:
+                    results[ip] = DHCPReservation(
+                        scope_id=scope_id,
+                        ip_address=ip,
+                        mac_address=h.get("hw-address", ""),
+                        name=h.get("hostname", ""),
+                    )
+        except RuntimeError as e:
+            if "not supported" not in str(e).lower():
+                raise
+
+        # Dynamic leases — requires lease_cmds hook; filtered to this subnet
+        try:
+            data = self._cmd("lease4-get-all", arguments={"subnets": [subnet_id]})
+            for l in data.get("leases", []):
+                ip = l.get("ip-address", "")
+                if ip and ip not in results:
+                    results[ip] = DHCPReservation(
+                        scope_id=scope_id,
+                        ip_address=ip,
+                        mac_address=l.get("hw-address", ""),
+                        name=l.get("hostname", ""),
+                    )
+        except RuntimeError as e:
+            if "not supported" not in str(e).lower():
+                raise
+
+        return list(results.values())
 
     def add_reservation(self, reservation: DHCPReservation) -> None:
         self._cmd("reservation-add", arguments={
