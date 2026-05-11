@@ -1,3 +1,17 @@
+export function isValidIPv4(ip: string): boolean {
+  const parts = ip.split('.')
+  if (parts.length !== 4) return false
+  return parts.every(p => p !== '' && !isNaN(Number(p)) && Number(p) >= 0 && Number(p) <= 255 && String(Number(p)) === p)
+}
+
+export function isValidIPv6(ip: string): boolean {
+  if (!ip || ip.length > 45) return false
+  if ((ip.match(/::/g) ?? []).length > 1) return false
+  const parts = ip.split(':')
+  if (parts.length < 2 || parts.length > 8) return false
+  return parts.every(p => p === '' || /^[0-9a-fA-F]{1,4}$/.test(p))
+}
+
 export function ipToNum(ip: string): number {
   return ip.split('.').reduce((acc, p) => (acc << 8) + parseInt(p, 10), 0) >>> 0
 }
