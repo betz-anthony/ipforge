@@ -26,14 +26,24 @@ class KeaDHCPProvider(DHCPProvider):
             raise RuntimeError(result.get("text", "Kea command failed"))
         return result.get("arguments", {})
 
+    def _get_subnets(self) -> list[dict]:
+        # subnet4-list requires subnet_cmds hook; fall back to config-get if unavailable
+        try:
+            return self._cmd("subnet4-list").get("subnets", [])
+        except RuntimeError as e:
+            if "not supported" in str(e).lower():
+                cfg = self._cmd("config-get")
+                return cfg.get("Dhcp4", {}).get("subnet4", [])
+            raise
+
     def _subnet_id(self, scope_id: str) -> int:
-        for s in self._cmd("subnet4-list").get("subnets", []):
+        for s in self._get_subnets():
             if s["subnet"] == scope_id:
                 return int(s["id"])
         raise RuntimeError(f"Subnet {scope_id!r} not found in Kea")
 
     def get_scopes(self) -> list[DHCPScope]:
-        subnets = self._cmd("subnet4-list").get("subnets", [])
+        subnets = self._get_subnets()
         scopes: list[DHCPScope] = []
         for s in subnets:
             pools = s.get("pools", [])
