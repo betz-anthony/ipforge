@@ -2,7 +2,6 @@ import json
 import threading
 import winrm
 from winrm.exceptions import WinRMTransportError
-from app.config import settings
 from app.providers.dhcp.base import DHCPProvider, DHCPScope, DHCPReservation
 
 try:
@@ -17,9 +16,13 @@ def _is_v6(scope_id: str) -> bool:
 
 
 class MSDHCPProvider(DHCPProvider):
-    source = "msdhcp"
-
-    def __init__(self):
+    def __init__(self, cfg: dict, name: str):
+        self.source = name
+        self._winrm_host = cfg.get("winrm_host", "")
+        self._winrm_user = cfg.get("winrm_user", "")
+        self._winrm_password = cfg.get("winrm_password", "")
+        self._winrm_transport = cfg.get("winrm_transport", "ntlm")
+        self._dhcp_server = cfg.get("dhcp_server", "")
         self._session = None
         self._lock = threading.Lock()
 
@@ -27,9 +30,9 @@ class MSDHCPProvider(DHCPProvider):
     def session(self):
         if self._session is None:
             self._session = winrm.Session(
-                settings.ms_dhcp_winrm_host,
-                auth=(settings.ms_dhcp_winrm_user, settings.ms_dhcp_winrm_password),
-                transport=settings.ms_dhcp_winrm_transport,
+                self._winrm_host,
+                auth=(self._winrm_user, self._winrm_password),
+                transport=self._winrm_transport,
             )
         return self._session
 
@@ -51,13 +54,11 @@ class MSDHCPProvider(DHCPProvider):
         return data if isinstance(data, list) else [data]
 
     def get_scopes(self) -> list[DHCPScope]:
-        v4 = self._get_v4_scopes()
-        v6 = self._get_v6_scopes()
-        return v4 + v6
+        return self._get_v4_scopes() + self._get_v6_scopes()
 
     def _get_v4_scopes(self) -> list[DHCPScope]:
         out = self._run(
-            f"Get-DhcpServerv4Scope -ComputerName '{settings.ms_dhcp_server}' "
+            f"Get-DhcpServerv4Scope -ComputerName '{self._dhcp_server}' "
             "| ConvertTo-Json -Depth 3"
         )
         return [
@@ -77,7 +78,7 @@ class MSDHCPProvider(DHCPProvider):
     def _get_v6_scopes(self) -> list[DHCPScope]:
         try:
             out = self._run(
-                f"Get-DhcpServerv6Scope -ComputerName '{settings.ms_dhcp_server}' "
+                f"Get-DhcpServerv6Scope -ComputerName '{self._dhcp_server}' "
                 "| ConvertTo-Json -Depth 3"
             )
         except RuntimeError:
@@ -104,7 +105,7 @@ class MSDHCPProvider(DHCPProvider):
     def _get_v4_leases(self, scope_id: str) -> list[DHCPReservation]:
         out = self._run(
             f"Get-DhcpServerv4Lease -ScopeId '{scope_id}' "
-            f"-ComputerName '{settings.ms_dhcp_server}' "
+            f"-ComputerName '{self._dhcp_server}' "
             "| ConvertTo-Json -Depth 3"
         )
         return [
@@ -120,7 +121,7 @@ class MSDHCPProvider(DHCPProvider):
     def _get_v6_leases(self, scope_id: str) -> list[DHCPReservation]:
         out = self._run(
             f"Get-DhcpServerv6Lease -Prefix '{scope_id}' "
-            f"-ComputerName '{settings.ms_dhcp_server}' "
+            f"-ComputerName '{self._dhcp_server}' "
             "| ConvertTo-Json -Depth 3"
         )
         return [
@@ -143,7 +144,7 @@ class MSDHCPProvider(DHCPProvider):
                 f"-Iaid {reservation.iaid} "
                 f"-Name '{reservation.name}' "
                 f"-Description '{reservation.description}' "
-                f"-ComputerName '{settings.ms_dhcp_server}'"
+                f"-ComputerName '{self._dhcp_server}'"
             )
         else:
             self._run(
@@ -152,7 +153,7 @@ class MSDHCPProvider(DHCPProvider):
                 f"-ClientId '{reservation.mac_address}' "
                 f"-Name '{reservation.name}' "
                 f"-Description '{reservation.description}' "
-                f"-ComputerName '{settings.ms_dhcp_server}'"
+                f"-ComputerName '{self._dhcp_server}'"
             )
 
     def delete_reservation(self, scope_id: str, ip_address: str) -> None:
@@ -160,10 +161,10 @@ class MSDHCPProvider(DHCPProvider):
             self._run(
                 f"Remove-DhcpServerv6Reservation -Prefix '{scope_id}' "
                 f"-IPAddress '{ip_address}' "
-                f"-ComputerName '{settings.ms_dhcp_server}'"
+                f"-ComputerName '{self._dhcp_server}'"
             )
         else:
             self._run(
                 f"Remove-DhcpServerv4Reservation -IPAddress '{ip_address}' -Force "
-                f"-ComputerName '{settings.ms_dhcp_server}'"
+                f"-ComputerName '{self._dhcp_server}'"
             )

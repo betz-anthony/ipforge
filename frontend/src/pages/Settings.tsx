@@ -1,58 +1,76 @@
 import { useEffect, useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Eye, EyeOff, Save } from 'lucide-react'
-import { settingsApi, type AppSettingsUpdate } from '../api/client'
+import { Eye, EyeOff, Save, Plus, Pencil, Trash2, Check, X } from 'lucide-react'
+import {
+  settingsApi, providerConfigsApi,
+  type AppSettingsUpdate, type ProviderConfig, type ProviderConfigCreate,
+} from '../api/client'
+
+// ── Provider field definitions ─────────────────────────────────────────────
 
 const TRANSPORT_OPTIONS = ['ntlm', 'kerberos', 'basic', 'certificate', 'credssp']
 const TSIG_ALGORITHMS   = ['hmac-sha256', 'hmac-sha512', 'hmac-sha1', 'hmac-md5']
 
-const DNS_OPTIONS  = [
+type FieldDef = {
+  key: string
+  label: string
+  placeholder?: string
+  type?: 'text' | 'number' | 'password' | 'select' | 'textarea'
+  options?: string[]
+  default?: string | number
+}
+
+const PROVIDER_FIELDS: Record<string, FieldDef[]> = {
+  msdns: [
+    { key: 'winrm_host',      label: 'WinRM Host',   placeholder: 'dc.domain.local' },
+    { key: 'winrm_user',      label: 'Username',     placeholder: 'DOMAIN\\svcaccount' },
+    { key: 'winrm_password',  label: 'Password',     type: 'password' },
+    { key: 'winrm_port',      label: 'WinRM Port',   type: 'number', default: 5985 },
+    { key: 'winrm_transport', label: 'Transport',    type: 'select', options: TRANSPORT_OPTIONS, default: 'ntlm' },
+    { key: 'dns_server',      label: 'DNS Server',   placeholder: 'dns.domain.local' },
+  ],
+  msdhcp: [
+    { key: 'winrm_host',      label: 'WinRM Host',   placeholder: 'dc.domain.local' },
+    { key: 'winrm_user',      label: 'Username',     placeholder: 'DOMAIN\\svcaccount' },
+    { key: 'winrm_password',  label: 'Password',     type: 'password' },
+    { key: 'winrm_port',      label: 'WinRM Port',   type: 'number', default: 5985 },
+    { key: 'winrm_transport', label: 'Transport',    type: 'select', options: TRANSPORT_OPTIONS, default: 'ntlm' },
+    { key: 'dhcp_server',     label: 'DHCP Server',  placeholder: 'dhcp.domain.local' },
+  ],
+  bind: [
+    { key: 'host',            label: 'Nameserver Host',          placeholder: 'ns1.domain.local' },
+    { key: 'port',            label: 'Port',                     type: 'number', default: 53 },
+    { key: 'tsig_key_name',   label: 'TSIG Key Name',            placeholder: 'ipam-key' },
+    { key: 'tsig_key_secret', label: 'TSIG Key Secret (base64)', type: 'password' },
+    { key: 'tsig_algorithm',  label: 'TSIG Algorithm',           type: 'select', options: TSIG_ALGORITHMS, default: 'hmac-sha256' },
+    { key: 'zones',           label: 'Zones (comma-separated)',  placeholder: 'example.com, 1.168.192.in-addr.arpa', type: 'textarea' },
+  ],
+  pihole: [
+    { key: 'url',      label: 'URL',            placeholder: 'http://192.168.1.1' },
+    { key: 'password', label: 'Admin Password', type: 'password' },
+  ],
+  keadhcp: [
+    { key: 'url',    label: 'Control Agent URL',        placeholder: 'http://kea-host:8000' },
+    { key: 'secret', label: 'API Secret (if auth)',     type: 'password', placeholder: 'Leave blank if none' },
+  ],
+}
+
+const DNS_TYPES  = [
   { value: 'msdns',  label: 'Microsoft DNS' },
   { value: 'pihole', label: 'Pi-hole v6' },
   { value: 'bind',   label: 'BIND (dnspython)' },
 ]
-const DHCP_OPTIONS = [
+const DHCP_TYPES = [
   { value: 'msdhcp',  label: 'Microsoft DHCP' },
   { value: 'pihole',  label: 'Pi-hole v6' },
   { value: 'keadhcp', label: 'ISC Kea' },
 ]
 
-function toggleProvider(current: string, value: string): string {
-  const parts = current.split(',').map(s => s.trim()).filter(Boolean)
-  const idx = parts.indexOf(value)
-  if (idx >= 0) parts.splice(idx, 1)
-  else parts.push(value)
-  return parts.join(',')
-}
+const TYPE_LABEL: Record<string, string> = Object.fromEntries(
+  [...DNS_TYPES, ...DHCP_TYPES].map(t => [t.value, t.label])
+)
 
-function hasProvider(current: string, value: string): boolean {
-  return current.split(',').map(s => s.trim()).includes(value)
-}
-
-type FormState = AppSettingsUpdate & {
-  _ms_dns_password:  string
-  _ms_dhcp_password: string
-  _pihole_password:  string
-  _bind_secret:      string
-  _kea_secret:       string
-}
-
-const defaults: FormState = {
-  dns_provider: 'msdns', dhcp_provider: 'msdhcp',
-  ms_dns_winrm_host: '', ms_dns_winrm_user: '', ms_dns_winrm_port: 5985,
-  ms_dns_winrm_transport: 'ntlm', ms_dns_server: '',
-  ms_dhcp_winrm_host: '', ms_dhcp_winrm_user: '', ms_dhcp_winrm_port: 5985,
-  ms_dhcp_winrm_transport: 'ntlm', ms_dhcp_server: '',
-  pihole_url: '',
-  bind_host: '', bind_port: 53, bind_tsig_key_name: '',
-  bind_tsig_algorithm: 'hmac-sha256', bind_zones: '',
-  kea_url: '',
-  util_warn_threshold: 80,
-  util_critical_threshold: 95,
-  util_dashboard_top_n: 5,
-  _ms_dns_password: '', _ms_dhcp_password: '', _pihole_password: '',
-  _bind_secret: '', _kea_secret: '',
-}
+// ── Small reusable components ──────────────────────────────────────────────
 
 function Field({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
   return (
@@ -63,123 +81,300 @@ function Field({ label, hint, children }: { label: string; hint?: string; childr
   )
 }
 
-function SecretField({
-  label, value, onChange, placeholder, isSet,
-}: {
-  label: string; value: string; onChange: (v: string) => void
-  placeholder?: string; isSet?: boolean
-}) {
-  const [show, setShow] = useState(false)
-  return (
-    <Field label={label} hint={isSet ? '● set' : undefined}>
-      <div className="password-wrap">
-        <input
-          type={show ? 'text' : 'password'}
-          value={value}
-          onChange={e => onChange(e.target.value)}
-          placeholder={isSet ? 'Leave blank to keep' : (placeholder ?? 'Enter value')}
-        />
-        <button type="button" className="btn-ghost btn-sm" onClick={() => setShow(s => !s)}>
-          {show ? <EyeOff size={13} /> : <Eye size={13} />}
-        </button>
-      </div>
-    </Field>
-  )
-}
-
 function SectionTitle({ children }: { children: React.ReactNode }) {
   return <div className="settings-section-title">{children}</div>
 }
 
+// ── Provider inline form ───────────────────────────────────────────────────
+
+function ProviderForm({
+  category,
+  editing,
+  onSave,
+  onCancel,
+  error,
+  pending,
+}: {
+  category: 'dns' | 'dhcp'
+  editing: ProviderConfig | null  // null = create
+  onSave: (name: string, providerType: string, cfg: Record<string, unknown>) => void
+  onCancel: () => void
+  error?: string
+  pending: boolean
+}) {
+  const typeOptions = category === 'dns' ? DNS_TYPES : DHCP_TYPES
+  const [ptype, setPtype] = useState(editing?.provider_type ?? typeOptions[0].value)
+  const [name, setName]   = useState(editing?.name ?? '')
+  const [cfg, setCfg]     = useState<Record<string, unknown>>(
+    (editing?.config as Record<string, unknown>) ?? {}
+  )
+
+  const fields = PROVIDER_FIELDS[ptype] ?? []
+
+  const [showSecrets, setShowSecrets] = useState<Record<string, boolean>>({})
+
+  function cfgVal(key: string): string {
+    const v = cfg[key]
+    return v !== undefined && v !== null ? String(v) : ''
+  }
+
+  function setCfgKey(key: string, value: unknown) {
+    setCfg(c => ({ ...c, [key]: value }))
+  }
+
+  return (
+    <div className="inline-form" style={{ marginTop: '0.75rem' }}>
+      <div className="form-grid">
+        {!editing && (
+          <Field label="Type">
+            <select value={ptype} onChange={e => { setPtype(e.target.value); setCfg({}) }}>
+              {typeOptions.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
+            </select>
+          </Field>
+        )}
+        <Field label="Name / ID" hint="slug: lowercase, hyphens, underscores">
+          <input
+            value={name}
+            onChange={e => setName(e.target.value.toLowerCase())}
+            placeholder={`${ptype}-1`}
+            disabled={!!editing}
+          />
+        </Field>
+        {fields.map(f => {
+          if (f.type === 'password') {
+            const show = showSecrets[f.key] ?? false
+            const isSet = editing?.secrets_set?.[f.key] ?? false
+            return (
+              <Field key={f.key} label={f.label} hint={isSet && !cfgVal(f.key) ? '● set' : undefined}>
+                <div className="password-wrap">
+                  <input
+                    type={show ? 'text' : 'password'}
+                    value={cfgVal(f.key)}
+                    onChange={e => setCfgKey(f.key, e.target.value)}
+                    placeholder={isSet ? 'Leave blank to keep' : (f.placeholder ?? 'Enter value')}
+                  />
+                  <button type="button" className="btn-ghost btn-sm" onClick={() => setShowSecrets(s => ({ ...s, [f.key]: !show }))}>
+                    {show ? <EyeOff size={13} /> : <Eye size={13} />}
+                  </button>
+                </div>
+              </Field>
+            )
+          }
+          if (f.type === 'select') {
+            return (
+              <Field key={f.key} label={f.label}>
+                <select value={cfgVal(f.key) || String(f.default ?? '')} onChange={e => setCfgKey(f.key, e.target.value)}>
+                  {(f.options ?? []).map(o => <option key={o} value={o}>{o}</option>)}
+                </select>
+              </Field>
+            )
+          }
+          if (f.type === 'textarea') {
+            return (
+              <Field key={f.key} label={f.label}>
+                <input value={cfgVal(f.key)} onChange={e => setCfgKey(f.key, e.target.value)} placeholder={f.placeholder} />
+              </Field>
+            )
+          }
+          if (f.type === 'number') {
+            return (
+              <Field key={f.key} label={f.label}>
+                <input
+                  type="number"
+                  value={cfgVal(f.key) || String(f.default ?? '')}
+                  onChange={e => setCfgKey(f.key, Number(e.target.value))}
+                />
+              </Field>
+            )
+          }
+          return (
+            <Field key={f.key} label={f.label}>
+              <input value={cfgVal(f.key)} onChange={e => setCfgKey(f.key, e.target.value)} placeholder={f.placeholder} />
+            </Field>
+          )
+        })}
+      </div>
+      <div className="form-actions">
+        <button
+          className="btn-primary btn-sm"
+          disabled={pending || !name}
+          onClick={() => onSave(name, ptype, cfg)}
+        >
+          <Check size={13} />
+          {pending ? 'Saving…' : (editing ? 'Update' : 'Add')}
+        </button>
+        <button className="btn-ghost btn-sm" onClick={onCancel}><X size={13} /> Cancel</button>
+        {error && <span className="feedback-error">{error}</span>}
+      </div>
+    </div>
+  )
+}
+
+// ── Provider list section ──────────────────────────────────────────────────
+
+function ProviderSection({
+  category,
+  providers,
+  qc,
+}: {
+  category: 'dns' | 'dhcp'
+  providers: ProviderConfig[]
+  qc: ReturnType<typeof useQueryClient>
+}) {
+  const [adding, setAdding]   = useState(false)
+  const [editId, setEditId]   = useState<number | null>(null)
+  const [mutErr, setMutErr]   = useState('')
+
+  const invalidate = () => qc.invalidateQueries({ queryKey: ['provider-configs'] })
+
+  const createMut = useMutation({
+    mutationFn: (d: ProviderConfigCreate) => providerConfigsApi.create(d),
+    onSuccess: () => { setAdding(false); setMutErr(''); invalidate() },
+    onError: (e: Error) => setMutErr(e.message),
+  })
+
+  const updateMut = useMutation({
+    mutationFn: ({ id, data }: { id: number; data: Parameters<typeof providerConfigsApi.update>[1] }) =>
+      providerConfigsApi.update(id, data),
+    onSuccess: () => { setEditId(null); setMutErr(''); invalidate() },
+    onError: (e: Error) => setMutErr(e.message),
+  })
+
+  const deleteMut = useMutation({
+    mutationFn: (id: number) => providerConfigsApi.delete(id),
+    onSuccess: () => { invalidate() },
+  })
+
+  const toggleMut = useMutation({
+    mutationFn: ({ id, enabled }: { id: number; enabled: boolean }) =>
+      providerConfigsApi.update(id, { enabled }),
+    onSuccess: () => { invalidate() },
+  })
+
+  const mine = providers.filter(p => p.category === category)
+
+  return (
+    <div className="settings-section">
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <SectionTitle>{category === 'dns' ? 'DNS' : 'DHCP'} Providers</SectionTitle>
+        {!adding && (
+          <button className="btn-ghost btn-sm" onClick={() => { setAdding(true); setEditId(null) }}>
+            <Plus size={13} /> Add
+          </button>
+        )}
+      </div>
+
+      {mine.length === 0 && !adding && (
+        <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', margin: '0.5rem 0' }}>
+          No {category === 'dns' ? 'DNS' : 'DHCP'} providers configured.
+        </p>
+      )}
+
+      {mine.map(p => (
+        <div key={p.id}>
+          {editId === p.id ? (
+            <ProviderForm
+              category={category}
+              editing={p}
+              pending={updateMut.isPending}
+              error={mutErr}
+              onCancel={() => { setEditId(null); setMutErr('') }}
+              onSave={(_name, _type, cfg) =>
+                updateMut.mutate({ id: p.id, data: { config: cfg } })
+              }
+            />
+          ) : (
+            <div
+              style={{
+                display: 'flex', alignItems: 'center', gap: '0.5rem',
+                padding: '0.45rem 0.6rem', border: '1px solid var(--border)',
+                borderRadius: '6px', marginBottom: '0.4rem',
+                background: p.enabled ? 'var(--surface)' : 'var(--surface-2)',
+                opacity: p.enabled ? 1 : 0.6,
+              }}
+            >
+              <span className="badge badge-gray" style={{ fontSize: '0.6rem', flexShrink: 0 }}>
+                {TYPE_LABEL[p.provider_type] ?? p.provider_type}
+              </span>
+              <span style={{ flex: 1, fontSize: '0.82rem', fontFamily: 'var(--font-mono)' }}>{p.name}</span>
+              <button
+                className={`btn-ghost btn-sm`}
+                style={{ fontSize: '0.7rem' }}
+                onClick={() => toggleMut.mutate({ id: p.id, enabled: !p.enabled })}
+                title={p.enabled ? 'Disable' : 'Enable'}
+              >
+                {p.enabled ? 'Enabled' : 'Disabled'}
+              </button>
+              <button
+                className="btn-ghost btn-sm"
+                onClick={() => { setEditId(p.id); setAdding(false) }}
+                title="Edit"
+              >
+                <Pencil size={12} />
+              </button>
+              <button
+                className="btn-danger btn-sm"
+                onClick={() => window.confirm(`Delete provider "${p.name}"?`) && deleteMut.mutate(p.id)}
+                title="Delete"
+              >
+                <Trash2 size={12} />
+              </button>
+            </div>
+          )}
+        </div>
+      ))}
+
+      {adding && (
+        <ProviderForm
+          category={category}
+          editing={null}
+          pending={createMut.isPending}
+          error={mutErr}
+          onCancel={() => { setAdding(false); setMutErr('') }}
+          onSave={(name, providerType, cfg) =>
+            createMut.mutate({ category, provider_type: providerType, name, config: cfg })
+          }
+        />
+      )}
+    </div>
+  )
+}
+
+// ── Main settings page ─────────────────────────────────────────────────────
+
 export default function SettingsPage() {
   const qc = useQueryClient()
-  const { data, isLoading } = useQuery({ queryKey: ['settings'], queryFn: settingsApi.get })
-  const [form, setForm] = useState<FormState>(defaults)
+  const { data: settingsData, isLoading } = useQuery({ queryKey: ['settings'], queryFn: settingsApi.get })
+  const { data: providerConfigs = [] } = useQuery({ queryKey: ['provider-configs'], queryFn: providerConfigsApi.list })
+
+  const [form, setForm] = useState<AppSettingsUpdate>({
+    util_warn_threshold:     80,
+    util_critical_threshold: 95,
+    util_dashboard_top_n:    5,
+  })
   const [saved, setSaved] = useState(false)
 
   useEffect(() => {
-    if (!data) return
-    setForm(f => ({
-      ...f,
-      dns_provider:           data.dns_provider,
-      dhcp_provider:          data.dhcp_provider,
-      ms_dns_winrm_host:      data.ms_dns_winrm_host,
-      ms_dns_winrm_user:      data.ms_dns_winrm_user,
-      ms_dns_winrm_port:      data.ms_dns_winrm_port,
-      ms_dns_winrm_transport: data.ms_dns_winrm_transport,
-      ms_dns_server:          data.ms_dns_server,
-      ms_dhcp_winrm_host:     data.ms_dhcp_winrm_host,
-      ms_dhcp_winrm_user:     data.ms_dhcp_winrm_user,
-      ms_dhcp_winrm_port:     data.ms_dhcp_winrm_port,
-      ms_dhcp_winrm_transport:data.ms_dhcp_winrm_transport,
-      ms_dhcp_server:         data.ms_dhcp_server,
-      pihole_url:             data.pihole_url,
-      bind_host:           data.bind_host,
-      bind_port:           data.bind_port,
-      bind_tsig_key_name:  data.bind_tsig_key_name,
-      bind_tsig_algorithm: data.bind_tsig_algorithm,
-      bind_zones:          data.bind_zones,
-      kea_url:             data.kea_url,
-      util_warn_threshold:     data.util_warn_threshold,
-      util_critical_threshold: data.util_critical_threshold,
-      util_dashboard_top_n:    data.util_dashboard_top_n,
-    }))
-  }, [data])
+    if (!settingsData) return
+    setForm({
+      util_warn_threshold:     settingsData.util_warn_threshold,
+      util_critical_threshold: settingsData.util_critical_threshold,
+      util_dashboard_top_n:    settingsData.util_dashboard_top_n,
+    })
+  }, [settingsData])
 
   const mutation = useMutation({
-    mutationFn: () => {
-      const payload: AppSettingsUpdate = {
-        dns_provider:            form.dns_provider,
-        dhcp_provider:           form.dhcp_provider,
-        ms_dns_winrm_host:       form.ms_dns_winrm_host,
-        ms_dns_winrm_user:       form.ms_dns_winrm_user,
-        ms_dns_winrm_port:       form.ms_dns_winrm_port,
-        ms_dns_winrm_transport:  form.ms_dns_winrm_transport,
-        ms_dns_server:           form.ms_dns_server,
-        ms_dhcp_winrm_host:      form.ms_dhcp_winrm_host,
-        ms_dhcp_winrm_user:      form.ms_dhcp_winrm_user,
-        ms_dhcp_winrm_port:      form.ms_dhcp_winrm_port,
-        ms_dhcp_winrm_transport: form.ms_dhcp_winrm_transport,
-        ms_dhcp_server:          form.ms_dhcp_server,
-        pihole_url:              form.pihole_url,
-        bind_host:               form.bind_host,
-        bind_port:               form.bind_port,
-        bind_tsig_key_name:      form.bind_tsig_key_name,
-        bind_tsig_algorithm:     form.bind_tsig_algorithm,
-        bind_zones:              form.bind_zones,
-        kea_url:                 form.kea_url,
-        util_warn_threshold:     form.util_warn_threshold,
-        util_critical_threshold: form.util_critical_threshold,
-        util_dashboard_top_n:    form.util_dashboard_top_n,
-      }
-      if (form._ms_dns_password)  payload.ms_dns_winrm_password  = form._ms_dns_password
-      if (form._ms_dhcp_password) payload.ms_dhcp_winrm_password = form._ms_dhcp_password
-      if (form._pihole_password)  payload.pihole_password         = form._pihole_password
-      if (form._bind_secret)      payload.bind_tsig_key_secret    = form._bind_secret
-      if (form._kea_secret)       payload.kea_secret              = form._kea_secret
-      return settingsApi.update(payload)
-    },
+    mutationFn: () => settingsApi.update(form),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['settings'] })
-      setForm(f => ({ ...f, _ms_dns_password: '', _ms_dhcp_password: '', _pihole_password: '', _bind_secret: '', _kea_secret: '' }))
       setSaved(true)
       setTimeout(() => setSaved(false), 3000)
     },
   })
 
-  const s = <K extends keyof FormState>(key: K) =>
-    (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
-      setForm(f => ({ ...f, [key]: (
-        key === 'ms_dns_winrm_port' || key === 'ms_dhcp_winrm_port' || key === 'bind_port' ||
-        key === 'util_warn_threshold' || key === 'util_critical_threshold' ||
-        key === 'util_dashboard_top_n'
-      ) ? Number(e.target.value) : e.target.value }))
-
-  const needsMSDNS  = hasProvider(form.dns_provider  ?? '', 'msdns')
-  const needsMSDHCP = hasProvider(form.dhcp_provider ?? '', 'msdhcp')
-  const needsPihole = hasProvider(form.dns_provider ?? '', 'pihole') || hasProvider(form.dhcp_provider ?? '', 'pihole')
-  const needsBind   = hasProvider(form.dns_provider ?? '', 'bind')
-  const needsKea    = hasProvider(form.dhcp_provider ?? '', 'keadhcp')
+  const s = (key: keyof AppSettingsUpdate) =>
+    (e: React.ChangeEvent<HTMLInputElement>) =>
+      setForm(f => ({ ...f, [key]: Number(e.target.value) }))
 
   if (isLoading) return <p className="loading">Loading…</p>
 
@@ -187,201 +382,23 @@ export default function SettingsPage() {
     <div style={{ maxWidth: '760px' }}>
       <div className="page-header"><h1>Settings</h1></div>
 
+      {/* ── Providers ── */}
+      <ProviderSection category="dns"  providers={providerConfigs} qc={qc} />
+      <ProviderSection category="dhcp" providers={providerConfigs} qc={qc} />
+
+      {/* ── Utilization ── */}
       <form onSubmit={e => { e.preventDefault(); mutation.mutate() }}>
-
-        {/* ── Provider selection ── */}
-        <div className="settings-section">
-          <SectionTitle>Providers</SectionTitle>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem' }}>
-            <div>
-              <div className="provider-group-label">DNS</div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
-                {DNS_OPTIONS.map(opt => (
-                  <label key={opt.value} className="checkbox-label">
-                    <input
-                      type="checkbox"
-                      checked={hasProvider(form.dns_provider ?? '', opt.value)}
-                      onChange={() => setForm(f => ({ ...f, dns_provider: toggleProvider(f.dns_provider ?? '', opt.value) }))}
-                    />
-                    {opt.label}
-                  </label>
-                ))}
-              </div>
-            </div>
-            <div>
-              <div className="provider-group-label">DHCP</div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
-                {DHCP_OPTIONS.map(opt => (
-                  <label key={opt.value} className="checkbox-label">
-                    <input
-                      type="checkbox"
-                      checked={hasProvider(form.dhcp_provider ?? '', opt.value)}
-                      onChange={() => setForm(f => ({ ...f, dhcp_provider: toggleProvider(f.dhcp_provider ?? '', opt.value) }))}
-                    />
-                    {opt.label}
-                  </label>
-                ))}
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* ── Microsoft DNS ── */}
-        {needsMSDNS && (
-          <div className="settings-section">
-            <SectionTitle>Microsoft DNS</SectionTitle>
-            <div className="form-grid">
-              <Field label="WinRM Host">
-                <input value={form.ms_dns_winrm_host ?? ''} onChange={s('ms_dns_winrm_host')} placeholder="dc.domain.local" />
-              </Field>
-              <Field label="Username">
-                <input value={form.ms_dns_winrm_user ?? ''} onChange={s('ms_dns_winrm_user')} placeholder="DOMAIN\svcaccount" />
-              </Field>
-              <SecretField
-                label="Password" value={form._ms_dns_password}
-                onChange={v => setForm(f => ({ ...f, _ms_dns_password: v }))}
-                isSet={data?.ms_dns_winrm_password_set}
-              />
-              <Field label="WinRM Port">
-                <input type="number" value={form.ms_dns_winrm_port ?? 5985} onChange={s('ms_dns_winrm_port')} />
-              </Field>
-              <Field label="Transport">
-                <select value={form.ms_dns_winrm_transport ?? 'ntlm'} onChange={s('ms_dns_winrm_transport')}>
-                  {TRANSPORT_OPTIONS.map(t => <option key={t} value={t}>{t}</option>)}
-                </select>
-              </Field>
-              <Field label="DNS Server">
-                <input value={form.ms_dns_server ?? ''} onChange={s('ms_dns_server')} placeholder="dns.domain.local" />
-              </Field>
-            </div>
-          </div>
-        )}
-
-        {/* ── Microsoft DHCP ── */}
-        {needsMSDHCP && (
-          <div className="settings-section">
-            <SectionTitle>Microsoft DHCP</SectionTitle>
-            <div className="form-grid">
-              <Field label="WinRM Host">
-                <input value={form.ms_dhcp_winrm_host ?? ''} onChange={s('ms_dhcp_winrm_host')} placeholder="dc.domain.local" />
-              </Field>
-              <Field label="Username">
-                <input value={form.ms_dhcp_winrm_user ?? ''} onChange={s('ms_dhcp_winrm_user')} placeholder="DOMAIN\svcaccount" />
-              </Field>
-              <SecretField
-                label="Password" value={form._ms_dhcp_password}
-                onChange={v => setForm(f => ({ ...f, _ms_dhcp_password: v }))}
-                isSet={data?.ms_dhcp_winrm_password_set}
-              />
-              <Field label="WinRM Port">
-                <input type="number" value={form.ms_dhcp_winrm_port ?? 5985} onChange={s('ms_dhcp_winrm_port')} />
-              </Field>
-              <Field label="Transport">
-                <select value={form.ms_dhcp_winrm_transport ?? 'ntlm'} onChange={s('ms_dhcp_winrm_transport')}>
-                  {TRANSPORT_OPTIONS.map(t => <option key={t} value={t}>{t}</option>)}
-                </select>
-              </Field>
-              <Field label="DHCP Server">
-                <input value={form.ms_dhcp_server ?? ''} onChange={s('ms_dhcp_server')} placeholder="dhcp.domain.local" />
-              </Field>
-            </div>
-          </div>
-        )}
-
-        {/* ── Pi-hole ── */}
-        {needsPihole && (
-          <div className="settings-section">
-            <SectionTitle>Pi-hole v6</SectionTitle>
-            <div className="form-grid">
-              <Field label="URL">
-                <input value={form.pihole_url ?? ''} onChange={s('pihole_url')} placeholder="http://192.168.1.1" />
-              </Field>
-              <SecretField
-                label="Admin Password" value={form._pihole_password}
-                onChange={v => setForm(f => ({ ...f, _pihole_password: v }))}
-                isSet={data?.pihole_password_set}
-              />
-            </div>
-          </div>
-        )}
-
-        {/* ── BIND ── */}
-        {needsBind && (
-          <div className="settings-section">
-            <SectionTitle>BIND DNS</SectionTitle>
-            <div className="form-grid">
-              <Field label="Nameserver Host">
-                <input value={form.bind_host ?? ''} onChange={s('bind_host')} placeholder="ns1.domain.local" />
-              </Field>
-              <Field label="Port">
-                <input type="number" value={form.bind_port ?? 53} onChange={s('bind_port')} />
-              </Field>
-              <Field label="TSIG Key Name">
-                <input value={form.bind_tsig_key_name ?? ''} onChange={s('bind_tsig_key_name')} placeholder="ipam-key" />
-              </Field>
-              <SecretField
-                label="TSIG Key Secret (base64)" value={form._bind_secret}
-                onChange={v => setForm(f => ({ ...f, _bind_secret: v }))}
-                isSet={data?.bind_tsig_key_secret_set}
-              />
-              <Field label="TSIG Algorithm">
-                <select value={form.bind_tsig_algorithm ?? 'hmac-sha256'} onChange={s('bind_tsig_algorithm')}>
-                  {TSIG_ALGORITHMS.map(a => <option key={a} value={a}>{a}</option>)}
-                </select>
-              </Field>
-              <Field label="Zones (comma-separated)" hint="required">
-                <input
-                  value={form.bind_zones ?? ''}
-                  onChange={s('bind_zones')}
-                  placeholder="example.com, 1.168.192.in-addr.arpa"
-                />
-              </Field>
-            </div>
-          </div>
-        )}
-
-        {/* ── ISC Kea ── */}
-        {needsKea && (
-          <div className="settings-section">
-            <SectionTitle>ISC Kea Control Agent</SectionTitle>
-            <div className="form-grid">
-              <Field label="Control Agent URL">
-                <input value={form.kea_url ?? ''} onChange={s('kea_url')} placeholder="http://kea-host:8000" />
-              </Field>
-              <SecretField
-                label="API Secret (if auth enabled)" value={form._kea_secret}
-                onChange={v => setForm(f => ({ ...f, _kea_secret: v }))}
-                isSet={data?.kea_secret_set}
-                placeholder="Leave blank if no auth"
-              />
-            </div>
-          </div>
-        )}
-
-        {/* ── Utilization ── */}
         <div className="settings-section">
           <SectionTitle>Utilization Thresholds</SectionTitle>
           <div className="form-grid">
             <Field label="Warn threshold (%)" hint="default 80">
-              <input
-                type="number" min={1} max={99}
-                value={form.util_warn_threshold ?? 80}
-                onChange={s('util_warn_threshold')}
-              />
+              <input type="number" min={1} max={99} value={form.util_warn_threshold ?? 80} onChange={s('util_warn_threshold')} />
             </Field>
             <Field label="Critical threshold (%)" hint="default 95">
-              <input
-                type="number" min={1} max={100}
-                value={form.util_critical_threshold ?? 95}
-                onChange={s('util_critical_threshold')}
-              />
+              <input type="number" min={1} max={100} value={form.util_critical_threshold ?? 95} onChange={s('util_critical_threshold')} />
             </Field>
             <Field label="Dashboard top N subnets" hint="default 5">
-              <input
-                type="number" min={1} max={20}
-                value={form.util_dashboard_top_n ?? 5}
-                onChange={s('util_dashboard_top_n')}
-              />
+              <input type="number" min={1} max={20} value={form.util_dashboard_top_n ?? 5} onChange={s('util_dashboard_top_n')} />
             </Field>
           </div>
         </div>

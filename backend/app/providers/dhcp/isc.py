@@ -1,5 +1,4 @@
 import requests
-from app.config import settings
 from app.providers.dhcp.base import DHCPProvider, DHCPScope, DHCPReservation
 
 # ISC Kea DHCP provider via Kea Control Agent REST API.
@@ -8,15 +7,18 @@ from app.providers.dhcp.base import DHCPProvider, DHCPScope, DHCPReservation
 
 
 class KeaDHCPProvider(DHCPProvider):
-    source = "keadhcp"
+    def __init__(self, cfg: dict, name: str):
+        self.source = name
+        self._url = cfg.get("url", "")
+        self._secret = cfg.get("secret", "")
 
     def _cmd(self, command: str, service: str = "dhcp4", arguments: dict | None = None) -> dict:
         body: dict = {"command": command, "service": [service]}
         if arguments:
             body["arguments"] = arguments
 
-        auth = ("kea", settings.kea_secret) if settings.kea_secret else None
-        r = requests.post(settings.kea_url, json=body, auth=auth, timeout=10)
+        auth = ("kea", self._secret) if self._secret else None
+        r = requests.post(self._url, json=body, auth=auth, timeout=10)
         r.raise_for_status()
 
         result = r.json()
@@ -43,9 +45,8 @@ class KeaDHCPProvider(DHCPProvider):
         raise RuntimeError(f"Subnet {scope_id!r} not found in Kea")
 
     def get_scopes(self) -> list[DHCPScope]:
-        subnets = self._get_subnets()
         scopes: list[DHCPScope] = []
-        for s in subnets:
+        for s in self._get_subnets():
             pools = s.get("pools", [])
             pool_str = pools[0].get("pool", "") if pools else ""
             start = end = ""

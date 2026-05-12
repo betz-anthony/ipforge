@@ -7,6 +7,7 @@ from app.models.cache import (
     SyncStatus,
 )
 from app.models.scan import ScanResult, Collision, CollisionType
+from app.models.provider_config import ProviderConfig
 
 __all__ = [
     "Subnet", "IPAddress", "AppSetting",
@@ -14,4 +15,5 @@ __all__ = [
     "CachedDHCPScope", "CachedDHCPLease",
     "SyncStatus",
     "ScanResult", "Collision", "CollisionType",
+    "ProviderConfig",
 ]
