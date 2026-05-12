@@ -1,6 +1,5 @@
 import requests
 from urllib.parse import quote
-from app.config import settings
 from app.providers.dns.base import DNSProvider, DNSRecord
 
 # Pi-hole v6 FTL REST API provider.
@@ -9,20 +8,18 @@ from app.providers.dns.base import DNSProvider, DNSRecord
 
 
 class PiholeDNSProvider(DNSProvider):
-    source = "pihole"
     ZONE = "pihole-local"
 
-    def __init__(self):
+    def __init__(self, cfg: dict, name: str):
+        self.source = name
+        self._base_url = cfg.get("url", "").rstrip("/")
+        self._password = cfg.get("password", "")
         self._sid: str | None = None
-
-    @property
-    def _base(self) -> str:
-        return settings.pihole_url.rstrip("/")
 
     def _authenticate(self) -> str:
         r = requests.post(
-            f"{self._base}/api/auth",
-            json={"password": settings.pihole_password},
+            f"{self._base_url}/api/auth",
+            json={"password": self._password},
             verify=False, timeout=10,
         )
         r.raise_for_status()
@@ -34,7 +31,7 @@ class PiholeDNSProvider(DNSProvider):
         return {"X-FTL-SID": self._sid}
 
     def _req(self, method: str, path: str, **kwargs):
-        url = f"{self._base}/api{path}"
+        url = f"{self._base_url}/api{path}"
         r = requests.request(method, url, headers=self._headers(), verify=False, timeout=10, **kwargs)
         if r.status_code == 401:
             self._sid = None
@@ -53,7 +50,6 @@ class PiholeDNSProvider(DNSProvider):
         records: list[DNSRecord] = []
         cfg = self._dns_config()
 
-        # dns.hosts: ["192.168.1.10 hostname", ...]
         for entry in cfg.get("hosts", []):
             parts = entry.split(None, 1)
             if len(parts) == 2:
@@ -64,7 +60,6 @@ class PiholeDNSProvider(DNSProvider):
                     value=ip, zone=zone, ttl=0,
                 ))
 
-        # dns.cnameRecords: ["alias,target" or "alias,target,ttl", ...]
         for entry in cfg.get("cnameRecords", []):
             parts = entry.split(",")
             if len(parts) >= 2:

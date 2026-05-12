@@ -1,6 +1,5 @@
 import requests
 from urllib.parse import quote
-from app.config import settings
 from app.providers.dhcp.base import DHCPProvider, DHCPScope, DHCPReservation
 
 # Pi-hole v6 DHCP provider.
@@ -9,20 +8,18 @@ from app.providers.dhcp.base import DHCPProvider, DHCPScope, DHCPReservation
 
 
 class PiholeDHCPProvider(DHCPProvider):
-    source = "pihole"
     SCOPE_ID = "pihole"
 
-    def __init__(self):
+    def __init__(self, cfg: dict, name: str):
+        self.source = name
+        self._base_url = cfg.get("url", "").rstrip("/")
+        self._password = cfg.get("password", "")
         self._sid: str | None = None
-
-    @property
-    def _base(self) -> str:
-        return settings.pihole_url.rstrip("/")
 
     def _authenticate(self) -> str:
         r = requests.post(
-            f"{self._base}/api/auth",
-            json={"password": settings.pihole_password},
+            f"{self._base_url}/api/auth",
+            json={"password": self._password},
             verify=False, timeout=10,
         )
         r.raise_for_status()
@@ -34,7 +31,7 @@ class PiholeDHCPProvider(DHCPProvider):
         return {"X-FTL-SID": self._sid}
 
     def _req(self, method: str, path: str, **kwargs):
-        url = f"{self._base}/api{path}"
+        url = f"{self._base_url}/api{path}"
         r = requests.request(method, url, headers=self._headers(), verify=False, timeout=10, **kwargs)
         if r.status_code == 401:
             self._sid = None

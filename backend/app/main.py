@@ -14,6 +14,7 @@ from app.api import tools as tools_router
 from app.api import stats as stats_router
 from app.api import scan as scan_router
 from app.api import search as search_router
+from app.api import provider_configs as provider_configs_router
 import app.models  # noqa: F401
 
 
@@ -61,6 +62,7 @@ app.include_router(tools_router.router, prefix="/api/tools", tags=["tools"])
 app.include_router(stats_router.router, prefix="/api/stats", tags=["stats"])
 app.include_router(scan_router.router, prefix="/api/scan", tags=["scan"])
 app.include_router(search_router.router, prefix="/api/search", tags=["search"])
+app.include_router(provider_configs_router.router, prefix="/api/provider-configs", tags=["provider-configs"])
 
 
 @app.get("/health", tags=["ops"])

@@ -132,80 +132,54 @@ export const dnsApi = {
 }
 
 export interface AppSettings {
-  dns_provider: string
-  dhcp_provider: string
-  // MS DNS
-  ms_dns_winrm_host: string
-  ms_dns_winrm_user: string
-  ms_dns_winrm_password_set: boolean
-  ms_dns_winrm_port: number
-  ms_dns_winrm_transport: string
-  ms_dns_server: string
-  // MS DHCP
-  ms_dhcp_winrm_host: string
-  ms_dhcp_winrm_user: string
-  ms_dhcp_winrm_password_set: boolean
-  ms_dhcp_winrm_port: number
-  ms_dhcp_winrm_transport: string
-  ms_dhcp_server: string
-  // Pi-hole
-  pihole_url: string
-  pihole_password_set: boolean
-  // BIND
-  bind_host: string
-  bind_port: number
-  bind_tsig_key_name: string
-  bind_tsig_key_secret_set: boolean
-  bind_tsig_algorithm: string
-  bind_zones: string
-  // Kea
-  kea_url: string
-  kea_secret_set: boolean
-  // Utilization
-  util_warn_threshold: number
+  util_warn_threshold:     number
   util_critical_threshold: number
-  util_dashboard_top_n: number
+  util_dashboard_top_n:    number
 }
 
 export interface AppSettingsUpdate {
-  dns_provider?: string
-  dhcp_provider?: string
-  // MS DNS
-  ms_dns_winrm_host?: string
-  ms_dns_winrm_user?: string
-  ms_dns_winrm_password?: string
-  ms_dns_winrm_port?: number
-  ms_dns_winrm_transport?: string
-  ms_dns_server?: string
-  // MS DHCP
-  ms_dhcp_winrm_host?: string
-  ms_dhcp_winrm_user?: string
-  ms_dhcp_winrm_password?: string
-  ms_dhcp_winrm_port?: number
-  ms_dhcp_winrm_transport?: string
-  ms_dhcp_server?: string
-  // Pi-hole
-  pihole_url?: string
-  pihole_password?: string
-  // BIND
-  bind_host?: string
-  bind_port?: number
-  bind_tsig_key_name?: string
-  bind_tsig_key_secret?: string
-  bind_tsig_algorithm?: string
-  bind_zones?: string
-  // Kea
-  kea_url?: string
-  kea_secret?: string
-  // Utilization
-  util_warn_threshold?: number
+  util_warn_threshold?:     number
   util_critical_threshold?: number
-  util_dashboard_top_n?: number
+  util_dashboard_top_n?:    number
+}
+
+export interface ProviderConfig {
+  id:            number
+  category:      'dns' | 'dhcp'
+  provider_type: string
+  name:          string
+  config:        Record<string, unknown>
+  secrets_set:   Record<string, boolean>
+  enabled:       boolean
+  sort_order:    number
+}
+
+export interface ProviderConfigCreate {
+  category:      'dns' | 'dhcp'
+  provider_type: string
+  name:          string
+  config:        Record<string, unknown>
+  enabled?:      boolean
+  sort_order?:   number
+}
+
+export interface ProviderConfigUpdate {
+  name?:       string
+  config?:     Record<string, unknown>
+  enabled?:    boolean
+  sort_order?: number
 }
 
 export const settingsApi = {
   get: () => api.get<AppSettings>('/settings').then(r => r.data),
   update: (data: AppSettingsUpdate) => api.put<AppSettings>('/settings', data).then(r => r.data),
+}
+
+export const providerConfigsApi = {
+  list:   ()                                     => api.get<ProviderConfig[]>('/provider-configs').then(r => r.data),
+  create: (data: ProviderConfigCreate)           => api.post<ProviderConfig>('/provider-configs', data).then(r => r.data),
+  update: (id: number, data: ProviderConfigUpdate) => api.put<ProviderConfig>(`/provider-configs/${id}`, data).then(r => r.data),
+  delete: (id: number)                           => api.delete(`/provider-configs/${id}`),
 }
 
 export interface SyncInfo {

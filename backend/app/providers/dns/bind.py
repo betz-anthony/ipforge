@@ -5,30 +5,34 @@ import dns.tsigkeyring
 import dns.rdatatype
 import dns.rcode
 import dns.name
-from app.config import settings
 from app.providers.dns.base import DNSProvider, DNSRecord
 
 # BIND provider via dnspython.
 # Reading:  AXFR zone transfer (allow-transfer must permit this host or TSIG key).
 # Writing:  RFC 2136 dynamic update over TCP (allow-update must permit TSIG key).
-# Zones:    No self-listing API — configure bind_zones as comma-separated list.
+# Zones:    No self-listing API — configure zones as comma-separated list.
 
 
 class BINDDNSProvider(DNSProvider):
-    source = "bind"
+    def __init__(self, cfg: dict, name: str):
+        self.source = name
+        self._host = cfg.get("host", "")
+        self._port = int(cfg.get("port", 53))
+        self._tsig_key_name = cfg.get("tsig_key_name", "")
+        self._tsig_key_secret = cfg.get("tsig_key_secret", "")
+        self._tsig_algorithm = cfg.get("tsig_algorithm", "hmac-sha256")
+        self._zones = cfg.get("zones", "")
 
     def _keyring(self):
-        if not settings.bind_tsig_key_name:
+        if not self._tsig_key_name:
             return None, None
-        keyring = dns.tsigkeyring.from_text({
-            settings.bind_tsig_key_name: settings.bind_tsig_key_secret,
-        })
-        return keyring, settings.bind_tsig_algorithm
+        keyring = dns.tsigkeyring.from_text({self._tsig_key_name: self._tsig_key_secret})
+        return keyring, self._tsig_algorithm
 
     def get_zones(self) -> list[str]:
-        if not settings.bind_zones:
+        if not self._zones:
             return []
-        return [z.strip() for z in settings.bind_zones.split(",") if z.strip()]
+        return [z.strip() for z in self._zones.split(",") if z.strip()]
 
     def get_records(self, zone: str) -> list[DNSRecord]:
         keyring, algo = self._keyring()
@@ -36,11 +40,7 @@ class BINDDNSProvider(DNSProvider):
         if keyring:
             xfr_kwargs = {"keyring": keyring, "keyalgorithm": algo}
 
-        xfr = dns.query.xfr(
-            settings.bind_host, zone,
-            port=settings.bind_port,
-            **xfr_kwargs,
-        )
+        xfr = dns.query.xfr(self._host, zone, port=self._port, **xfr_kwargs)
         zone_obj = dns.zone.from_xfr(xfr)
 
         records: list[DNSRecord] = []
@@ -58,26 +58,26 @@ class BINDDNSProvider(DNSProvider):
                     ))
         return records
 
-    def _update(self, zone: str) -> tuple:
+    def _update(self, zone: str):
         keyring, algo = self._keyring()
         kwargs: dict = {}
         if keyring:
             kwargs = {"keyring": keyring, "keyalgorithm": algo}
-        return dns.update.Update(zone, **kwargs), kwargs
+        return dns.update.Update(zone, **kwargs)
 
     def _send_update(self, update) -> None:
-        resp = dns.query.tcp(update, settings.bind_host, port=settings.bind_port)
+        resp = dns.query.tcp(update, self._host, port=self._port)
         rc = resp.rcode()
         if rc != dns.rcode.NOERROR:
             raise RuntimeError(f"BIND RFC 2136 update rejected: {dns.rcode.to_text(rc)}")
 
     def add_record(self, record: DNSRecord) -> None:
-        update, _ = self._update(record.zone)
+        update = self._update(record.zone)
         update.add(record.name, record.ttl, record.record_type, record.value)
         self._send_update(update)
 
     def delete_record(self, record: DNSRecord) -> None:
-        update, _ = self._update(record.zone)
+        update = self._update(record.zone)
         update.delete(record.name, record.record_type, record.value)
         self._send_update(update)
 
