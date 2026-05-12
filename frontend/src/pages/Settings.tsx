@@ -30,16 +30,19 @@ function hasProvider(current: string, value: string): boolean {
 }
 
 type FormState = AppSettingsUpdate & {
-  _ms_password:    string
-  _pihole_password: string
-  _bind_secret:    string
-  _kea_secret:     string
+  _ms_dns_password:  string
+  _ms_dhcp_password: string
+  _pihole_password:  string
+  _bind_secret:      string
+  _kea_secret:       string
 }
 
 const defaults: FormState = {
   dns_provider: 'msdns', dhcp_provider: 'msdhcp',
-  ms_winrm_host: '', ms_winrm_user: '', ms_winrm_port: 5985,
-  ms_winrm_transport: 'ntlm', ms_dns_server: '', ms_dhcp_server: '',
+  ms_dns_winrm_host: '', ms_dns_winrm_user: '', ms_dns_winrm_port: 5985,
+  ms_dns_winrm_transport: 'ntlm', ms_dns_server: '',
+  ms_dhcp_winrm_host: '', ms_dhcp_winrm_user: '', ms_dhcp_winrm_port: 5985,
+  ms_dhcp_winrm_transport: 'ntlm', ms_dhcp_server: '',
   pihole_url: '',
   bind_host: '', bind_port: 53, bind_tsig_key_name: '',
   bind_tsig_algorithm: 'hmac-sha256', bind_zones: '',
@@ -47,7 +50,8 @@ const defaults: FormState = {
   util_warn_threshold: 80,
   util_critical_threshold: 95,
   util_dashboard_top_n: 5,
-  _ms_password: '', _pihole_password: '', _bind_secret: '', _kea_secret: '',
+  _ms_dns_password: '', _ms_dhcp_password: '', _pihole_password: '',
+  _bind_secret: '', _kea_secret: '',
 }
 
 function Field({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
@@ -97,15 +101,19 @@ export default function SettingsPage() {
     if (!data) return
     setForm(f => ({
       ...f,
-      dns_provider:        data.dns_provider,
-      dhcp_provider:       data.dhcp_provider,
-      ms_winrm_host:       data.ms_winrm_host,
-      ms_winrm_user:       data.ms_winrm_user,
-      ms_winrm_port:       data.ms_winrm_port,
-      ms_winrm_transport:  data.ms_winrm_transport,
-      ms_dns_server:       data.ms_dns_server,
-      ms_dhcp_server:      data.ms_dhcp_server,
-      pihole_url:          data.pihole_url,
+      dns_provider:           data.dns_provider,
+      dhcp_provider:          data.dhcp_provider,
+      ms_dns_winrm_host:      data.ms_dns_winrm_host,
+      ms_dns_winrm_user:      data.ms_dns_winrm_user,
+      ms_dns_winrm_port:      data.ms_dns_winrm_port,
+      ms_dns_winrm_transport: data.ms_dns_winrm_transport,
+      ms_dns_server:          data.ms_dns_server,
+      ms_dhcp_winrm_host:     data.ms_dhcp_winrm_host,
+      ms_dhcp_winrm_user:     data.ms_dhcp_winrm_user,
+      ms_dhcp_winrm_port:     data.ms_dhcp_winrm_port,
+      ms_dhcp_winrm_transport:data.ms_dhcp_winrm_transport,
+      ms_dhcp_server:         data.ms_dhcp_server,
+      pihole_url:             data.pihole_url,
       bind_host:           data.bind_host,
       bind_port:           data.bind_port,
       bind_tsig_key_name:  data.bind_tsig_key_name,
@@ -121,34 +129,39 @@ export default function SettingsPage() {
   const mutation = useMutation({
     mutationFn: () => {
       const payload: AppSettingsUpdate = {
-        dns_provider:        form.dns_provider,
-        dhcp_provider:       form.dhcp_provider,
-        ms_winrm_host:       form.ms_winrm_host,
-        ms_winrm_user:       form.ms_winrm_user,
-        ms_winrm_port:       form.ms_winrm_port,
-        ms_winrm_transport:  form.ms_winrm_transport,
-        ms_dns_server:       form.ms_dns_server,
-        ms_dhcp_server:      form.ms_dhcp_server,
-        pihole_url:          form.pihole_url,
-        bind_host:           form.bind_host,
-        bind_port:           form.bind_port,
-        bind_tsig_key_name:  form.bind_tsig_key_name,
-        bind_tsig_algorithm: form.bind_tsig_algorithm,
-        bind_zones:          form.bind_zones,
-        kea_url:             form.kea_url,
+        dns_provider:            form.dns_provider,
+        dhcp_provider:           form.dhcp_provider,
+        ms_dns_winrm_host:       form.ms_dns_winrm_host,
+        ms_dns_winrm_user:       form.ms_dns_winrm_user,
+        ms_dns_winrm_port:       form.ms_dns_winrm_port,
+        ms_dns_winrm_transport:  form.ms_dns_winrm_transport,
+        ms_dns_server:           form.ms_dns_server,
+        ms_dhcp_winrm_host:      form.ms_dhcp_winrm_host,
+        ms_dhcp_winrm_user:      form.ms_dhcp_winrm_user,
+        ms_dhcp_winrm_port:      form.ms_dhcp_winrm_port,
+        ms_dhcp_winrm_transport: form.ms_dhcp_winrm_transport,
+        ms_dhcp_server:          form.ms_dhcp_server,
+        pihole_url:              form.pihole_url,
+        bind_host:               form.bind_host,
+        bind_port:               form.bind_port,
+        bind_tsig_key_name:      form.bind_tsig_key_name,
+        bind_tsig_algorithm:     form.bind_tsig_algorithm,
+        bind_zones:              form.bind_zones,
+        kea_url:                 form.kea_url,
         util_warn_threshold:     form.util_warn_threshold,
         util_critical_threshold: form.util_critical_threshold,
         util_dashboard_top_n:    form.util_dashboard_top_n,
       }
-      if (form._ms_password)    payload.ms_winrm_password  = form._ms_password
-      if (form._pihole_password) payload.pihole_password   = form._pihole_password
-      if (form._bind_secret)    payload.bind_tsig_key_secret = form._bind_secret
-      if (form._kea_secret)     payload.kea_secret         = form._kea_secret
+      if (form._ms_dns_password)  payload.ms_dns_winrm_password  = form._ms_dns_password
+      if (form._ms_dhcp_password) payload.ms_dhcp_winrm_password = form._ms_dhcp_password
+      if (form._pihole_password)  payload.pihole_password         = form._pihole_password
+      if (form._bind_secret)      payload.bind_tsig_key_secret    = form._bind_secret
+      if (form._kea_secret)       payload.kea_secret              = form._kea_secret
       return settingsApi.update(payload)
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['settings'] })
-      setForm(f => ({ ...f, _ms_password: '', _pihole_password: '', _bind_secret: '', _kea_secret: '' }))
+      setForm(f => ({ ...f, _ms_dns_password: '', _ms_dhcp_password: '', _pihole_password: '', _bind_secret: '', _kea_secret: '' }))
       setSaved(true)
       setTimeout(() => setSaved(false), 3000)
     },
@@ -157,12 +170,13 @@ export default function SettingsPage() {
   const s = <K extends keyof FormState>(key: K) =>
     (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
       setForm(f => ({ ...f, [key]: (
-        key === 'ms_winrm_port' || key === 'bind_port' ||
+        key === 'ms_dns_winrm_port' || key === 'ms_dhcp_winrm_port' || key === 'bind_port' ||
         key === 'util_warn_threshold' || key === 'util_critical_threshold' ||
         key === 'util_dashboard_top_n'
       ) ? Number(e.target.value) : e.target.value }))
 
-  const needsWinRM  = hasProvider(form.dns_provider ?? '', 'msdns')  || hasProvider(form.dhcp_provider ?? '', 'msdhcp')
+  const needsMSDNS  = hasProvider(form.dns_provider  ?? '', 'msdns')
+  const needsMSDHCP = hasProvider(form.dhcp_provider ?? '', 'msdhcp')
   const needsPihole = hasProvider(form.dns_provider ?? '', 'pihole') || hasProvider(form.dhcp_provider ?? '', 'pihole')
   const needsBind   = hasProvider(form.dns_provider ?? '', 'bind')
   const needsKea    = hasProvider(form.dhcp_provider ?? '', 'keadhcp')
@@ -212,40 +226,64 @@ export default function SettingsPage() {
           </div>
         </div>
 
-        {/* ── Microsoft WinRM ── */}
-        {needsWinRM && (
+        {/* ── Microsoft DNS ── */}
+        {needsMSDNS && (
           <div className="settings-section">
-            <SectionTitle>WinRM Connection</SectionTitle>
+            <SectionTitle>Microsoft DNS</SectionTitle>
             <div className="form-grid">
-              <Field label="Host">
-                <input value={form.ms_winrm_host ?? ''} onChange={s('ms_winrm_host')} placeholder="dc.domain.local" />
+              <Field label="WinRM Host">
+                <input value={form.ms_dns_winrm_host ?? ''} onChange={s('ms_dns_winrm_host')} placeholder="dc.domain.local" />
               </Field>
               <Field label="Username">
-                <input value={form.ms_winrm_user ?? ''} onChange={s('ms_winrm_user')} placeholder="DOMAIN\svcaccount" />
+                <input value={form.ms_dns_winrm_user ?? ''} onChange={s('ms_dns_winrm_user')} placeholder="DOMAIN\svcaccount" />
               </Field>
               <SecretField
-                label="Password" value={form._ms_password}
-                onChange={v => setForm(f => ({ ...f, _ms_password: v }))}
-                isSet={data?.ms_winrm_password_set}
+                label="Password" value={form._ms_dns_password}
+                onChange={v => setForm(f => ({ ...f, _ms_dns_password: v }))}
+                isSet={data?.ms_dns_winrm_password_set}
               />
-              <Field label="Port">
-                <input type="number" value={form.ms_winrm_port ?? 5985} onChange={s('ms_winrm_port')} />
+              <Field label="WinRM Port">
+                <input type="number" value={form.ms_dns_winrm_port ?? 5985} onChange={s('ms_dns_winrm_port')} />
               </Field>
               <Field label="Transport">
-                <select value={form.ms_winrm_transport ?? 'ntlm'} onChange={s('ms_winrm_transport')}>
+                <select value={form.ms_dns_winrm_transport ?? 'ntlm'} onChange={s('ms_dns_winrm_transport')}>
                   {TRANSPORT_OPTIONS.map(t => <option key={t} value={t}>{t}</option>)}
                 </select>
               </Field>
-              {form.dns_provider === 'msdns' && (
-                <Field label="DNS Server">
-                  <input value={form.ms_dns_server ?? ''} onChange={s('ms_dns_server')} placeholder="dns.domain.local" />
-                </Field>
-              )}
-              {form.dhcp_provider === 'msdhcp' && (
-                <Field label="DHCP Server">
-                  <input value={form.ms_dhcp_server ?? ''} onChange={s('ms_dhcp_server')} placeholder="dhcp.domain.local" />
-                </Field>
-              )}
+              <Field label="DNS Server">
+                <input value={form.ms_dns_server ?? ''} onChange={s('ms_dns_server')} placeholder="dns.domain.local" />
+              </Field>
+            </div>
+          </div>
+        )}
+
+        {/* ── Microsoft DHCP ── */}
+        {needsMSDHCP && (
+          <div className="settings-section">
+            <SectionTitle>Microsoft DHCP</SectionTitle>
+            <div className="form-grid">
+              <Field label="WinRM Host">
+                <input value={form.ms_dhcp_winrm_host ?? ''} onChange={s('ms_dhcp_winrm_host')} placeholder="dc.domain.local" />
+              </Field>
+              <Field label="Username">
+                <input value={form.ms_dhcp_winrm_user ?? ''} onChange={s('ms_dhcp_winrm_user')} placeholder="DOMAIN\svcaccount" />
+              </Field>
+              <SecretField
+                label="Password" value={form._ms_dhcp_password}
+                onChange={v => setForm(f => ({ ...f, _ms_dhcp_password: v }))}
+                isSet={data?.ms_dhcp_winrm_password_set}
+              />
+              <Field label="WinRM Port">
+                <input type="number" value={form.ms_dhcp_winrm_port ?? 5985} onChange={s('ms_dhcp_winrm_port')} />
+              </Field>
+              <Field label="Transport">
+                <select value={form.ms_dhcp_winrm_transport ?? 'ntlm'} onChange={s('ms_dhcp_winrm_transport')}>
+                  {TRANSPORT_OPTIONS.map(t => <option key={t} value={t}>{t}</option>)}
+                </select>
+              </Field>
+              <Field label="DHCP Server">
+                <input value={form.ms_dhcp_server ?? ''} onChange={s('ms_dhcp_server')} placeholder="dhcp.domain.local" />
+              </Field>
             </div>
           </div>
         )}

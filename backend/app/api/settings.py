@@ -9,15 +9,18 @@ from app.providers.registry import get_dns_providers, get_dhcp_providers
 router = APIRouter()
 
 INT_KEYS = {
-    "ms_winrm_port", "bind_port",
+    "ms_dns_winrm_port", "ms_dhcp_winrm_port", "bind_port",
     "util_warn_threshold", "util_critical_threshold", "util_dashboard_top_n",
 }
 
 SETTING_KEYS = [
     "dns_provider", "dhcp_provider",
-    # MS
-    "ms_winrm_host", "ms_winrm_user", "ms_winrm_password",
-    "ms_winrm_port", "ms_winrm_transport", "ms_dns_server", "ms_dhcp_server",
+    # MS DNS
+    "ms_dns_winrm_host", "ms_dns_winrm_user", "ms_dns_winrm_password",
+    "ms_dns_winrm_port", "ms_dns_winrm_transport", "ms_dns_server",
+    # MS DHCP
+    "ms_dhcp_winrm_host", "ms_dhcp_winrm_user", "ms_dhcp_winrm_password",
+    "ms_dhcp_winrm_port", "ms_dhcp_winrm_transport", "ms_dhcp_server",
     # Pi-hole
     "pihole_url", "pihole_password",
     # BIND
@@ -33,13 +36,19 @@ SETTING_KEYS = [
 class SettingsResponse(BaseModel):
     dns_provider: str
     dhcp_provider: str
-    # MS
-    ms_winrm_host: str
-    ms_winrm_user: str
-    ms_winrm_password_set: bool
-    ms_winrm_port: int
-    ms_winrm_transport: str
+    # MS DNS
+    ms_dns_winrm_host: str
+    ms_dns_winrm_user: str
+    ms_dns_winrm_password_set: bool
+    ms_dns_winrm_port: int
+    ms_dns_winrm_transport: str
     ms_dns_server: str
+    # MS DHCP
+    ms_dhcp_winrm_host: str
+    ms_dhcp_winrm_user: str
+    ms_dhcp_winrm_password_set: bool
+    ms_dhcp_winrm_port: int
+    ms_dhcp_winrm_transport: str
     ms_dhcp_server: str
     # Pi-hole
     pihole_url: str
@@ -63,13 +72,19 @@ class SettingsResponse(BaseModel):
 class SettingsUpdate(BaseModel):
     dns_provider: str | None = None
     dhcp_provider: str | None = None
-    # MS
-    ms_winrm_host: str | None = None
-    ms_winrm_user: str | None = None
-    ms_winrm_password: str | None = None
-    ms_winrm_port: int | None = None
-    ms_winrm_transport: str | None = None
+    # MS DNS
+    ms_dns_winrm_host: str | None = None
+    ms_dns_winrm_user: str | None = None
+    ms_dns_winrm_password: str | None = None
+    ms_dns_winrm_port: int | None = None
+    ms_dns_winrm_transport: str | None = None
     ms_dns_server: str | None = None
+    # MS DHCP
+    ms_dhcp_winrm_host: str | None = None
+    ms_dhcp_winrm_user: str | None = None
+    ms_dhcp_winrm_password: str | None = None
+    ms_dhcp_winrm_port: int | None = None
+    ms_dhcp_winrm_transport: str | None = None
     ms_dhcp_server: str | None = None
     # Pi-hole
     pihole_url: str | None = None
@@ -113,12 +128,17 @@ def get_settings():
     return SettingsResponse(
         dns_provider=settings.dns_provider,
         dhcp_provider=settings.dhcp_provider,
-        ms_winrm_host=settings.ms_winrm_host,
-        ms_winrm_user=settings.ms_winrm_user,
-        ms_winrm_password_set=bool(settings.ms_winrm_password),
-        ms_winrm_port=settings.ms_winrm_port,
-        ms_winrm_transport=settings.ms_winrm_transport,
+        ms_dns_winrm_host=settings.ms_dns_winrm_host,
+        ms_dns_winrm_user=settings.ms_dns_winrm_user,
+        ms_dns_winrm_password_set=bool(settings.ms_dns_winrm_password),
+        ms_dns_winrm_port=settings.ms_dns_winrm_port,
+        ms_dns_winrm_transport=settings.ms_dns_winrm_transport,
         ms_dns_server=settings.ms_dns_server,
+        ms_dhcp_winrm_host=settings.ms_dhcp_winrm_host,
+        ms_dhcp_winrm_user=settings.ms_dhcp_winrm_user,
+        ms_dhcp_winrm_password_set=bool(settings.ms_dhcp_winrm_password),
+        ms_dhcp_winrm_port=settings.ms_dhcp_winrm_port,
+        ms_dhcp_winrm_transport=settings.ms_dhcp_winrm_transport,
         ms_dhcp_server=settings.ms_dhcp_server,
         pihole_url=settings.pihole_url,
         pihole_password_set=bool(settings.pihole_password),

@@ -134,13 +134,19 @@ export const dnsApi = {
 export interface AppSettings {
   dns_provider: string
   dhcp_provider: string
-  // MS
-  ms_winrm_host: string
-  ms_winrm_user: string
-  ms_winrm_password_set: boolean
-  ms_winrm_port: number
-  ms_winrm_transport: string
+  // MS DNS
+  ms_dns_winrm_host: string
+  ms_dns_winrm_user: string
+  ms_dns_winrm_password_set: boolean
+  ms_dns_winrm_port: number
+  ms_dns_winrm_transport: string
   ms_dns_server: string
+  // MS DHCP
+  ms_dhcp_winrm_host: string
+  ms_dhcp_winrm_user: string
+  ms_dhcp_winrm_password_set: boolean
+  ms_dhcp_winrm_port: number
+  ms_dhcp_winrm_transport: string
   ms_dhcp_server: string
   // Pi-hole
   pihole_url: string
@@ -164,13 +170,19 @@ export interface AppSettings {
 export interface AppSettingsUpdate {
   dns_provider?: string
   dhcp_provider?: string
-  // MS
-  ms_winrm_host?: string
-  ms_winrm_user?: string
-  ms_winrm_password?: string
-  ms_winrm_port?: number
-  ms_winrm_transport?: string
+  // MS DNS
+  ms_dns_winrm_host?: string
+  ms_dns_winrm_user?: string
+  ms_dns_winrm_password?: string
+  ms_dns_winrm_port?: number
+  ms_dns_winrm_transport?: string
   ms_dns_server?: string
+  // MS DHCP
+  ms_dhcp_winrm_host?: string
+  ms_dhcp_winrm_user?: string
+  ms_dhcp_winrm_password?: string
+  ms_dhcp_winrm_port?: number
+  ms_dhcp_winrm_transport?: string
   ms_dhcp_server?: string
   // Pi-hole
   pihole_url?: string
