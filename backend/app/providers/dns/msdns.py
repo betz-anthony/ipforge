@@ -23,9 +23,9 @@ class MSDNSProvider(DNSProvider):
     def session(self):
         if self._session is None:
             self._session = winrm.Session(
-                settings.ms_winrm_host,
-                auth=(settings.ms_winrm_user, settings.ms_winrm_password),
-                transport=settings.ms_winrm_transport,
+                settings.ms_dns_winrm_host,
+                auth=(settings.ms_dns_winrm_user, settings.ms_dns_winrm_password),
+                transport=settings.ms_dns_winrm_transport,
             )
         return self._session
 
