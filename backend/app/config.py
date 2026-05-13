@@ -4,6 +4,13 @@ from pydantic_settings import BaseSettings
 class Settings(BaseSettings):
     database_url: str = "postgresql://ipam:ipam@localhost:5432/ipam"
 
+    # Auth
+    jwt_secret_key: str = "change-me-in-production-use-a-long-random-string"
+    jwt_algorithm: str = "HS256"
+    jwt_expire_minutes: int = 480      # 8 hours
+    auth_backend: str = "local"        # "local" | "ldap" (planned)
+    default_admin_password: str = "admin"
+
     # Utilization thresholds
     util_warn_threshold: int = 80
     util_critical_threshold: int = 95

@@ -1,3 +1,4 @@
+from app.core.deps import require_operator
 import logging
 from datetime import datetime, timezone
 from fastapi import APIRouter, HTTPException, Depends, Query
@@ -61,7 +62,7 @@ def get_leases_by_ip(address: str, db: Session = Depends(get_db)):
     ]
 
 
-@router.post("/scopes/{scope_id:path}/reservations", response_model=DHCPReservation, status_code=201)
+@router.post("/scopes/{scope_id:path}/reservations", response_model=DHCPReservation, status_code=201, dependencies=[Depends(require_operator)])
 def add_reservation(scope_id: str, reservation: DHCPReservation, source: str = Query(""),
                     db: Session = Depends(get_db)):
     reservation.scope_id = scope_id
@@ -86,7 +87,7 @@ def add_reservation(scope_id: str, reservation: DHCPReservation, source: str = Q
     return reservation
 
 
-@router.delete("/scopes/{scope_id:path}/reservations/{ip_address}", status_code=204)
+@router.delete("/scopes/{scope_id:path}/reservations/{ip_address}", status_code=204, dependencies=[Depends(require_operator)])
 def delete_reservation(scope_id: str, ip_address: str, source: str = Query(""),
                        db: Session = Depends(get_db)):
     providers = get_dhcp_providers()

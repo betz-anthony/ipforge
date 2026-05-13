@@ -1,3 +1,4 @@
+from app.core.deps import require_operator
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from app.database import get_db
@@ -21,7 +22,7 @@ def list_addresses(
     return q.all()
 
 
-@router.post("", response_model=AddressRead, status_code=201)
+@router.post("", response_model=AddressRead, status_code=201, dependencies=[Depends(require_operator)])
 def create_address(data: AddressCreate, db: Session = Depends(get_db)):
     if db.query(IPAddress).filter(IPAddress.address == data.address).first():
         raise HTTPException(409, "Address already exists")
@@ -48,7 +49,7 @@ def get_address(address_id: int, db: Session = Depends(get_db)):
     return address
 
 
-@router.put("/{address_id}", response_model=AddressRead)
+@router.put("/{address_id}", response_model=AddressRead, dependencies=[Depends(require_operator)])
 def update_address(address_id: int, data: AddressUpdate, db: Session = Depends(get_db)):
     address = db.get(IPAddress, address_id)
     if not address:
@@ -60,7 +61,7 @@ def update_address(address_id: int, data: AddressUpdate, db: Session = Depends(g
     return address
 
 
-@router.delete("/{address_id}", status_code=204)
+@router.delete("/{address_id}", status_code=204, dependencies=[Depends(require_operator)])
 def delete_address(address_id: int, db: Session = Depends(get_db)):
     address = db.get(IPAddress, address_id)
     if not address:

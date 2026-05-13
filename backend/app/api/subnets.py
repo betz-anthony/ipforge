@@ -1,3 +1,4 @@
+from app.core.deps import require_operator
 import ipaddress
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import func
@@ -51,7 +52,7 @@ def list_subnets(
     return result
 
 
-@router.post("", response_model=SubnetRead, status_code=201)
+@router.post("", response_model=SubnetRead, status_code=201, dependencies=[Depends(require_operator)])
 def create_subnet(data: SubnetCreate, db: Session = Depends(get_db)):
     try:
         network = ipaddress.ip_network(data.cidr, strict=False)
@@ -74,7 +75,7 @@ def get_subnet(subnet_id: int, db: Session = Depends(get_db)):
     return subnet
 
 
-@router.put("/{subnet_id}", response_model=SubnetRead)
+@router.put("/{subnet_id}", response_model=SubnetRead, dependencies=[Depends(require_operator)])
 def update_subnet(subnet_id: int, data: SubnetUpdate, db: Session = Depends(get_db)):
     subnet = db.get(Subnet, subnet_id)
     if not subnet:
@@ -86,7 +87,7 @@ def update_subnet(subnet_id: int, data: SubnetUpdate, db: Session = Depends(get_
     return subnet
 
 
-@router.delete("/{subnet_id}", status_code=204)
+@router.delete("/{subnet_id}", status_code=204, dependencies=[Depends(require_operator)])
 def delete_subnet(subnet_id: int, db: Session = Depends(get_db)):
     subnet = db.get(Subnet, subnet_id)
     if not subnet:
