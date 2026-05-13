@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Eye, EyeOff, Save, Plus, Pencil, Trash2, Check, X } from 'lucide-react'
+import { useAuth } from '../contexts/AuthContext'
 import {
-  settingsApi, providerConfigsApi,
-  type AppSettingsUpdate, type ProviderConfig, type ProviderConfigCreate,
+  settingsApi, providerConfigsApi, usersApi,
+  type AppSettingsUpdate, type ProviderConfig, type ProviderConfigCreate, type UserRecord,
 } from '../api/client'
 
 // ── Provider field definitions ─────────────────────────────────────────────
@@ -340,10 +341,184 @@ function ProviderSection({
   )
 }
 
+// ── Users section ─────────────────────────────────────────────────────────
+
+const ROLE_OPTIONS = ['readonly', 'operator', 'admin']
+
+function UsersSection({ currentUsername }: { currentUsername: string }) {
+  const qc = useQueryClient()
+  const { data: users = [], isLoading } = useQuery({ queryKey: ['users'], queryFn: usersApi.list })
+
+  const [adding, setAdding]   = useState(false)
+  const [editId, setEditId]   = useState<number | null>(null)
+  const [mutErr, setMutErr]   = useState('')
+
+  const [newUsername, setNewUsername] = useState('')
+  const [newPassword, setNewPassword] = useState('')
+  const [newRole, setNewRole]         = useState('operator')
+
+  const [editRole, setEditRole]         = useState('')
+  const [editPassword, setEditPassword] = useState('')
+  const [editEnabled, setEditEnabled]   = useState(true)
+
+  const invalidate = () => qc.invalidateQueries({ queryKey: ['users'] })
+
+  const createMut = useMutation({
+    mutationFn: () => usersApi.create(newUsername, newPassword, newRole),
+    onSuccess: () => {
+      setAdding(false); setMutErr('')
+      setNewUsername(''); setNewPassword(''); setNewRole('operator')
+      invalidate()
+    },
+    onError: (e: Error) => setMutErr(e.message),
+  })
+
+  const updateMut = useMutation({
+    mutationFn: ({ id, data }: { id: number; data: Parameters<typeof usersApi.update>[1] }) =>
+      usersApi.update(id, data),
+    onSuccess: () => { setEditId(null); setMutErr(''); invalidate() },
+    onError: (e: Error) => setMutErr(e.message),
+  })
+
+  const deleteMut = useMutation({
+    mutationFn: (id: number) => usersApi.delete(id),
+    onSuccess: () => { invalidate() },
+  })
+
+  function startEdit(u: UserRecord) {
+    setEditId(u.id); setEditRole(u.role); setEditPassword(''); setEditEnabled(u.enabled)
+    setAdding(false); setMutErr('')
+  }
+
+  if (isLoading) return null
+
+  return (
+    <div className="settings-section">
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <SectionTitle>Users</SectionTitle>
+        {!adding && (
+          <button className="btn-ghost btn-sm" onClick={() => { setAdding(true); setEditId(null) }}>
+            <Plus size={13} /> Add
+          </button>
+        )}
+      </div>
+
+      {users.map(u => (
+        <div key={u.id}>
+          {editId === u.id ? (
+            <div className="inline-form" style={{ marginTop: '0.5rem' }}>
+              <div className="form-grid">
+                <Field label="Role">
+                  <select value={editRole} onChange={e => setEditRole(e.target.value)}>
+                    {ROLE_OPTIONS.map(r => <option key={r} value={r}>{r}</option>)}
+                  </select>
+                </Field>
+                <Field label="New Password" hint="leave blank to keep">
+                  <input
+                    type="password"
+                    value={editPassword}
+                    onChange={e => setEditPassword(e.target.value)}
+                    placeholder="Leave blank to keep"
+                  />
+                </Field>
+                {u.username !== currentUsername && (
+                  <Field label="Enabled">
+                    <select value={editEnabled ? 'yes' : 'no'} onChange={e => setEditEnabled(e.target.value === 'yes')}>
+                      <option value="yes">Enabled</option>
+                      <option value="no">Disabled</option>
+                    </select>
+                  </Field>
+                )}
+              </div>
+              <div className="form-actions">
+                <button
+                  className="btn-primary btn-sm"
+                  disabled={updateMut.isPending}
+                  onClick={() => {
+                    const data: Parameters<typeof usersApi.update>[1] = { role: editRole, enabled: editEnabled }
+                    if (editPassword) data.password = editPassword
+                    updateMut.mutate({ id: u.id, data })
+                  }}
+                >
+                  <Check size={13} />
+                  {updateMut.isPending ? 'Saving…' : 'Update'}
+                </button>
+                <button className="btn-ghost btn-sm" onClick={() => { setEditId(null); setMutErr('') }}>
+                  <X size={13} /> Cancel
+                </button>
+                {mutErr && <span className="feedback-error">{mutErr}</span>}
+              </div>
+            </div>
+          ) : (
+            <div style={{
+              display: 'flex', alignItems: 'center', gap: '0.5rem',
+              padding: '0.45rem 0.6rem', border: '1px solid var(--border)',
+              borderRadius: '6px', marginBottom: '0.4rem',
+              background: u.enabled ? 'var(--surface)' : 'var(--surface-2)',
+              opacity: u.enabled ? 1 : 0.6,
+            }}>
+              <span style={{ flex: 1, fontSize: '0.82rem', fontFamily: 'var(--font-mono)' }}>{u.username}</span>
+              <span className="badge badge-gray" style={{ fontSize: '0.6rem' }}>{u.role}</span>
+              {!u.enabled && (
+                <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>disabled</span>
+              )}
+              <button className="btn-ghost btn-sm" onClick={() => startEdit(u)} title="Edit">
+                <Pencil size={12} />
+              </button>
+              {u.username !== currentUsername && (
+                <button
+                  className="btn-danger btn-sm"
+                  onClick={() => window.confirm(`Delete user "${u.username}"?`) && deleteMut.mutate(u.id)}
+                  title="Delete"
+                >
+                  <Trash2 size={12} />
+                </button>
+              )}
+            </div>
+          )}
+        </div>
+      ))}
+
+      {adding && (
+        <div className="inline-form" style={{ marginTop: '0.75rem' }}>
+          <div className="form-grid">
+            <Field label="Username">
+              <input value={newUsername} onChange={e => setNewUsername(e.target.value)} placeholder="username" />
+            </Field>
+            <Field label="Password">
+              <input type="password" value={newPassword} onChange={e => setNewPassword(e.target.value)} placeholder="Min 8 characters" />
+            </Field>
+            <Field label="Role">
+              <select value={newRole} onChange={e => setNewRole(e.target.value)}>
+                {ROLE_OPTIONS.map(r => <option key={r} value={r}>{r}</option>)}
+              </select>
+            </Field>
+          </div>
+          <div className="form-actions">
+            <button
+              className="btn-primary btn-sm"
+              disabled={createMut.isPending || !newUsername || !newPassword}
+              onClick={() => createMut.mutate()}
+            >
+              <Check size={13} />
+              {createMut.isPending ? 'Adding…' : 'Add User'}
+            </button>
+            <button className="btn-ghost btn-sm" onClick={() => { setAdding(false); setMutErr('') }}>
+              <X size={13} /> Cancel
+            </button>
+            {mutErr && <span className="feedback-error">{mutErr}</span>}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ── Main settings page ─────────────────────────────────────────────────────
 
 export default function SettingsPage() {
   const qc = useQueryClient()
+  const { user } = useAuth()
   const { data: settingsData, isLoading } = useQuery({ queryKey: ['settings'], queryFn: settingsApi.get })
   const { data: providerConfigs = [] } = useQuery({ queryKey: ['provider-configs'], queryFn: providerConfigsApi.list })
 
@@ -414,6 +589,9 @@ export default function SettingsPage() {
           )}
         </div>
       </form>
+
+      {/* ── Users ── */}
+      {user && <UsersSection currentUsername={user.username} />}
     </div>
   )
 }

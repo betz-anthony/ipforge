@@ -2,6 +2,60 @@ import axios from 'axios'
 
 const api = axios.create({ baseURL: '/api' })
 
+// Attach JWT from localStorage
+api.interceptors.request.use(cfg => {
+  const token = localStorage.getItem('ipam_token')
+  if (token) cfg.headers.Authorization = `Bearer ${token}`
+  return cfg
+})
+
+// On 401, clear token and redirect to login
+api.interceptors.response.use(
+  r => r,
+  err => {
+    if (err.response?.status === 401) {
+      localStorage.removeItem('ipam_token')
+      localStorage.removeItem('ipam_user')
+      window.location.href = '/login'
+    }
+    return Promise.reject(err)
+  }
+)
+
+export interface AuthUser {
+  username: string
+  role: 'readonly' | 'operator' | 'admin'
+}
+
+export const authApi = {
+  login: (username: string, password: string) => {
+    const form = new URLSearchParams({ username, password })
+    return api.post<{ access_token: string; username: string; role: string }>(
+      '/auth/login',
+      form,
+      { headers: { 'Content-Type': 'application/x-www-form-urlencoded' } }
+    ).then(r => r.data)
+  },
+  me: () => api.get<AuthUser>('/auth/me').then(r => r.data),
+  changePassword: (current_password: string, new_password: string) =>
+    api.post('/auth/change-password', { current_password, new_password }),
+}
+
+export interface UserRecord {
+  id: number
+  username: string
+  role: string
+  enabled: boolean
+}
+
+export const usersApi = {
+  list:   ()                                                      => api.get<UserRecord[]>('/users').then(r => r.data),
+  create: (username: string, password: string, role: string)     => api.post<UserRecord>('/users', { username, password, role }).then(r => r.data),
+  update: (id: number, data: Partial<{ role: string; enabled: boolean; password: string }>) =>
+    api.put<UserRecord>(`/users/${id}`, data).then(r => r.data),
+  delete: (id: number) => api.delete(`/users/${id}`),
+}
+
 export interface Subnet {
   id: number
   name: string

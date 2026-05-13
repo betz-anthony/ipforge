@@ -1,3 +1,4 @@
+from app.core.deps import require_operator
 import logging
 from datetime import datetime, timezone
 from fastapi import APIRouter, HTTPException, Depends
@@ -53,7 +54,7 @@ def get_records_by_ip(address: str, db: Session = Depends(get_db)):
     ]
 
 
-@router.post("/zones/{zone}/records", response_model=DNSRecord, status_code=201)
+@router.post("/zones/{zone}/records", response_model=DNSRecord, status_code=201, dependencies=[Depends(require_operator)])
 def create_record(zone: str, record: DNSRecord, db: Session = Depends(get_db)):
     record.zone = zone
     providers = get_dns_providers()
@@ -76,7 +77,7 @@ def create_record(zone: str, record: DNSRecord, db: Session = Depends(get_db)):
     return record
 
 
-@router.delete("/zones/{zone}/records", status_code=204)
+@router.delete("/zones/{zone}/records", status_code=204, dependencies=[Depends(require_operator)])
 def delete_record(zone: str, record: DNSRecord, db: Session = Depends(get_db)):
     record.zone = zone
     providers = get_dns_providers()
