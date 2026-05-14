@@ -89,7 +89,7 @@ export interface IPAddress {
 
 export const subnetsApi = {
   list: () => api.get<Subnet[]>('/subnets').then(r => r.data),
-  create: (data: Omit<Subnet, 'id' | 'created_at' | 'notes' | 'used_count' | 'total_count' | 'utilization_pct' | 'rollup_used_count' | 'rollup_total_count' | 'rollup_utilization_pct'> & { notes?: string | null; parent_id?: number | null }) =>
+  create: (data: Omit<Subnet, 'id' | 'created_at' | 'notes' | 'used_count' | 'total_count' | 'utilization_pct' | 'rollup_used_count' | 'rollup_total_count' | 'rollup_utilization_pct' | 'parent_id'> & { notes?: string | null; parent_id?: number | null }) =>
     api.post<Subnet>('/subnets', data).then(r => r.data),
   update: (id: number, data: Partial<Omit<Subnet, 'id' | 'created_at' | 'used_count' | 'total_count' | 'utilization_pct' | 'rollup_used_count' | 'rollup_total_count' | 'rollup_utilization_pct'>>) =>
     api.put<Subnet>(`/subnets/${id}`, data).then(r => r.data),
