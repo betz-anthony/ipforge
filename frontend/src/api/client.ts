@@ -331,3 +331,26 @@ export const searchApi = {
   search: (q: string) =>
     api.get<SearchResults>('/search', { params: { q } }).then(r => r.data),
 }
+
+export interface AuditEntry {
+  id:            number
+  timestamp:     string
+  username:      string
+  action:        'create' | 'update' | 'delete'
+  resource_type: string
+  resource_id:   string
+  summary:       string | null
+  before_state:  string | null
+  after_state:   string | null
+}
+
+export const auditApi = {
+  list: (params?: {
+    resource_type?: string
+    username?: string
+    from_date?: string
+    to_date?: string
+    limit?: number
+    offset?: number
+  }) => api.get<AuditEntry[]>('/audit', { params }).then(r => r.data),
+}

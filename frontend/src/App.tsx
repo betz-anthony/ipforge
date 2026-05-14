@@ -1,6 +1,6 @@
 import { Routes, Route, NavLink } from 'react-router-dom'
 import {
-  LayoutDashboard, Network, List, Server, Globe, Search, Settings, LogOut
+  LayoutDashboard, Network, List, Server, Globe, Search, Settings, LogOut, ClipboardList
 } from 'lucide-react'
 import { useAuth } from './contexts/AuthContext'
 import Dashboard from './pages/Dashboard'
@@ -10,6 +10,7 @@ import DHCP from './pages/DHCP'
 import DNS from './pages/DNS'
 import SearchPage from './pages/Search'
 import SettingsPage from './pages/Settings'
+import AuditPage from './pages/Audit'
 import Login from './pages/Login'
 
 const NAV = [
@@ -53,6 +54,11 @@ export default function App() {
             Search
           </NavLink>
 
+          <NavLink to="/audit" className={({ isActive }) => 'nav-link' + (isActive ? ' active' : '')}>
+            <ClipboardList size={15} strokeWidth={1.75} />
+            Audit
+          </NavLink>
+
           {isAdmin && (
             <NavLink to="/settings" className={({ isActive }) => 'nav-link' + (isActive ? ' active' : '')}>
               <Settings size={15} strokeWidth={1.75} />
@@ -89,6 +95,7 @@ export default function App() {
           <Route path="/dhcp"      element={<DHCP />} />
           <Route path="/dns"       element={<DNS />} />
           <Route path="/search"    element={<SearchPage />} />
+          <Route path="/audit"     element={<AuditPage />} />
           {isAdmin && <Route path="/settings" element={<SettingsPage />} />}
         </Routes>
       </main>
