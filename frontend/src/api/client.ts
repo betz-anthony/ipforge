@@ -65,9 +65,13 @@ export interface Subnet {
   description: string | null
   notes: string | null
   created_at: string
+  parent_id: number | null
   used_count: number
   total_count: number
   utilization_pct: number
+  rollup_used_count: number
+  rollup_total_count: number
+  rollup_utilization_pct: number
 }
 
 export interface IPAddress {
@@ -85,11 +89,13 @@ export interface IPAddress {
 
 export const subnetsApi = {
   list: () => api.get<Subnet[]>('/subnets').then(r => r.data),
-  create: (data: Omit<Subnet, 'id' | 'created_at' | 'notes' | 'used_count' | 'total_count' | 'utilization_pct'> & { notes?: string | null }) =>
+  create: (data: Omit<Subnet, 'id' | 'created_at' | 'notes' | 'used_count' | 'total_count' | 'utilization_pct' | 'rollup_used_count' | 'rollup_total_count' | 'rollup_utilization_pct'> & { notes?: string | null; parent_id?: number | null }) =>
     api.post<Subnet>('/subnets', data).then(r => r.data),
-  update: (id: number, data: Partial<Subnet>) =>
+  update: (id: number, data: Partial<Omit<Subnet, 'id' | 'created_at' | 'used_count' | 'total_count' | 'utilization_pct' | 'rollup_used_count' | 'rollup_total_count' | 'rollup_utilization_pct'>>) =>
     api.put<Subnet>(`/subnets/${id}`, data).then(r => r.data),
   delete: (id: number) => api.delete(`/subnets/${id}`),
+  suggestParent: (cidr: string) =>
+    api.get<Subnet[]>('/subnets/suggest-parent', { params: { cidr } }).then(r => r.data),
 }
 
 export const addressesApi = {
