@@ -195,6 +195,108 @@ def resolve_collision(
             addr.status = new_status
             action_taken = {"new_status": body.new_status}
 
+        elif c.collision_type == "hostname_mismatch" and body.canonical_hostname:
+            canonical = body.canonical_hostname
+
+            lease = db.query(CachedDHCPLease).filter_by(ip_address=c.ip_address).first()
+            dns_row = db.query(CachedDNSRecord).filter(
+                CachedDNSRecord.value == c.ip_address,
+                CachedDNSRecord.record_type.in_(["A", "AAAA"]),
+            ).first()
+            original_hostname = lease.name if lease else None
+
+            # Step 1: DHCP
+            dhcp_provider = None
+            if lease:
+                dhcp_providers = get_dhcp_providers()
+                dhcp_provider = next(
+                    (p for p in dhcp_providers if p.source == lease.source),
+                    dhcp_providers[0] if dhcp_providers else None,
+                )
+                if dhcp_provider:
+                    try:
+                        dhcp_provider.update_reservation_name(lease.scope_id, c.ip_address, canonical)
+                    except Exception as exc:
+                        logger.error("DHCP update_reservation_name failed: %s", exc)
+                        raise HTTPException(502, detail={"error": "connection_error", "detail": str(exc), "step": "dhcp"})
+
+            # Step 2: DNS (with DHCP rollback on failure)
+            if dns_row:
+                dns_providers = get_dns_providers()
+                dns_provider = next(
+                    (p for p in dns_providers if p.source == dns_row.source),
+                    dns_providers[0] if dns_providers else None,
+                )
+                if dns_provider:
+                    old_rec = DNSRecord(
+                        name=dns_row.name, record_type=dns_row.record_type,
+                        value=dns_row.value, zone=dns_row.zone,
+                        ttl=dns_row.ttl, source=dns_row.source,
+                    )
+                    new_rec = DNSRecord(
+                        name=canonical, record_type=dns_row.record_type,
+                        value=dns_row.value, zone=dns_row.zone,
+                        ttl=dns_row.ttl, source=dns_row.source,
+                    )
+                    try:
+                        dns_provider.update_record(old_rec, new_rec)
+                    except Exception as exc:
+                        logger.error("DNS update_record failed: %s", exc)
+                        if dhcp_provider and lease and original_hostname:
+                            try:
+                                dhcp_provider.update_reservation_name(lease.scope_id, c.ip_address, original_hostname)
+                            except Exception as rb_exc:
+                                logger.error("DHCP rollback failed: %s", rb_exc)
+                        raise HTTPException(502, detail={"error": "connection_error", "detail": str(exc), "step": "dns"})
+
+            # Step 3: IPAM
+            addr = db.query(IPAddress).filter_by(address=c.ip_address).first()
+            if addr:
+                addr.hostname = canonical
+            action_taken = {"canonical_hostname": canonical}
+
+        elif c.collision_type == "multi_dhcp_scope" and body.sources_to_remove:
+            sources_to_remove = body.sources_to_remove
+            dhcp_providers = get_dhcp_providers()
+
+            # Pre-fetch lease data for each source (needed for rollback re-add)
+            leases_by_source: dict = {}
+            for source in sources_to_remove:
+                row = db.query(CachedDHCPLease).filter_by(
+                    ip_address=c.ip_address, source=source
+                ).first()
+                if row:
+                    leases_by_source[source] = row
+
+            deleted: list[tuple] = []  # (provider, lease_row) pairs already deleted
+
+            for source in sources_to_remove:
+                provider = next((p for p in dhcp_providers if p.source == source), None)
+                lease_row = leases_by_source.get(source)
+                if not provider or not lease_row:
+                    continue
+                try:
+                    provider.delete_reservation(lease_row.scope_id, c.ip_address)
+                    deleted.append((provider, lease_row))
+                except Exception as exc:
+                    logger.error("DHCP delete_reservation failed for %s: %s", source, exc)
+                    for (prov, deleted_lease) in deleted:
+                        try:
+                            prov.add_reservation(DHCPReservation(
+                                scope_id=deleted_lease.scope_id,
+                                ip_address=deleted_lease.ip_address,
+                                mac_address=deleted_lease.mac_address or "",
+                                client_duid=deleted_lease.client_duid or "",
+                                iaid=deleted_lease.iaid or 0,
+                                name=deleted_lease.name or "",
+                                description=deleted_lease.description or "",
+                            ))
+                        except Exception as rb_exc:
+                            logger.error("DHCP rollback add_reservation failed: %s", rb_exc)
+                    raise HTTPException(502, detail={"error": "connection_error", "detail": str(exc), "step": "dhcp"})
+
+            action_taken = {"sources_to_remove": sources_to_remove}
+
     c.resolved    = True
     c.resolved_at = _utcnow()
     db.flush()

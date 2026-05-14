@@ -1,4 +1,4 @@
-from unittest.mock import patch
+from unittest.mock import patch, MagicMock
 from datetime import datetime, timezone
 
 from app.models.address import IPAddress, AddressStatus
@@ -481,3 +481,165 @@ def test_resolve_active_but_available_invalid_status_returns_422(client, db):
     r = client.put(f"/api/scan/collisions/{c.id}/resolve",
                    json={"new_status": "bogus_value"})
     assert r.status_code == 422
+
+
+def test_resolve_hostname_mismatch_calls_providers(client, db):
+    subnet = _make_subnet(db, cidr="10.0.0.0/24")
+    addr = IPAddress(address="10.0.0.10", subnet_id=subnet.id,
+                     status=AddressStatus.assigned, hostname="workstation01")
+    db.add(addr)
+    db.add(CachedDHCPLease(
+        scope_id="10.0.0.0", ip_address="10.0.0.10",
+        name="workstation01", source="msdhcp",
+        mac_address="aa:bb:cc:dd:ee:ff", synced_at=_now(),
+    ))
+    db.add(CachedDNSRecord(
+        name="workstation01", record_type="A", value="10.0.0.10",
+        zone="corp.local", ttl=300, source="msdns", synced_at=_now(),
+    ))
+    c = Collision(
+        ip_address="10.0.0.10", collision_type="hostname_mismatch",
+        details='{"ipam":"workstation01","dhcp":"workstation01","dns":"oldname"}',
+        detected_at=_now(), resolved=False,
+    )
+    db.add(c)
+    db.commit()
+    db.refresh(c)
+
+    mock_dhcp = MagicMock()
+    mock_dhcp.source = "msdhcp"
+    mock_dns = MagicMock()
+    mock_dns.source = "msdns"
+
+    with patch("app.api.scan.get_dhcp_providers", return_value=[mock_dhcp]), \
+         patch("app.api.scan.get_dns_providers",  return_value=[mock_dns]):
+        r = client.put(f"/api/scan/collisions/{c.id}/resolve",
+                       json={"canonical_hostname": "server01"})
+
+    assert r.status_code == 200
+    mock_dhcp.update_reservation_name.assert_called_once_with("10.0.0.0", "10.0.0.10", "server01")
+    mock_dns.update_record.assert_called_once()
+    dns_new = mock_dns.update_record.call_args[0][1]
+    assert dns_new.name == "server01"
+    db.refresh(addr)
+    assert addr.hostname == "server01"
+    db.refresh(c)
+    assert c.resolved is True
+
+
+def test_resolve_hostname_mismatch_rolls_back_dhcp_on_dns_failure(client, db):
+    subnet = _make_subnet(db, cidr="10.0.0.0/24")
+    addr = IPAddress(address="10.0.0.10", subnet_id=subnet.id,
+                     status=AddressStatus.assigned, hostname="workstation01")
+    db.add(addr)
+    db.add(CachedDHCPLease(
+        scope_id="10.0.0.0", ip_address="10.0.0.10",
+        name="workstation01", source="msdhcp", synced_at=_now(),
+    ))
+    db.add(CachedDNSRecord(
+        name="workstation01", record_type="A", value="10.0.0.10",
+        zone="corp.local", ttl=300, source="msdns", synced_at=_now(),
+    ))
+    c = Collision(
+        ip_address="10.0.0.10", collision_type="hostname_mismatch",
+        details='{"ipam":"workstation01","dhcp":"workstation01","dns":"workstation01"}',
+        detected_at=_now(), resolved=False,
+    )
+    db.add(c)
+    db.commit()
+    db.refresh(c)
+
+    mock_dhcp = MagicMock()
+    mock_dhcp.source = "msdhcp"
+    mock_dns = MagicMock()
+    mock_dns.source = "msdns"
+    mock_dns.update_record.side_effect = RuntimeError("DNS unreachable")
+
+    with patch("app.api.scan.get_dhcp_providers", return_value=[mock_dhcp]), \
+         patch("app.api.scan.get_dns_providers",  return_value=[mock_dns]):
+        r = client.put(f"/api/scan/collisions/{c.id}/resolve",
+                       json={"canonical_hostname": "server01"})
+
+    assert r.status_code == 502
+    # DHCP called once forward, once rollback
+    assert mock_dhcp.update_reservation_name.call_count == 2
+    rollback_call = mock_dhcp.update_reservation_name.call_args_list[1]
+    assert rollback_call[0][2] == "workstation01"  # original hostname restored
+    db.refresh(c)
+    assert c.resolved is False
+
+
+def test_resolve_multi_dhcp_scope_deletes_selected_source(client, db):
+    subnet = _make_subnet(db, cidr="10.0.0.0/24")
+    db.add(CachedDHCPLease(
+        scope_id="10.0.0.0", ip_address="10.0.0.5",
+        mac_address="aa:bb:cc:dd:ee:01", name="device1",
+        source="msdhcp", synced_at=_now(),
+    ))
+    db.add(CachedDHCPLease(
+        scope_id="10.0.0.0", ip_address="10.0.0.5",
+        mac_address="aa:bb:cc:dd:ee:02", name="device1",
+        source="pihole", synced_at=_now(),
+    ))
+    c = Collision(
+        ip_address="10.0.0.5", collision_type="multi_dhcp_scope",
+        details='{"sources":["msdhcp","pihole"]}',
+        detected_at=_now(), resolved=False,
+    )
+    db.add(c)
+    db.commit()
+    db.refresh(c)
+
+    mock_dhcp1 = MagicMock()
+    mock_dhcp1.source = "msdhcp"
+    mock_dhcp2 = MagicMock()
+    mock_dhcp2.source = "pihole"
+
+    with patch("app.api.scan.get_dhcp_providers", return_value=[mock_dhcp1, mock_dhcp2]):
+        r = client.put(f"/api/scan/collisions/{c.id}/resolve",
+                       json={"sources_to_remove": ["pihole"]})
+
+    assert r.status_code == 200
+    mock_dhcp1.delete_reservation.assert_not_called()
+    mock_dhcp2.delete_reservation.assert_called_once_with("10.0.0.0", "10.0.0.5")
+    db.refresh(c)
+    assert c.resolved is True
+
+
+def test_resolve_multi_dhcp_scope_rolls_back_on_failure(client, db):
+    subnet = _make_subnet(db, cidr="10.0.0.0/24")
+    db.add(CachedDHCPLease(
+        scope_id="10.0.0.0", ip_address="10.0.0.5",
+        mac_address="aa:bb:cc:dd:ee:01", name="device1",
+        source="msdhcp", synced_at=_now(),
+    ))
+    db.add(CachedDHCPLease(
+        scope_id="10.0.0.0", ip_address="10.0.0.5",
+        mac_address="aa:bb:cc:dd:ee:02", name="device1",
+        source="pihole", synced_at=_now(),
+    ))
+    c = Collision(
+        ip_address="10.0.0.5", collision_type="multi_dhcp_scope",
+        details='{"sources":["msdhcp","pihole"]}',
+        detected_at=_now(), resolved=False,
+    )
+    db.add(c)
+    db.commit()
+    db.refresh(c)
+
+    mock_dhcp1 = MagicMock()
+    mock_dhcp1.source = "msdhcp"
+    mock_dhcp2 = MagicMock()
+    mock_dhcp2.source = "pihole"
+    mock_dhcp2.delete_reservation.side_effect = RuntimeError("DHCP unreachable")
+
+    with patch("app.api.scan.get_dhcp_providers", return_value=[mock_dhcp1, mock_dhcp2]):
+        r = client.put(f"/api/scan/collisions/{c.id}/resolve",
+                       json={"sources_to_remove": ["msdhcp", "pihole"]})
+
+    assert r.status_code == 502
+    # msdhcp deleted, pihole failed → msdhcp re-added via add_reservation
+    mock_dhcp1.delete_reservation.assert_called_once()
+    mock_dhcp1.add_reservation.assert_called_once()
+    db.refresh(c)
+    assert c.resolved is False
