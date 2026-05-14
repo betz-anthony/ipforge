@@ -437,3 +437,49 @@ def test_resolve_collision(client, db):
 def test_resolve_collision_404(client):
     r = client.put("/api/scan/collisions/9999/resolve")
     assert r.status_code == 404
+
+
+# ---------------------------------------------------------------------------
+# Guided resolve tests
+# ---------------------------------------------------------------------------
+
+from unittest.mock import MagicMock
+
+
+def test_resolve_active_but_available_updates_ipam_status(client, db):
+    subnet = _make_subnet(db, cidr="10.0.0.0/24")
+    addr = IPAddress(address="10.0.0.1", subnet_id=subnet.id, status=AddressStatus.available)
+    db.add(addr)
+    c = Collision(
+        ip_address="10.0.0.1", collision_type="active_but_available",
+        details='{"ipam_status":"available","latency_ms":1.2}',
+        detected_at=_now(), resolved=False,
+    )
+    db.add(c)
+    db.commit()
+    db.refresh(c)
+    db.refresh(addr)
+
+    r = client.put(f"/api/scan/collisions/{c.id}/resolve",
+                   json={"new_status": "assigned"})
+    assert r.status_code == 200
+    assert r.json()["resolved"] is True
+
+    db.refresh(addr)
+    assert addr.status == AddressStatus.assigned
+    db.refresh(c)
+    assert c.resolved is True
+
+
+def test_resolve_active_but_available_invalid_status_returns_422(client, db):
+    c = Collision(
+        ip_address="10.0.0.99", collision_type="active_but_available",
+        details="{}", detected_at=_now(), resolved=False,
+    )
+    db.add(c)
+    db.commit()
+    db.refresh(c)
+
+    r = client.put(f"/api/scan/collisions/{c.id}/resolve",
+                   json={"new_status": "bogus_value"})
+    assert r.status_code == 422

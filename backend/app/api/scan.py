@@ -1,3 +1,4 @@
+import logging
 import threading
 from datetime import datetime, timezone
 from typing import Literal
@@ -5,12 +6,21 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
+from app.core.audit import write_audit
+from app.core.deps import get_current_user
 from app.database import get_db
+from app.models.address import IPAddress, AddressStatus
+from app.models.cache import CachedDHCPLease, CachedDNSRecord
 from app.models.cache import SyncStatus
 from app.models.scan import Collision, ScanResult
 from app.models.subnet import Subnet
+from app.models.user import User
+from app.providers.dhcp.base import DHCPReservation
+from app.providers.dns.base import DNSRecord
+from app.providers.registry import get_dhcp_providers, get_dns_providers
 from app.utils import ip_in_cidr
 
+logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
@@ -57,6 +67,12 @@ class CollisionResponse(BaseModel):
     detected_at: str | None
     resolved: bool
     resolved_at: str | None
+
+
+class CollisionResolveRequest(BaseModel):
+    new_status:         str | None       = None  # active_but_available
+    canonical_hostname: str | None       = None  # hostname_mismatch
+    sources_to_remove:  list[str] | None = None  # multi_dhcp_scope
 
 
 class ResolveResponse(BaseModel):
@@ -155,21 +171,36 @@ def list_collisions(
 
 
 @router.put("/collisions/{collision_id}/resolve", response_model=ResolveResponse)
-def resolve_collision(collision_id: int, db: Session = Depends(get_db)):
+def resolve_collision(
+    collision_id: int,
+    body: CollisionResolveRequest | None = None,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
     c = db.get(Collision, collision_id)
     if not c:
         raise HTTPException(404, "Collision not found")
 
-    # TODO(enhancement/guided-resolve): dispatch type-specific remediation before marking resolved.
-    # active_but_available  → update IPAddress.status to 'assigned' via addresses API
-    # hostname_mismatch     → accept canonical name from request body; push update to DNS
-    #                         (DNSProvider.update_record) and DHCP (DHCPProvider — needs
-    #                         update_reservation_name, not yet implemented) and IPAM record
-    # multi_dhcp_scope      → accept target source to remove from request body; call
-    #                         DHCPProvider.delete_reservation(scope_id, ip) on that source
-    # See docs/enhancements.md — "Guided collision resolve"
+    action_taken: dict = {}
+
+    if body:
+        if c.collision_type == "active_but_available" and body.new_status:
+            try:
+                new_status = AddressStatus(body.new_status)
+            except ValueError:
+                raise HTTPException(422, f"Invalid status: {body.new_status}")
+            addr = db.query(IPAddress).filter_by(address=c.ip_address).first()
+            if addr:
+                addr.status = new_status
+            action_taken = {"new_status": body.new_status}
 
     c.resolved    = True
     c.resolved_at = _utcnow()
+    db.flush()
+    write_audit(
+        db, current_user.username, "resolve", "collision", str(c.id),
+        f"{c.collision_type} {c.ip_address}",
+        after=action_taken if action_taken else None,
+    )
     db.commit()
     return ResolveResponse(id=c.id, resolved=True)
