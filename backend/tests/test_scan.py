@@ -483,6 +483,23 @@ def test_resolve_active_but_available_invalid_status_returns_422(client, db):
     assert r.status_code == 422
 
 
+def test_resolve_active_but_available_no_ipam_record_returns_422(client, db):
+    c = Collision(
+        ip_address="10.0.0.200", collision_type="active_but_available",
+        details='{"ipam_status":"available","latency_ms":1.0}',
+        detected_at=_now(), resolved=False,
+    )
+    db.add(c)
+    db.commit()
+    db.refresh(c)
+
+    r = client.put(f"/api/scan/collisions/{c.id}/resolve",
+                   json={"new_status": "assigned"})
+    assert r.status_code == 422
+    db.refresh(c)
+    assert c.resolved is False
+
+
 def test_resolve_hostname_mismatch_calls_providers(client, db):
     subnet = _make_subnet(db, cidr="10.0.0.0/24")
     addr = IPAddress(address="10.0.0.10", subnet_id=subnet.id,
