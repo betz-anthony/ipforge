@@ -5,6 +5,7 @@ import { subnetsApi, dhcpApi, addressesApi, scanApi, settingsApi, type Subnet, t
 import { ipInCidr } from '../utils/ip'
 import DetailDrawer from '../components/DetailDrawer'
 import UtilBar from '../components/UtilBar'
+import CollisionResolveDialog from './CollisionResolveDialog'
 
 const emptyForm = { name: '', cidr: '', vlan_id: '', description: '' }
 
@@ -69,13 +70,7 @@ export default function Subnets() {
     },
   })
 
-  const resolveCollisionMutation = useMutation({
-    mutationFn: (id: number) => scanApi.resolveCollision(id),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['collisions', selectedSubnet?.id] })
-      qc.invalidateQueries({ queryKey: ['collisions-all'] })
-    },
-  })
+  const [resolveTarget, setResolveTarget] = useState<Collision | null>(null)
 
   const { data: settingsData } = useQuery({ queryKey: ['settings'], queryFn: settingsApi.get })
   const warnAt     = settingsData?.util_warn_threshold     ?? 80
@@ -338,12 +333,10 @@ export default function Subnets() {
                     {c.collision_type.replace(/_/g, ' ')}
                   </span>
                 </span>
-                {/* TODO(enhancement/guided-resolve): replace direct mutate with CollisionResolveDialog.
-                    See docs/enhancements.md — "Guided collision resolve" */}
                 <button
                   className="btn-ghost btn-sm"
-                  onClick={() => resolveCollisionMutation.mutate(c.id)}
                   style={{ fontSize: '0.65rem' }}
+                  onClick={() => setResolveTarget(c)}
                 >
                   Resolve
                 </button>
@@ -467,6 +460,17 @@ export default function Subnets() {
             </tbody>
           </table>
         </div>
+      )}
+
+      {resolveTarget && (
+        <CollisionResolveDialog
+          collision={resolveTarget}
+          queryKeys={[
+            ['collisions', selectedSubnet?.id],
+            ['collisions-all'],
+          ]}
+          onClose={() => setResolveTarget(null)}
+        />
       )}
 
       {selectedSubnet && (

@@ -1,10 +1,11 @@
 import { useState } from 'react'
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useQuery } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
 import { Network, List, Server, Globe, Search } from 'lucide-react'
-import { statsApi, dnsApi, dhcpApi, scanApi, subnetsApi, settingsApi } from '../api/client'
+import { statsApi, dnsApi, dhcpApi, scanApi, subnetsApi, settingsApi, type Collision } from '../api/client'
 import SlidePanel from '../components/SlidePanel'
 import UtilBar from '../components/UtilBar'
+import CollisionResolveDialog from './CollisionResolveDialog'
 
 const TILES = [
   { to: '/subnets',   icon: Network, title: 'Subnets',   desc: 'Manage IP subnets and CIDRs' },
@@ -27,7 +28,6 @@ function count(val: number | undefined) {
 
 export default function Dashboard() {
   const [openPanel, setOpenPanel] = useState<PanelKey | null>(null)
-  const qc = useQueryClient()
 
   const { data: stats } = useQuery({ queryKey: ['stats'], queryFn: statsApi.get })
 
@@ -59,10 +59,7 @@ export default function Dashboard() {
     ? [...subnets].sort((a, b) => b.utilization_pct - a.utilization_pct).slice(0, topN)
     : []
 
-  const resolveCollisionMutation = useMutation({
-    mutationFn: (id: number) => scanApi.resolveCollision(id),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['collisions-dashboard'] }),
-  })
+  const [resolveTarget, setResolveTarget] = useState<Collision | null>(null)
 
   const toggle = (key: PanelKey) =>
     setOpenPanel(prev => (prev === key ? null : key))
@@ -258,15 +255,10 @@ export default function Dashboard() {
                 <div key={c.id} style={{ padding: '0.75rem', background: 'var(--surface-2)', borderRadius: '6px', border: '1px solid var(--border)' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.4rem' }}>
                     <span className="font-mono" style={{ fontSize: '0.85rem', fontWeight: 600 }}>{c.ip_address}</span>
-                    {/* TODO(enhancement/guided-resolve): replace direct mutate with a type-aware
-                        confirmation dialog (CollisionResolveDialog) that shows remediation
-                        options per collision_type and calls the appropriate server action.
-                        See docs/enhancements.md — "Guided collision resolve" */}
                     <button
                       className="btn-ghost btn-sm"
-                      onClick={() => resolveCollisionMutation.mutate(c.id)}
-                      disabled={resolveCollisionMutation.isPending}
                       style={{ fontSize: '0.65rem' }}
+                      onClick={() => setResolveTarget(c)}
                     >
                       Resolve
                     </button>
@@ -301,6 +293,13 @@ export default function Dashboard() {
             </div>
           )}
         </SlidePanel>
+      )}
+      {resolveTarget && (
+        <CollisionResolveDialog
+          collision={resolveTarget}
+          queryKeys={[['collisions-dashboard']]}
+          onClose={() => setResolveTarget(null)}
+        />
       )}
     </div>
   )
