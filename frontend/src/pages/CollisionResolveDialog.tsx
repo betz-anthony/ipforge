@@ -1,10 +1,10 @@
 import { useState } from 'react'
-import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQueryClient, type QueryKey } from '@tanstack/react-query'
 import { scanApi, type Collision, type CollisionResolveRequest } from '../api/client'
 
 interface Props {
   collision: Collision
-  queryKeys: string[][]
+  queryKeys: QueryKey[]
   onClose: () => void
 }
 
@@ -36,11 +36,6 @@ export default function CollisionResolveDialog({ collision, queryKeys, onClose }
     }
   }
 
-  const isDisabled =
-    mutation.isPending ||
-    (collision.collision_type === 'hostname_mismatch' && !canonicalHostname.trim()) ||
-    (collision.collision_type === 'multi_dhcp_scope' && sourcesToRemove.length === 0)
-
   const errRaw = mutation.error as { response?: { data?: { detail?: unknown } } } | null
   const errDetail = errRaw?.response?.data?.detail
   const errorMsg = errDetail
@@ -48,6 +43,11 @@ export default function CollisionResolveDialog({ collision, queryKeys, onClose }
     : null
 
   const sources: string[] = Array.isArray(details.sources) ? (details.sources as string[]) : []
+
+  const isDisabled =
+    mutation.isPending ||
+    (collision.collision_type === 'hostname_mismatch' && !canonicalHostname.trim()) ||
+    (collision.collision_type === 'multi_dhcp_scope' && (sourcesToRemove.length === 0 || sourcesToRemove.length >= sources.length))
 
   return (
     <div
