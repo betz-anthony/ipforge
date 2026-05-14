@@ -56,7 +56,7 @@ def list_subnets(
         result.append(SubnetWithStats(
             id=s.id, name=s.name, cidr=s.cidr, ip_version=s.ip_version,
             vlan_id=s.vlan_id, description=s.description, notes=s.notes,
-            created_at=s.created_at,
+            created_at=s.created_at, parent_id=s.parent_id,
             used_count=used, total_count=total, utilization_pct=pct,
         ))
     return result
