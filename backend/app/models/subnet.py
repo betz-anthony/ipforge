@@ -16,7 +16,7 @@ class Subnet(Base):
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     parent_id: Mapped[int | None] = mapped_column(
-        Integer, ForeignKey("subnets.id"), nullable=True, index=True
+        Integer, ForeignKey("subnets.id"), nullable=True
     )
 
     addresses: Mapped[list["IPAddress"]] = relationship(
