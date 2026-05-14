@@ -9,6 +9,7 @@ from app.models.cache import (
 from app.models.scan import ScanResult, Collision, CollisionType
 from app.models.provider_config import ProviderConfig
 from app.models.user import User
+from app.models.audit_log import AuditLog
 
 __all__ = [
     "Subnet", "IPAddress", "AppSetting",
@@ -18,4 +19,5 @@ __all__ = [
     "ScanResult", "Collision", "CollisionType",
     "ProviderConfig",
     "User",
+    "AuditLog",
 ]
