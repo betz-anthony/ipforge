@@ -111,7 +111,7 @@ export default function AuditPage() {
             onClick={() => setExpanded(expanded === e.id ? null : e.id)}
           >
             <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', flexShrink: 0, minWidth: '140px' }}>
-              {new Date(e.timestamp + 'Z').toLocaleString()}
+              {new Date(e.timestamp.endsWith('Z') || e.timestamp.includes('+') ? e.timestamp : e.timestamp + 'Z').toLocaleString()}
             </span>
             <ActionBadge action={e.action} />
             <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', flexShrink: 0 }}>
@@ -125,12 +125,16 @@ export default function AuditPage() {
             </span>
           </div>
 
-          {expanded === e.id && (e.before_state || e.after_state) && (
+          {expanded === e.id && (
             <div style={{ padding: '0.5rem 0.75rem 0.75rem', background: 'var(--surface-2)', borderTop: '1px solid var(--border)' }}>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
-                <StateViewer label="Before" json={e.before_state} />
-                <StateViewer label="After"  json={e.after_state}  />
-              </div>
+              {(e.before_state || e.after_state) ? (
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+                  <StateViewer label="Before" json={e.before_state} />
+                  <StateViewer label="After"  json={e.after_state}  />
+                </div>
+              ) : (
+                <p style={{ margin: 0, fontSize: '0.8rem', color: 'var(--text-muted)' }}>No state captured.</p>
+              )}
             </div>
           )}
         </div>
