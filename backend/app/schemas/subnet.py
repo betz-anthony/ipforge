@@ -29,7 +29,7 @@ class SubnetRead(BaseModel):
     description: str | None
     notes: str | None
     created_at: datetime
-    parent_id: int | None = None
+    parent_id: int | None
 
     model_config = {"from_attributes": True}
 
