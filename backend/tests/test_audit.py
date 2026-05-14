@@ -52,7 +52,7 @@ def test_create_subnet_writes_audit(client, db):
     assert e.action == "create"
     assert e.resource_type == "subnet"
     assert e.username == "test_admin"
-    assert e.after_state is not None
+    assert json.loads(e.after_state)["cidr"] == "10.0.0.0/24"
     assert e.before_state is None
 
 
@@ -74,5 +74,5 @@ def test_delete_subnet_writes_audit(client, db):
     client.delete(f"/api/subnets/{sid}")
     e = db.query(AuditLog).first()
     assert e.action == "delete"
-    assert e.before_state is not None
+    assert json.loads(e.before_state)["cidr"] == "10.2.0.0/24"
     assert e.after_state is None
