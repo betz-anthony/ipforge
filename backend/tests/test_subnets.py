@@ -211,3 +211,14 @@ def test_self_parent_returns_422(client, db):
 
     r = client.put(f"/api/subnets/{subnet.id}", json={"parent_id": subnet.id})
     assert r.status_code == 422
+
+
+def test_update_subnet_reparent_cidr_mismatch_returns_422(client, db):
+    child = Subnet(name="Prod", cidr="10.1.0.0/16", ip_version=4)
+    unrelated = Subnet(name="Other", cidr="192.168.0.0/16", ip_version=4)
+    db.add(child)
+    db.add(unrelated)
+    db.commit()
+
+    r = client.put(f"/api/subnets/{child.id}", json={"parent_id": unrelated.id})
+    assert r.status_code == 422
