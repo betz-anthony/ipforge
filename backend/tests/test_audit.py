@@ -76,3 +76,53 @@ def test_delete_subnet_writes_audit(client, db):
     assert e.action == "delete"
     assert json.loads(e.before_state)["cidr"] == "10.2.0.0/24"
     assert e.after_state is None
+
+
+# ── Address audit ─────────────────────────────────────────────────────────
+
+
+def test_create_address_writes_audit(client, db):
+    subnet = Subnet(name="Net", cidr="10.0.0.0/24", ip_version=4)
+    db.add(subnet)
+    db.commit()
+    r = client.post("/api/addresses", json={
+        "address": "10.0.0.1", "subnet_id": subnet.id,
+        "status": "assigned", "hostname": None, "mac_address": None,
+        "description": None, "notes": None,
+    })
+    assert r.status_code == 201
+    e = db.query(AuditLog).first()
+    assert e.action == "create"
+    assert e.resource_type == "address"
+    assert e.username == "test_admin"
+    assert json.loads(e.after_state)["address"] == "10.0.0.1"
+    assert e.before_state is None
+
+
+def test_update_address_writes_audit(client, db):
+    subnet = Subnet(name="Net", cidr="10.0.0.0/24", ip_version=4)
+    db.add(subnet)
+    db.flush()
+    addr = IPAddress(address="10.0.0.2", subnet_id=subnet.id, status=AddressStatus.available)
+    db.add(addr)
+    db.commit()
+    client.put(f"/api/addresses/{addr.id}", json={"status": "assigned"})
+    e = db.query(AuditLog).first()
+    assert e.action == "update"
+    assert json.loads(e.before_state)["status"] == "available"
+    assert json.loads(e.after_state)["status"] == "assigned"
+
+
+def test_delete_address_writes_audit(client, db):
+    subnet = Subnet(name="Net", cidr="10.0.0.0/24", ip_version=4)
+    db.add(subnet)
+    db.flush()
+    addr = IPAddress(address="10.0.0.3", subnet_id=subnet.id, status=AddressStatus.available)
+    db.add(addr)
+    db.commit()
+    client.delete(f"/api/addresses/{addr.id}")
+    e = db.query(AuditLog).first()
+    assert e.action == "delete"
+    assert e.resource_type == "address"
+    assert json.loads(e.before_state)["address"] == "10.0.0.3"
+    assert e.after_state is None
