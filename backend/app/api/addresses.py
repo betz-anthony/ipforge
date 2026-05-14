@@ -1,4 +1,3 @@
-import json
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from app.database import get_db
@@ -16,7 +15,7 @@ def _address_state(a: IPAddress) -> dict:
         "id": a.id, "address": a.address, "subnet_id": a.subnet_id,
         "hostname": a.hostname,
         "status": a.status.value if hasattr(a.status, "value") else str(a.status),
-        "mac_address": a.mac_address, "description": a.description,
+        "mac_address": a.mac_address, "description": a.description, "notes": a.notes,
     }
 
 
