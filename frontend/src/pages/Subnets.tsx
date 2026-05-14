@@ -36,31 +36,39 @@ export default function Subnets() {
   useEffect(() => {
     if (suggestTimerRef.current) clearTimeout(suggestTimerRef.current)
     if (!form.cidr) { setParentCandidates([]); return }
+    let cancelled = false
     suggestTimerRef.current = setTimeout(async () => {
       try {
         const results = await subnetsApi.suggestParent(form.cidr)
-        setParentCandidates(results)
+        if (!cancelled) setParentCandidates(results)
       } catch {
-        setParentCandidates([])
+        if (!cancelled) setParentCandidates([])
       }
     }, 300)
-    return () => { if (suggestTimerRef.current) clearTimeout(suggestTimerRef.current) }
+    return () => {
+      cancelled = true
+      if (suggestTimerRef.current) clearTimeout(suggestTimerRef.current)
+    }
   }, [form.cidr])
 
   // Debounced suggest-parent for edit form (uses selectedSubnet.cidr — CIDR is immutable in edit)
   useEffect(() => {
     if (!selectedSubnet) return
     if (editSuggestTimerRef.current) clearTimeout(editSuggestTimerRef.current)
+    let cancelled = false
     editSuggestTimerRef.current = setTimeout(async () => {
       try {
         const results = await subnetsApi.suggestParent(selectedSubnet.cidr)
-        setEditParentCandidates(results)
+        if (!cancelled) setEditParentCandidates(results)
       } catch {
-        setEditParentCandidates([])
+        if (!cancelled) setEditParentCandidates([])
       }
     }, 300)
-    return () => { if (editSuggestTimerRef.current) clearTimeout(editSuggestTimerRef.current) }
-  }, [selectedSubnet])
+    return () => {
+      cancelled = true
+      if (editSuggestTimerRef.current) clearTimeout(editSuggestTimerRef.current)
+    }
+  }, [selectedSubnet?.cidr])
 
   const { data: subnetAddresses } = useQuery({
     queryKey: ['addresses', selectedSubnet?.id],
@@ -452,7 +460,7 @@ export default function Subnets() {
             >
               {createMutation.isPending ? 'Adding…' : 'Add'}
             </button>
-            <button className="btn-ghost btn-sm" onClick={() => { setShowForm(false); setForm(emptyForm) }}>
+            <button className="btn-ghost btn-sm" onClick={() => { setShowForm(false); setForm(emptyForm); setFormParentId(null); setParentCandidates([]) }}>
               <X size={13} /> Cancel
             </button>
             {createMutation.isError && (
@@ -556,7 +564,7 @@ export default function Subnets() {
           ]}
           onSave={() => updateMutation.mutate()}
           isSaving={updateMutation.isPending}
-          onClose={() => setSelectedSubnet(null)}
+          onClose={() => { setSelectedSubnet(null); setEditParentCandidates([]) }}
         >
           <div className="form-field">
             <label>Name</label>
