@@ -74,7 +74,8 @@ def create_subnet(
         raise HTTPException(400, "Invalid CIDR notation")
     if db.query(Subnet).filter(Subnet.cidr == data.cidr).first():
         raise HTTPException(409, "Subnet already exists")
-    subnet = Subnet(**data.model_dump(), ip_version=network.version)
+    subnet_data = data.model_dump(exclude={'ip_version'})
+    subnet = Subnet(**subnet_data, ip_version=network.version)
     db.add(subnet)
     db.flush()
     write_audit(db, current_user.username, "create", "subnet", str(subnet.id),
