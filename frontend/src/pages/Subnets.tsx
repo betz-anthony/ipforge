@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect, useRef } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Plus, X, Scan, AlertTriangle } from 'lucide-react'
 import { subnetsApi, dhcpApi, addressesApi, scanApi, settingsApi, type Subnet, type DHCPScope, type Collision } from '../api/client'
@@ -20,10 +20,47 @@ export default function Subnets() {
   const [showRangePicker, setShowRangePicker] = useState(false)
   const [rangeForm, setRangeForm]             = useState({ start_ip: '', end_ip: '' })
 
+  const [formParentId, setFormParentId]                 = useState<number | null>(null)
+  const [parentCandidates, setParentCandidates]         = useState<Subnet[]>([])
+  const [editParentId, setEditParentId]                 = useState<number | null | undefined>(undefined)
+  const [editParentCandidates, setEditParentCandidates] = useState<Subnet[]>([])
+  const suggestTimerRef     = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const editSuggestTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
   const { data: allScopes } = useQuery({
     queryKey: ['dhcp-scopes'],
     queryFn: dhcpApi.listScopes,
   })
+
+  // Debounced suggest-parent for create form
+  useEffect(() => {
+    if (suggestTimerRef.current) clearTimeout(suggestTimerRef.current)
+    if (!form.cidr) { setParentCandidates([]); return }
+    suggestTimerRef.current = setTimeout(async () => {
+      try {
+        const results = await subnetsApi.suggestParent(form.cidr)
+        setParentCandidates(results)
+      } catch {
+        setParentCandidates([])
+      }
+    }, 300)
+    return () => { if (suggestTimerRef.current) clearTimeout(suggestTimerRef.current) }
+  }, [form.cidr])
+
+  // Debounced suggest-parent for edit form (uses selectedSubnet.cidr — CIDR is immutable in edit)
+  useEffect(() => {
+    if (!selectedSubnet) return
+    if (editSuggestTimerRef.current) clearTimeout(editSuggestTimerRef.current)
+    editSuggestTimerRef.current = setTimeout(async () => {
+      try {
+        const results = await subnetsApi.suggestParent(selectedSubnet.cidr)
+        setEditParentCandidates(results)
+      } catch {
+        setEditParentCandidates([])
+      }
+    }, 300)
+    return () => { if (editSuggestTimerRef.current) clearTimeout(editSuggestTimerRef.current) }
+  }, [selectedSubnet])
 
   const { data: subnetAddresses } = useQuery({
     queryKey: ['addresses', selectedSubnet?.id],
@@ -89,11 +126,14 @@ export default function Subnets() {
       description: form.description || null,
       ip_version:  4,
       notes:       null,
+      parent_id:   formParentId,
     }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['subnets'] })
       setForm(emptyForm)
       setShowForm(false)
+      setFormParentId(null)
+      setParentCandidates([])
     },
   })
 
@@ -103,6 +143,7 @@ export default function Subnets() {
       vlan_id:     editForm.vlan_id ? Number(editForm.vlan_id) : null,
       description: editForm.description || null,
       notes:       editForm.notes       || null,
+      ...(editParentId !== undefined ? { parent_id: editParentId } : {}),
     }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['subnets'] }),
   })
@@ -128,6 +169,7 @@ export default function Subnets() {
       description: s.description ?? '',
       notes:       s.notes       ?? '',
     })
+    setEditParentId(s.parent_id ?? null)
     setShowRangePicker(false)
     setRangeForm({ start_ip: '', end_ip: '' })
   }
@@ -136,6 +178,11 @@ export default function Subnets() {
     if (!allUnresolvedCollisions) return 0
     return allUnresolvedCollisions.filter(c => ipInCidr(c.ip_address, subnet.cidr)).length
   }
+
+  const subnetById = useMemo(() => {
+    if (!data) return new Map<number, Subnet>()
+    return new Map(data.map((s: Subnet) => [s.id, s]))
+  }, [data])
 
   const prefixLen     = selectedSubnet ? parseInt(selectedSubnet.cidr.split('/')[1]) : 0
   const isLargeSubnet = prefixLen < 24
@@ -380,6 +427,22 @@ export default function Subnets() {
               <label>Description</label>
               <input placeholder="Optional" value={form.description} onChange={set('description')} />
             </div>
+            <div className="form-field" style={{ gridColumn: '1 / -1' }}>
+              <label>Parent Subnet</label>
+              <select
+                value={formParentId ?? ''}
+                onChange={e => setFormParentId(e.target.value ? Number(e.target.value) : null)}
+              >
+                <option value="">— None (root subnet) —</option>
+                {parentCandidates.length === 0 && form.cidr ? (
+                  <option disabled value="">No containing subnets found</option>
+                ) : (
+                  parentCandidates.map(s => (
+                    <option key={s.id} value={s.id}>{s.name} — {s.cidr}</option>
+                  ))
+                )}
+              </select>
+            </div>
           </div>
           <div className="form-actions">
             <button
@@ -429,6 +492,11 @@ export default function Subnets() {
                   <td>
                     <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                       {s.name}
+                      {s.parent_id != null && (
+                        <span style={{ fontSize: '0.62rem', color: 'var(--text-muted)', background: 'var(--surface-2)', padding: '0.05rem 0.3rem', borderRadius: '3px' }}>
+                          ↳ {subnetById.get(s.parent_id)?.name ?? `#${s.parent_id}`}
+                        </span>
+                      )}
                       {collisionCount > 0 && (
                         <span style={{ fontSize: '0.65rem', fontWeight: 600, color: 'var(--warning, #f59e0b)', display: 'flex', alignItems: 'center', gap: '2px' }}>
                           <AlertTriangle size={10} /> {collisionCount}
@@ -501,6 +569,18 @@ export default function Subnets() {
           <div className="form-field">
             <label>Description</label>
             <input value={editForm.description} onChange={setEdit('description')} />
+          </div>
+          <div className="form-field" style={{ gridColumn: '1 / -1' }}>
+            <label>Parent Subnet</label>
+            <select
+              value={editParentId ?? ''}
+              onChange={e => setEditParentId(e.target.value ? Number(e.target.value) : null)}
+            >
+              <option value="">— None (root subnet) —</option>
+              {editParentCandidates.map(s => (
+                <option key={s.id} value={s.id}>{s.name} — {s.cidr}</option>
+              ))}
+            </select>
           </div>
           <div className="form-field" style={{ gridColumn: '1 / -1' }}>
             <label>Notes</label>
