@@ -126,3 +126,60 @@ def test_delete_address_writes_audit(client, db):
     assert e.resource_type == "address"
     assert json.loads(e.before_state)["address"] == "10.0.0.3"
     assert e.after_state is None
+
+
+# ── Audit API endpoint ────────────────────────────────────────────────────
+
+
+def test_audit_list_returns_entries(client, db):
+    write_audit(db, "alice", "create", "subnet", "1", "10.0.0.0/24", after={"id": 1})
+    write_audit(db, "bob",   "delete", "address", "5", "10.0.0.1",   before={"id": 5})
+    db.commit()
+    r = client.get("/api/audit")
+    assert r.status_code == 200
+    data = r.json()
+    assert len(data) == 2
+    assert data[0]["username"] in ("alice", "bob")
+
+
+def test_audit_filter_by_resource_type(client, db):
+    write_audit(db, "alice", "create", "subnet",  "1", "10.0.0.0/24")
+    write_audit(db, "alice", "create", "address", "2", "10.0.0.1")
+    db.commit()
+    r = client.get("/api/audit?resource_type=subnet")
+    data = r.json()
+    assert len(data) == 1
+    assert data[0]["resource_type"] == "subnet"
+
+
+def test_audit_filter_by_username(client, db):
+    write_audit(db, "alice", "create", "subnet", "1", "10.0.0.0/24")
+    write_audit(db, "bob",   "create", "subnet", "2", "10.1.0.0/24")
+    db.commit()
+    r = client.get("/api/audit?username=alice")
+    data = r.json()
+    assert len(data) == 1
+    assert data[0]["username"] == "alice"
+
+
+def test_audit_limit(client, db):
+    for i in range(10):
+        write_audit(db, "alice", "create", "subnet", str(i), f"10.{i}.0.0/24")
+    db.commit()
+    r = client.get("/api/audit?limit=3")
+    assert len(r.json()) == 3
+
+
+def test_audit_ordered_newest_first(client, db):
+    from datetime import datetime, timezone, timedelta
+    t1 = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(hours=1)
+    t2 = datetime.now(timezone.utc).replace(tzinfo=None)
+    db.add(AuditLog(timestamp=t1, username="a", action="create", resource_type="subnet",
+                    resource_id="1", summary="old"))
+    db.add(AuditLog(timestamp=t2, username="a", action="create", resource_type="subnet",
+                    resource_id="2", summary="new"))
+    db.commit()
+    r = client.get("/api/audit")
+    data = r.json()
+    assert data[0]["summary"] == "new"
+    assert data[1]["summary"] == "old"
