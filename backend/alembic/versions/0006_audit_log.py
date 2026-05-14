@@ -17,7 +17,7 @@ def upgrade() -> None:
     op.create_table(
         'audit_log',
         sa.Column('id',            sa.Integer(),    primary_key=True),
-        sa.Column('timestamp',     sa.DateTime(),   nullable=False),
+        sa.Column('timestamp',     sa.DateTime(),   nullable=False, server_default=sa.func.now()),
         sa.Column('username',      sa.String(64),   nullable=False),
         sa.Column('action',        sa.String(16),   nullable=False),
         sa.Column('resource_type', sa.String(32),   nullable=False),
