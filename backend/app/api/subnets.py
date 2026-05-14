@@ -1,5 +1,3 @@
-from app.core.deps import require_operator
-from app.core.audit import write_audit
 import ipaddress
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import func
@@ -9,6 +7,8 @@ from app.models.subnet import Subnet
 from app.models.address import IPAddress, AddressStatus
 from app.models.user import User
 from app.schemas.subnet import SubnetCreate, SubnetRead, SubnetUpdate, SubnetWithStats
+from app.core.deps import require_operator
+from app.core.audit import write_audit
 
 router = APIRouter()
 
@@ -20,6 +20,7 @@ def _subnet_state(s: Subnet) -> dict:
         "id": s.id, "name": s.name, "cidr": s.cidr,
         "ip_version": s.ip_version, "vlan_id": s.vlan_id,
         "description": s.description, "notes": s.notes,
+        "created_at": str(s.created_at) if s.created_at else None,
     }
 
 
