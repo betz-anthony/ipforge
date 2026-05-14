@@ -284,6 +284,12 @@ export interface Collision {
   resolved_at: string | null
 }
 
+export interface CollisionResolveRequest {
+  new_status?:         string
+  canonical_hostname?: string
+  sources_to_remove?:  string[]
+}
+
 export const scanApi = {
   trigger: (subnet_id: number, body?: { start_ip?: string; end_ip?: string }) =>
     api.post<{ status: string }>(`/scan/subnets/${subnet_id}`, body ?? {}).then(r => r.data),
@@ -291,8 +297,8 @@ export const scanApi = {
     api.get<ScanStatus>(`/scan/subnets/${subnet_id}`).then(r => r.data),
   collisions: (params?: { resolved?: boolean; subnet_id?: number }) =>
     api.get<Collision[]>('/scan/collisions', { params }).then(r => r.data),
-  resolveCollision: (id: number) =>
-    api.put<{ id: number; resolved: boolean }>(`/scan/collisions/${id}/resolve`).then(r => r.data),
+  resolveCollision: (id: number, body?: CollisionResolveRequest) =>
+    api.put<{ id: number; resolved: boolean }>(`/scan/collisions/${id}/resolve`, body ?? {}).then(r => r.data),
 }
 
 export interface SearchResults {
@@ -336,7 +342,7 @@ export interface AuditEntry {
   id:            number
   timestamp:     string
   username:      string
-  action:        'create' | 'update' | 'delete'
+  action:        'create' | 'update' | 'delete' | 'resolve'
   resource_type: string
   resource_id:   string
   summary:       string | null
