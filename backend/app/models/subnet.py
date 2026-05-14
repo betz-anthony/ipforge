@@ -1,4 +1,4 @@
-from sqlalchemy import String, Integer, Text, DateTime
+from sqlalchemy import String, Integer, Text, DateTime, ForeignKey
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from datetime import datetime
 from app.database import Base
@@ -15,6 +15,9 @@ class Subnet(Base):
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    parent_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("subnets.id"), nullable=True, index=True
+    )
 
     addresses: Mapped[list["IPAddress"]] = relationship(
         "IPAddress", back_populates="subnet", cascade="all, delete-orphan"
