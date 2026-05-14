@@ -121,16 +121,18 @@ def delete_reservation(
         CachedDHCPLease.ip_address == ip_address,
         CachedDHCPLease.source == target.source,
     ).first()
+    if lease is None:
+        logger.warning("delete_reservation: no cached lease for %s/%s", scope_id, ip_address)
     before = {
         "scope_id": scope_id, "ip_address": ip_address, "source": target.source,
         "name": lease.name if lease else None,
         "mac_address": lease.mac_address if lease else None,
+        "client_duid": lease.client_duid if lease else None,
+        "iaid": lease.iaid if lease else None,
+        "description": lease.description if lease else None,
     }
-    db.query(CachedDHCPLease).filter(
-        CachedDHCPLease.scope_id == scope_id,
-        CachedDHCPLease.ip_address == ip_address,
-        CachedDHCPLease.source == target.source,
-    ).delete()
+    if lease:
+        db.delete(lease)
     write_audit(db, current_user.username, "delete", "dhcp_reservation",
                 ip_address, ip_address, before=before)
     db.commit()
