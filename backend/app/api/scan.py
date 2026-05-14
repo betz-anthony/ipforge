@@ -190,8 +190,9 @@ def resolve_collision(
             except ValueError:
                 raise HTTPException(422, f"Invalid status: {body.new_status}")
             addr = db.query(IPAddress).filter_by(address=c.ip_address).first()
-            if addr:
-                addr.status = new_status
+            if addr is None:
+                raise HTTPException(422, "No IPAM record found for this IP")
+            addr.status = new_status
             action_taken = {"new_status": body.new_status}
 
     c.resolved    = True
