@@ -1,6 +1,8 @@
 import json
 from app.models.audit_log import AuditLog
 from app.core.audit import write_audit
+from app.models.subnet import Subnet
+from app.models.address import IPAddress, AddressStatus
 
 
 def test_write_audit_create(db):
@@ -36,3 +38,41 @@ def test_write_audit_delete_has_no_after(db):
     assert entry.action == "delete"
     assert entry.after_state is None
     assert json.loads(entry.before_state)["name"] == "web.corp.com"
+
+
+# ── Subnet audit ──────────────────────────────────────────────────────────
+
+
+def test_create_subnet_writes_audit(client, db):
+    r = client.post("/api/subnets", json={"name": "Corp", "cidr": "10.0.0.0/24", "description": None, "vlan_id": None, "notes": None})
+    assert r.status_code == 201
+    entries = db.query(AuditLog).all()
+    assert len(entries) == 1
+    e = entries[0]
+    assert e.action == "create"
+    assert e.resource_type == "subnet"
+    assert e.username == "test_admin"
+    assert e.after_state is not None
+    assert e.before_state is None
+
+
+def test_update_subnet_writes_audit_with_before_after(client, db):
+    db.add(Subnet(name="Old", cidr="10.1.0.0/24", ip_version=4))
+    db.commit()
+    sid = db.query(Subnet).first().id
+    client.put(f"/api/subnets/{sid}", json={"name": "New"})
+    e = db.query(AuditLog).first()
+    assert e.action == "update"
+    assert json.loads(e.before_state)["name"] == "Old"
+    assert json.loads(e.after_state)["name"] == "New"
+
+
+def test_delete_subnet_writes_audit(client, db):
+    db.add(Subnet(name="Gone", cidr="10.2.0.0/24", ip_version=4))
+    db.commit()
+    sid = db.query(Subnet).first().id
+    client.delete(f"/api/subnets/{sid}")
+    e = db.query(AuditLog).first()
+    assert e.action == "delete"
+    assert e.before_state is not None
+    assert e.after_state is None

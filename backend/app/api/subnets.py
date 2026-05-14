@@ -1,4 +1,5 @@
 from app.core.deps import require_operator
+from app.core.audit import write_audit
 import ipaddress
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import func
@@ -6,12 +7,20 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.models.subnet import Subnet
 from app.models.address import IPAddress, AddressStatus
+from app.models.user import User
 from app.schemas.subnet import SubnetCreate, SubnetRead, SubnetUpdate, SubnetWithStats
 
 router = APIRouter()
 
-
 _USED_STATUSES = [AddressStatus.assigned, AddressStatus.reserved, AddressStatus.discovered]
+
+
+def _subnet_state(s: Subnet) -> dict:
+    return {
+        "id": s.id, "name": s.name, "cidr": s.cidr,
+        "ip_version": s.ip_version, "vlan_id": s.vlan_id,
+        "description": s.description, "notes": s.notes,
+    }
 
 
 @router.get("", response_model=list[SubnetWithStats])
@@ -52,8 +61,12 @@ def list_subnets(
     return result
 
 
-@router.post("", response_model=SubnetRead, status_code=201, dependencies=[Depends(require_operator)])
-def create_subnet(data: SubnetCreate, db: Session = Depends(get_db)):
+@router.post("", response_model=SubnetRead, status_code=201)
+def create_subnet(
+    data: SubnetCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_operator),
+):
     try:
         network = ipaddress.ip_network(data.cidr, strict=False)
     except ValueError:
@@ -62,6 +75,9 @@ def create_subnet(data: SubnetCreate, db: Session = Depends(get_db)):
         raise HTTPException(409, "Subnet already exists")
     subnet = Subnet(**data.model_dump(), ip_version=network.version)
     db.add(subnet)
+    db.flush()
+    write_audit(db, current_user.username, "create", "subnet", str(subnet.id),
+                f"{subnet.cidr} ({subnet.name})", after=_subnet_state(subnet))
     db.commit()
     db.refresh(subnet)
     return subnet
@@ -75,22 +91,37 @@ def get_subnet(subnet_id: int, db: Session = Depends(get_db)):
     return subnet
 
 
-@router.put("/{subnet_id}", response_model=SubnetRead, dependencies=[Depends(require_operator)])
-def update_subnet(subnet_id: int, data: SubnetUpdate, db: Session = Depends(get_db)):
+@router.put("/{subnet_id}", response_model=SubnetRead)
+def update_subnet(
+    subnet_id: int,
+    data: SubnetUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_operator),
+):
     subnet = db.get(Subnet, subnet_id)
     if not subnet:
         raise HTTPException(404, "Subnet not found")
+    before = _subnet_state(subnet)
     for key, value in data.model_dump(exclude_unset=True).items():
         setattr(subnet, key, value)
+    db.flush()
+    write_audit(db, current_user.username, "update", "subnet", str(subnet.id),
+                f"{subnet.cidr} ({subnet.name})", before=before, after=_subnet_state(subnet))
     db.commit()
     db.refresh(subnet)
     return subnet
 
 
-@router.delete("/{subnet_id}", status_code=204, dependencies=[Depends(require_operator)])
-def delete_subnet(subnet_id: int, db: Session = Depends(get_db)):
+@router.delete("/{subnet_id}", status_code=204)
+def delete_subnet(
+    subnet_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_operator),
+):
     subnet = db.get(Subnet, subnet_id)
     if not subnet:
         raise HTTPException(404, "Subnet not found")
+    write_audit(db, current_user.username, "delete", "subnet", str(subnet.id),
+                f"{subnet.cidr} ({subnet.name})", before=_subnet_state(subnet))
     db.delete(subnet)
     db.commit()
