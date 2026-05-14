@@ -125,15 +125,13 @@ def suggest_parent(
     except ValueError:
         return []
     subnets = db.query(Subnet).all()
-    candidates = [
-        s for s in subnets
-        if s.cidr != cidr and
-        ipaddress.ip_network(s.cidr, strict=False).supernet_of(target)
+    parsed_subnets = [(s, ipaddress.ip_network(s.cidr, strict=False)) for s in subnets]
+    candidates_with_net = [
+        (s, net) for s, net in parsed_subnets
+        if s.cidr != cidr and net.version == target.version and net.supernet_of(target)
     ]
-    candidates.sort(
-        key=lambda s: ipaddress.ip_network(s.cidr, strict=False).prefixlen,
-        reverse=True,
-    )
+    candidates_with_net.sort(key=lambda pair: pair[1].prefixlen, reverse=True)
+    candidates = [s for s, _ in candidates_with_net]
     rows = _build_stats_rows(candidates, db)
     return [SubnetWithStats(**r) for r in rows]
 
@@ -154,7 +152,10 @@ def create_subnet(
         parent = db.get(Subnet, data.parent_id)
         if parent is None:
             raise HTTPException(404, "Parent subnet not found")
-        if not ipaddress.ip_network(parent.cidr, strict=False).supernet_of(network):
+        parent_network = ipaddress.ip_network(parent.cidr, strict=False)
+        if parent_network.version != network.version:
+            raise HTTPException(422, "Parent and subnet must be the same IP version")
+        if not parent_network.supernet_of(network):
             raise HTTPException(422, "Parent's CIDR does not contain this subnet's CIDR")
     subnet = Subnet(
         name=data.name, cidr=data.cidr, ip_version=network.version,
@@ -201,9 +202,11 @@ def update_subnet(
             parent = db.get(Subnet, new_parent_id)
             if parent is None:
                 raise HTTPException(404, "Parent subnet not found")
-            if not ipaddress.ip_network(parent.cidr, strict=False).supernet_of(
-                ipaddress.ip_network(subnet.cidr, strict=False)
-            ):
+            parent_network = ipaddress.ip_network(parent.cidr, strict=False)
+            subnet_network = ipaddress.ip_network(subnet.cidr, strict=False)
+            if parent_network.version != subnet_network.version:
+                raise HTTPException(422, "Parent and subnet must be the same IP version")
+            if not parent_network.supernet_of(subnet_network):
                 raise HTTPException(422, "Parent's CIDR does not contain this subnet's CIDR")
             if _is_ancestor(db, subnet_id, new_parent_id):
                 raise HTTPException(422, "Cycle detected: new parent is a descendant of this subnet")
