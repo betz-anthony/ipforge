@@ -1,12 +1,14 @@
-from app.core.deps import require_operator
 import logging
 from datetime import datetime, timezone
 from fastapi import APIRouter, HTTPException, Depends
 from sqlalchemy.orm import Session
 from app.database import get_db
+from app.models.user import User
 from app.providers.registry import get_dns_providers
 from app.providers.dns.base import DNSRecord
 from app.models.cache import CachedDNSZone, CachedDNSRecord as CRow
+from app.core.deps import require_operator
+from app.core.audit import write_audit
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -54,8 +56,13 @@ def get_records_by_ip(address: str, db: Session = Depends(get_db)):
     ]
 
 
-@router.post("/zones/{zone}/records", response_model=DNSRecord, status_code=201, dependencies=[Depends(require_operator)])
-def create_record(zone: str, record: DNSRecord, db: Session = Depends(get_db)):
+@router.post("/zones/{zone}/records", response_model=DNSRecord, status_code=201)
+def create_record(
+    zone: str,
+    record: DNSRecord,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_operator),
+):
     record.zone = zone
     providers = get_dns_providers()
     target = next((p for p in providers if p.source == record.source), None) or (providers[0] if providers else None)
@@ -73,12 +80,21 @@ def create_record(zone: str, record: DNSRecord, db: Session = Depends(get_db)):
                 zone=zone, ttl=record.ttl, source=record.source, synced_at=now))
     if db.get(CachedDNSZone, (zone, record.source)) is None:
         db.add(CachedDNSZone(zone=zone, source=record.source, synced_at=now))
+    write_audit(db, current_user.username, "create", "dns_record",
+                f"{record.name}/{record.record_type}",
+                f"{record.name} {record.record_type} {record.value}",
+                after=record.model_dump())
     db.commit()
     return record
 
 
-@router.delete("/zones/{zone}/records", status_code=204, dependencies=[Depends(require_operator)])
-def delete_record(zone: str, record: DNSRecord, db: Session = Depends(get_db)):
+@router.delete("/zones/{zone}/records", status_code=204)
+def delete_record(
+    zone: str,
+    record: DNSRecord,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_operator),
+):
     record.zone = zone
     providers = get_dns_providers()
     target = next((p for p in providers if p.source == record.source), None) or (providers[0] if providers else None)
@@ -94,4 +110,8 @@ def delete_record(zone: str, record: DNSRecord, db: Session = Depends(get_db)):
         name=record.name, record_type=record.record_type,
         value=record.value, zone=zone, source=record.source,
     ).delete()
+    write_audit(db, current_user.username, "delete", "dns_record",
+                f"{record.name}/{record.record_type}",
+                f"{record.name} {record.record_type} {record.value}",
+                before=record.model_dump())
     db.commit()

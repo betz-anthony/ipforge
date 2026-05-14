@@ -1,12 +1,14 @@
-from app.core.deps import require_operator
 import logging
 from datetime import datetime, timezone
 from fastapi import APIRouter, HTTPException, Depends, Query
 from sqlalchemy.orm import Session
 from app.database import get_db
+from app.models.user import User
 from app.providers.registry import get_dhcp_providers
 from app.providers.dhcp.base import DHCPReservation, DHCPScope
 from app.models.cache import CachedDHCPScope, CachedDHCPLease
+from app.core.deps import require_operator
+from app.core.audit import write_audit
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -62,9 +64,14 @@ def get_leases_by_ip(address: str, db: Session = Depends(get_db)):
     ]
 
 
-@router.post("/scopes/{scope_id:path}/reservations", response_model=DHCPReservation, status_code=201, dependencies=[Depends(require_operator)])
-def add_reservation(scope_id: str, reservation: DHCPReservation, source: str = Query(""),
-                    db: Session = Depends(get_db)):
+@router.post("/scopes/{scope_id:path}/reservations", response_model=DHCPReservation, status_code=201)
+def add_reservation(
+    scope_id: str,
+    reservation: DHCPReservation,
+    source: str = Query(""),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_operator),
+):
     reservation.scope_id = scope_id
     providers = get_dhcp_providers()
     target = next((p for p in providers if p.source == source), None) or (providers[0] if providers else None)
@@ -83,13 +90,22 @@ def add_reservation(scope_id: str, reservation: DHCPReservation, source: str = Q
         iaid=reservation.iaid, name=reservation.name,
         description=reservation.description, source=target.source, synced_at=now,
     ))
+    write_audit(db, current_user.username, "create", "dhcp_reservation",
+                reservation.ip_address,
+                f"{reservation.ip_address} ({reservation.name})",
+                after=reservation.model_dump())
     db.commit()
     return reservation
 
 
-@router.delete("/scopes/{scope_id:path}/reservations/{ip_address}", status_code=204, dependencies=[Depends(require_operator)])
-def delete_reservation(scope_id: str, ip_address: str, source: str = Query(""),
-                       db: Session = Depends(get_db)):
+@router.delete("/scopes/{scope_id:path}/reservations/{ip_address}", status_code=204)
+def delete_reservation(
+    scope_id: str,
+    ip_address: str,
+    source: str = Query(""),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_operator),
+):
     providers = get_dhcp_providers()
     target = next((p for p in providers if p.source == source), None) or (providers[0] if providers else None)
     if not target:
@@ -100,9 +116,21 @@ def delete_reservation(scope_id: str, ip_address: str, source: str = Query(""),
         logger.error("DHCP %s delete_reservation: %s", target.source, e, exc_info=True)
         raise HTTPException(502, str(e))
 
+    lease = db.query(CachedDHCPLease).filter(
+        CachedDHCPLease.scope_id == scope_id,
+        CachedDHCPLease.ip_address == ip_address,
+        CachedDHCPLease.source == target.source,
+    ).first()
+    before = {
+        "scope_id": scope_id, "ip_address": ip_address, "source": target.source,
+        "name": lease.name if lease else None,
+        "mac_address": lease.mac_address if lease else None,
+    }
     db.query(CachedDHCPLease).filter(
         CachedDHCPLease.scope_id == scope_id,
         CachedDHCPLease.ip_address == ip_address,
         CachedDHCPLease.source == target.source,
     ).delete()
+    write_audit(db, current_user.username, "delete", "dhcp_reservation",
+                ip_address, ip_address, before=before)
     db.commit()
