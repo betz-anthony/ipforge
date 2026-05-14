@@ -20,8 +20,85 @@ def _subnet_state(s: Subnet) -> dict:
         "id": s.id, "name": s.name, "cidr": s.cidr,
         "ip_version": s.ip_version, "vlan_id": s.vlan_id,
         "description": s.description, "notes": s.notes,
+        "parent_id": s.parent_id,
         "created_at": str(s.created_at) if s.created_at else None,
     }
+
+
+def _build_stats_rows(subnets: list[Subnet], db: Session) -> list[dict]:
+    """Build per-subnet own stats as a list of dicts (no rollup yet)."""
+    if not subnets:
+        return []
+    ids = [s.id for s in subnets]
+    counts = (
+        db.query(IPAddress.subnet_id, func.count(IPAddress.id).label("used"))
+        .filter(IPAddress.status.in_(_USED_STATUSES))
+        .filter(IPAddress.subnet_id.in_(ids))
+        .group_by(IPAddress.subnet_id)
+        .all()
+    )
+    count_map = {row.subnet_id: row.used for row in counts}
+    rows = []
+    for s in subnets:
+        used = count_map.get(s.id, 0)
+        net = ipaddress.ip_network(s.cidr, strict=False)
+        if net.version == 6:
+            total = net.num_addresses
+        elif net.prefixlen >= 31:
+            total = net.num_addresses
+        else:
+            total = max(1, net.num_addresses - 2)
+        pct = min(100.0, round(used / total * 100, 1)) if total > 0 else 0.0
+        rows.append({
+            "id": s.id, "name": s.name, "cidr": s.cidr,
+            "ip_version": s.ip_version, "vlan_id": s.vlan_id,
+            "description": s.description, "notes": s.notes,
+            "created_at": s.created_at, "parent_id": s.parent_id,
+            "used_count": used, "total_count": total, "utilization_pct": pct,
+            "rollup_used_count": used, "rollup_total_count": total,
+            "rollup_utilization_pct": pct,
+        })
+    return rows
+
+
+def _compute_rollup(rows: list[dict]) -> None:
+    """Post-order DFS rollup. Modifies rollup_* fields in-place."""
+    children_map: dict[int | None, list[dict]] = {}
+    for r in rows:
+        children_map.setdefault(r["parent_id"], []).append(r)
+
+    def dfs(r: dict) -> None:
+        children = children_map.get(r["id"], [])
+        for c in children:
+            dfs(c)
+        rollup_used  = r["used_count"]  + sum(c["rollup_used_count"]  for c in children)
+        rollup_total = r["total_count"] + sum(c["rollup_total_count"] for c in children)
+        r["rollup_used_count"]  = rollup_used
+        r["rollup_total_count"] = rollup_total
+        r["rollup_utilization_pct"] = (
+            min(100.0, round(rollup_used / rollup_total * 100, 1))
+            if rollup_total > 0 else 0.0
+        )
+
+    for root in children_map.get(None, []):
+        dfs(root)
+
+
+def _is_ancestor(db: Session, potential_ancestor_id: int, node_id: int) -> bool:
+    """True if potential_ancestor_id is an ancestor of node_id (or equal)."""
+    visited: set[int] = set()
+    current_id: int | None = node_id
+    while current_id is not None:
+        if current_id in visited:
+            break
+        visited.add(current_id)
+        if current_id == potential_ancestor_id:
+            return True
+        node = db.get(Subnet, current_id)
+        if node is None:
+            break
+        current_id = node.parent_id
+    return False
 
 
 @router.get("", response_model=list[SubnetWithStats])
@@ -33,33 +110,32 @@ def list_subnets(
     if ip_version is not None:
         q = q.filter(Subnet.ip_version == ip_version)
     subnets = q.all()
+    rows = _build_stats_rows(subnets, db)
+    _compute_rollup(rows)
+    return [SubnetWithStats(**r) for r in rows]
 
-    counts = (
-        db.query(IPAddress.subnet_id, func.count(IPAddress.id).label("used"))
-        .filter(IPAddress.status.in_(_USED_STATUSES))
-        .group_by(IPAddress.subnet_id)
-        .all()
+
+@router.get("/suggest-parent", response_model=list[SubnetWithStats])
+def suggest_parent(
+    cidr: str = Query(..., description="CIDR of the subnet being created/edited"),
+    db: Session = Depends(get_db),
+):
+    try:
+        target = ipaddress.ip_network(cidr, strict=False)
+    except ValueError:
+        return []
+    subnets = db.query(Subnet).all()
+    candidates = [
+        s for s in subnets
+        if s.cidr != cidr and
+        ipaddress.ip_network(s.cidr, strict=False).supernet_of(target)
+    ]
+    candidates.sort(
+        key=lambda s: ipaddress.ip_network(s.cidr, strict=False).prefixlen,
+        reverse=True,
     )
-    count_map = {row.subnet_id: row.used for row in counts}
-
-    result = []
-    for s in subnets:
-        used = count_map.get(s.id, 0)
-        network = ipaddress.ip_network(s.cidr, strict=False)
-        if network.version == 6:
-            total = network.num_addresses
-        elif network.prefixlen >= 31:
-            total = network.num_addresses
-        else:
-            total = max(1, network.num_addresses - 2)
-        pct = min(100.0, round(used / total * 100, 1)) if total > 0 else 0.0
-        result.append(SubnetWithStats(
-            id=s.id, name=s.name, cidr=s.cidr, ip_version=s.ip_version,
-            vlan_id=s.vlan_id, description=s.description, notes=s.notes,
-            created_at=s.created_at, parent_id=s.parent_id,
-            used_count=used, total_count=total, utilization_pct=pct,
-        ))
-    return result
+    rows = _build_stats_rows(candidates, db)
+    return [SubnetWithStats(**r) for r in rows]
 
 
 @router.post("", response_model=SubnetRead, status_code=201)
@@ -74,8 +150,17 @@ def create_subnet(
         raise HTTPException(400, "Invalid CIDR notation")
     if db.query(Subnet).filter(Subnet.cidr == data.cidr).first():
         raise HTTPException(409, "Subnet already exists")
-    subnet_data = data.model_dump(exclude={'ip_version'})
-    subnet = Subnet(**subnet_data, ip_version=network.version)
+    if data.parent_id is not None:
+        parent = db.get(Subnet, data.parent_id)
+        if parent is None:
+            raise HTTPException(404, "Parent subnet not found")
+        if not ipaddress.ip_network(parent.cidr, strict=False).supernet_of(network):
+            raise HTTPException(422, "Parent's CIDR does not contain this subnet's CIDR")
+    subnet = Subnet(
+        name=data.name, cidr=data.cidr, ip_version=network.version,
+        vlan_id=data.vlan_id, description=data.description,
+        notes=data.notes, parent_id=data.parent_id,
+    )
     db.add(subnet)
     db.flush()
     write_audit(db, current_user.username, "create", "subnet", str(subnet.id),
@@ -105,7 +190,24 @@ def update_subnet(
         raise HTTPException(404, "Subnet not found")
     before = _subnet_state(subnet)
     for key, value in data.model_dump(exclude_unset=True).items():
+        if key == "parent_id":
+            continue  # handled separately below
         setattr(subnet, key, value)
+    if "parent_id" in data.model_fields_set:
+        new_parent_id = data.parent_id
+        if new_parent_id is not None:
+            if new_parent_id == subnet_id:
+                raise HTTPException(422, "A subnet cannot be its own parent")
+            parent = db.get(Subnet, new_parent_id)
+            if parent is None:
+                raise HTTPException(404, "Parent subnet not found")
+            if not ipaddress.ip_network(parent.cidr, strict=False).supernet_of(
+                ipaddress.ip_network(subnet.cidr, strict=False)
+            ):
+                raise HTTPException(422, "Parent's CIDR does not contain this subnet's CIDR")
+            if _is_ancestor(db, subnet_id, new_parent_id):
+                raise HTTPException(422, "Cycle detected: new parent is a descendant of this subnet")
+        subnet.parent_id = new_parent_id
     db.flush()
     write_audit(db, current_user.username, "update", "subnet", str(subnet.id),
                 f"{subnet.cidr} ({subnet.name})", before=before, after=_subnet_state(subnet))
@@ -123,6 +225,8 @@ def delete_subnet(
     subnet = db.get(Subnet, subnet_id)
     if not subnet:
         raise HTTPException(404, "Subnet not found")
+    if db.query(Subnet).filter(Subnet.parent_id == subnet_id).first():
+        raise HTTPException(409, "Cannot delete subnet with children")
     write_audit(db, current_user.username, "delete", "subnet", str(subnet.id),
                 f"{subnet.cidr} ({subnet.name})", before=_subnet_state(subnet))
     db.delete(subnet)
