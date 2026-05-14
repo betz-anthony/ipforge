@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 from sqlalchemy import Column, Integer, String, Text, DateTime, Index
 from app.database import Base
 
@@ -7,11 +7,11 @@ class AuditLog(Base):
     __tablename__ = "audit_log"
 
     id            = Column(Integer, primary_key=True)
-    timestamp     = Column(DateTime, nullable=False, default=datetime.utcnow)
+    timestamp     = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
     username      = Column(String(64), nullable=False)
     action        = Column(String(16), nullable=False)   # create | update | delete
     resource_type = Column(String(32), nullable=False)   # subnet | address | dns_record | dhcp_reservation
-    resource_id   = Column(String(128), nullable=False)
+    resource_id   = Column(Text, nullable=False)
     summary       = Column(Text, nullable=True)
     before_state  = Column(Text, nullable=True)          # JSON string
     after_state   = Column(Text, nullable=True)          # JSON string

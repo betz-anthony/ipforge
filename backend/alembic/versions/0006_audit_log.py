@@ -21,7 +21,7 @@ def upgrade() -> None:
         sa.Column('username',      sa.String(64),   nullable=False),
         sa.Column('action',        sa.String(16),   nullable=False),
         sa.Column('resource_type', sa.String(32),   nullable=False),
-        sa.Column('resource_id',   sa.String(128),  nullable=False),
+        sa.Column('resource_id',   sa.Text(),       nullable=False),
         sa.Column('summary',       sa.Text(),       nullable=True),
         sa.Column('before_state',  sa.Text(),       nullable=True),
         sa.Column('after_state',   sa.Text(),       nullable=True),
@@ -32,7 +32,7 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    op.drop_index('ix_audit_log_username')
-    op.drop_index('ix_audit_log_resource_type')
-    op.drop_index('ix_audit_log_timestamp')
+    op.drop_index('ix_audit_log_username',      table_name='audit_log')
+    op.drop_index('ix_audit_log_resource_type', table_name='audit_log')
+    op.drop_index('ix_audit_log_timestamp',     table_name='audit_log')
     op.drop_table('audit_log')
