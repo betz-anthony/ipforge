@@ -279,7 +279,7 @@ export interface Collision {
   ip_address: string
   collision_type: 'active_but_available' | 'multi_dhcp_scope' | 'hostname_mismatch'
   details: string | null
-  detected_at: string
+  detected_at: string | null
   resolved: boolean
   resolved_at: string | null
 }
