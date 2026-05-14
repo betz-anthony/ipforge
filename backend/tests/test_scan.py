@@ -443,8 +443,6 @@ def test_resolve_collision_404(client):
 # Guided resolve tests
 # ---------------------------------------------------------------------------
 
-from unittest.mock import MagicMock
-
 
 def test_resolve_active_but_available_updates_ipam_status(client, db):
     subnet = _make_subnet(db, cidr="10.0.0.0/24")
