@@ -6,6 +6,7 @@ import { ipInCidr } from '../utils/ip'
 import DetailDrawer from '../components/DetailDrawer'
 import UtilBar from '../components/UtilBar'
 import CollisionResolveDialog from './CollisionResolveDialog'
+import SubnetTree from './SubnetTree'
 
 const emptyForm = { name: '', cidr: '', vlan_id: '', description: '' }
 
@@ -116,6 +117,9 @@ export default function Subnets() {
   })
 
   const [resolveTarget, setResolveTarget] = useState<Collision | null>(null)
+
+  const [treeView, setTreeView]           = useState(false)
+  const [treeSelectedId, setTreeSelectedId] = useState<number | null>(null)
 
   const { data: settingsData } = useQuery({ queryKey: ['settings'], queryFn: settingsApi.get })
   const warnAt     = settingsData?.util_warn_threshold     ?? 80
@@ -408,6 +412,13 @@ export default function Subnets() {
       <div className="page-header">
         <h1>Subnets</h1>
         <div className="page-header-actions">
+          <button
+            className={treeView ? 'btn-primary btn-sm' : 'btn-ghost btn-sm'}
+            onClick={() => setTreeView(v => !v)}
+            title={treeView ? 'Switch to flat table' : 'Switch to tree view'}
+          >
+            {treeView ? '☰ Flat' : '🌲 Tree'}
+          </button>
           {!showForm && (
             <button className="btn-primary btn-sm" onClick={() => setShowForm(true)}>
               <Plus size={13} /> Add Subnet
@@ -475,7 +486,7 @@ export default function Subnets() {
       {isLoading && <p className="loading">Loading…</p>}
       {error    && <p className="feedback-error">Failed to load subnets.</p>}
 
-      {data && (
+      {data && !treeView && (
         <div className="table-wrap">
           <table>
             <thead>
@@ -536,6 +547,19 @@ export default function Subnets() {
             </tbody>
           </table>
         </div>
+      )}
+
+      {data && treeView && (
+        <SubnetTree
+          subnets={data}
+          warnAt={warnAt}
+          criticalAt={criticalAt}
+          selectedId={treeSelectedId}
+          onSelect={s => {
+            setTreeSelectedId(s.id)
+            openDrawer(s)
+          }}
+        />
       )}
 
       {resolveTarget && (
