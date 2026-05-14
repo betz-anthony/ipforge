@@ -242,7 +242,7 @@ def resolve_collision(
                         dns_provider.update_record(old_rec, new_rec)
                     except Exception as exc:
                         logger.error("DNS update_record failed: %s", exc)
-                        if dhcp_provider and lease and original_hostname:
+                        if dhcp_provider and lease and original_hostname is not None:
                             try:
                                 dhcp_provider.update_reservation_name(lease.scope_id, c.ip_address, original_hostname)
                             except Exception as rb_exc:
