@@ -168,3 +168,17 @@ class MSDHCPProvider(DHCPProvider):
                 f"Remove-DhcpServerv4Reservation -IPAddress '{ip_address}' -Force "
                 f"-ComputerName '{self._dhcp_server}'"
             )
+
+    def update_reservation_name(self, scope_id: str, ip_address: str, name: str) -> None:
+        if _is_v6(scope_id):
+            self._run(
+                f"Set-DhcpServerv6Reservation -IPAddress '{ip_address}' "
+                f"-Name '{name}' "
+                f"-ComputerName '{self._dhcp_server}'"
+            )
+        else:
+            self._run(
+                f"Set-DhcpServerv4Reservation -IPAddress '{ip_address}' "
+                f"-Name '{name}' "
+                f"-ComputerName '{self._dhcp_server}'"
+            )
