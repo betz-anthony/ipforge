@@ -8,9 +8,9 @@ import UtilBar from '../components/UtilBar'
 import CollisionResolveDialog from './CollisionResolveDialog'
 import SubnetTree from './SubnetTree'
 
-const emptyForm = { name: '', cidr: '', vlan_id: '', description: '' }
+const emptyForm = { name: '', cidr: '', vlan_id: '', description: '', scan_interval_minutes: '' }
 
-const emptyEditForm = { name: '', vlan_id: '', description: '', notes: '' }
+const emptyEditForm = { name: '', vlan_id: '', description: '', notes: '', scan_interval_minutes: '' }
 
 export default function Subnets() {
   const [showForm, setShowForm]             = useState(false)
@@ -132,13 +132,14 @@ export default function Subnets() {
 
   const createMutation = useMutation({
     mutationFn: () => subnetsApi.create({
-      name:        form.name,
-      cidr:        form.cidr,
-      vlan_id:     form.vlan_id ? Number(form.vlan_id) : null,
-      description: form.description || null,
-      ip_version:  4,
-      notes:       null,
-      parent_id:   formParentId,
+      name:                  form.name,
+      cidr:                  form.cidr,
+      vlan_id:               form.vlan_id ? Number(form.vlan_id) : null,
+      description:           form.description || null,
+      ip_version:            4,
+      notes:                 null,
+      parent_id:             formParentId,
+      scan_interval_minutes: form.scan_interval_minutes ? Number(form.scan_interval_minutes) : null,
     }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['subnets'] })
@@ -151,10 +152,11 @@ export default function Subnets() {
 
   const updateMutation = useMutation({
     mutationFn: () => subnetsApi.update(selectedSubnet!.id, {
-      name:        editForm.name        || undefined,
-      vlan_id:     editForm.vlan_id ? Number(editForm.vlan_id) : null,
-      description: editForm.description || null,
-      notes:       editForm.notes       || null,
+      name:                  editForm.name        || undefined,
+      vlan_id:               editForm.vlan_id ? Number(editForm.vlan_id) : null,
+      description:           editForm.description || null,
+      notes:                 editForm.notes       || null,
+      scan_interval_minutes: editForm.scan_interval_minutes ? Number(editForm.scan_interval_minutes) : null,
       ...(editParentId !== undefined ? { parent_id: editParentId } : {}),
     }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['subnets'] }),
@@ -176,10 +178,11 @@ export default function Subnets() {
   const openDrawer = (s: Subnet) => {
     setSelectedSubnet(s)
     setEditForm({
-      name:        s.name,
-      vlan_id:     s.vlan_id != null ? String(s.vlan_id) : '',
-      description: s.description ?? '',
-      notes:       s.notes       ?? '',
+      name:                  s.name,
+      vlan_id:               s.vlan_id != null ? String(s.vlan_id) : '',
+      description:           s.description ?? '',
+      notes:                 s.notes       ?? '',
+      scan_interval_minutes: s.scan_interval_minutes ? String(s.scan_interval_minutes) : '',
     })
     setEditParentId(s.parent_id ?? null)
     setShowRangePicker(false)
@@ -446,6 +449,16 @@ export default function Subnets() {
               <label>Description</label>
               <input placeholder="Optional" value={form.description} onChange={set('description')} />
             </div>
+            <div className="form-field">
+              <label>Scan interval (min)</label>
+              <input
+                type="number"
+                min={1}
+                placeholder={`global default (${settingsData?.scan_interval_minutes ?? 30})`}
+                value={form.scan_interval_minutes}
+                onChange={set('scan_interval_minutes')}
+              />
+            </div>
             <div className="form-field" style={{ gridColumn: '1 / -1' }}>
               <label>Parent Subnet</label>
               <select
@@ -601,6 +614,16 @@ export default function Subnets() {
           <div className="form-field">
             <label>Description</label>
             <input value={editForm.description} onChange={setEdit('description')} />
+          </div>
+          <div className="form-field">
+            <label>Scan interval (min)</label>
+            <input
+              type="number"
+              min={1}
+              placeholder={`global default (${settingsData?.scan_interval_minutes ?? 30})`}
+              value={editForm.scan_interval_minutes}
+              onChange={setEdit('scan_interval_minutes')}
+            />
           </div>
           <div className="form-field" style={{ gridColumn: '1 / -1' }}>
             <label>Parent Subnet</label>
