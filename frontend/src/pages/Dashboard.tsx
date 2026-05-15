@@ -1,8 +1,9 @@
 import { useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useMutation } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
 import { Network, List, Server, Globe, Search } from 'lucide-react'
-import { statsApi, dnsApi, dhcpApi, scanApi, subnetsApi, settingsApi, type Collision } from '../api/client'
+import { statsApi, dnsApi, dhcpApi, scanApi, subnetsApi, settingsApi, scanAlertsApi, type Collision } from '../api/client'
+import { formatRelative } from '../utils/time'
 import SlidePanel from '../components/SlidePanel'
 import UtilBar from '../components/UtilBar'
 import CollisionResolveDialog from './CollisionResolveDialog'
@@ -20,7 +21,7 @@ const SOURCE_LABEL: Record<string, string> = {
   msdns: 'MS DNS', bind: 'BIND',
 }
 
-type PanelKey = 'dns_zones' | 'dns_records' | 'dhcp_scopes' | 'dhcp_leases' | 'collisions'
+type PanelKey = 'dns_zones' | 'dns_records' | 'dhcp_scopes' | 'dhcp_leases' | 'collisions' | 'scan_alerts'
 
 function count(val: number | undefined) {
   return val === undefined ? '—' : val.toLocaleString()
@@ -46,6 +47,16 @@ export default function Dashboard() {
   const { data: collisions } = useQuery({
     queryKey: ['collisions-dashboard'],
     queryFn: () => scanApi.collisions({ resolved: false }),
+  })
+
+  const { data: scanAlerts, refetch: refetchAlerts } = useQuery({
+    queryKey: ['scan-alerts-dashboard'],
+    queryFn: () => scanAlertsApi.list({ acknowledged: false, limit: 10 }),
+  })
+
+  const acknowledgeAllMutation = useMutation({
+    mutationFn: () => scanAlertsApi.acknowledgeAll(),
+    onSuccess: () => refetchAlerts(),
   })
 
   const { data: subnets }      = useQuery({ queryKey: ['subnets'],  queryFn: subnetsApi.list })
@@ -117,6 +128,20 @@ export default function Dashboard() {
           </div>
           <div className="stat-label">Collisions</div>
           <div className="stat-sub">unresolved</div>
+        </div>
+        <div
+          className="stat-card"
+          style={{ cursor: 'pointer' }}
+          onClick={() => toggle('scan_alerts')}
+        >
+          <div
+            className="stat-value"
+            style={{ color: scanAlerts && scanAlerts.length > 0 ? 'var(--danger, #f87171)' : undefined }}
+          >
+            {scanAlerts?.length ?? '—'}
+          </div>
+          <div className="stat-label">Scan Alerts</div>
+          <div className="stat-sub">unacknowledged</div>
         </div>
       </div>
 
@@ -292,6 +317,52 @@ export default function Dashboard() {
               </Link>
             </div>
           )}
+        </SlidePanel>
+      )}
+      {openPanel === 'scan_alerts' && (
+        <SlidePanel
+          title="Scan Alerts"
+          subtitle={`${scanAlerts?.length ?? 0} unacknowledged`}
+          onClose={() => setOpenPanel(null)}
+        >
+          <div>
+            {scanAlerts && scanAlerts.length > 0 && (
+              <div style={{ marginBottom: '0.75rem' }}>
+                <button
+                  className="btn-ghost btn-sm"
+                  onClick={() => acknowledgeAllMutation.mutate()}
+                  disabled={acknowledgeAllMutation.isPending}
+                >
+                  {acknowledgeAllMutation.isPending ? 'Acknowledging…' : 'Acknowledge all'}
+                </button>
+              </div>
+            )}
+            {!scanAlerts ? (
+              <p className="loading">Loading…</p>
+            ) : scanAlerts.length === 0 ? (
+              <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>No unacknowledged alerts.</p>
+            ) : (
+              <div className="detail-fields">
+                {scanAlerts.map(a => {
+                  const details = (() => { try { return JSON.parse(a.details ?? '{}') } catch { return {} } })()
+                  return (
+                    <div key={a.id} className="detail-field">
+                      <span className="detail-field-label" style={{ fontSize: '0.75rem' }}>
+                        <span style={{ color: a.event_type === 'went_unreachable' ? 'var(--danger, #f87171)' : 'var(--success, #4ade80)', marginRight: '0.3rem' }}>
+                          {a.event_type === 'went_unreachable' ? '▼' : '▲'}
+                        </span>
+                        <span className="font-mono">{a.ip_address}</span>
+                        {details.hostname && <span style={{ color: 'var(--text-muted)', marginLeft: '0.3rem' }}>{details.hostname}</span>}
+                      </span>
+                      <span className="detail-field-value" style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>
+                        {formatRelative(a.detected_at)}
+                      </span>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+          </div>
         </SlidePanel>
       )}
       {resolveTarget && (
