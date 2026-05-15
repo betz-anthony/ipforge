@@ -35,5 +35,6 @@ class AddressRead(AddressCreate):
     id: int
     created_at: datetime
     updated_at: datetime
+    last_seen: datetime | None = None
 
     model_config = {"from_attributes": True}

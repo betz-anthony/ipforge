@@ -258,3 +258,40 @@ def test_subnet_update_scan_interval(client, db):
     r = client.put(f"/api/subnets/{s.id}", json={"scan_interval_minutes": 60})
     assert r.status_code == 200
     assert r.json()["scan_interval_minutes"] == 60
+
+
+def test_address_list_includes_last_seen(client, db):
+    subnet = _make_subnet(db)
+    _make_address(db, subnet.id, "10.0.0.1")
+    r = client.get("/api/addresses")
+    assert r.status_code == 200
+    a = r.json()[0]
+    assert "last_seen" in a
+    assert a["last_seen"] is None
+
+
+def test_scan_history_endpoint_returns_rows(client, db):
+    subnet = _make_subnet(db)
+    addr = _make_address(db, subnet.id, "10.0.0.1")
+    from datetime import date as date_type
+    db.add(ScanHistoryDay(
+        ip_address="10.0.0.1", subnet_id=subnet.id,
+        date=date_type(2026, 5, 14),
+        up_count=5, total_count=6, uptime_pct=83.3, avg_latency_ms=12.0,
+    ))
+    db.commit()
+
+    r = client.get(f"/api/addresses/{addr.id}/scan-history")
+    assert r.status_code == 200
+    rows = r.json()
+    assert len(rows) == 1
+    assert rows[0]["up_count"] == 5
+    assert rows[0]["total_count"] == 6
+
+
+def test_scan_history_returns_empty_for_new_address(client, db):
+    subnet = _make_subnet(db)
+    addr = _make_address(db, subnet.id, "10.0.0.1")
+    r = client.get(f"/api/addresses/{addr.id}/scan-history")
+    assert r.status_code == 200
+    assert r.json() == []
