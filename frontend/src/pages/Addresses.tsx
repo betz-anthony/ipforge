@@ -1,7 +1,8 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Plus, X } from 'lucide-react'
-import { addressesApi, subnetsApi, dnsApi, dhcpApi, type IPAddress } from '../api/client'
+import { addressesApi, subnetsApi, dnsApi, dhcpApi, scanHistoryApi, type IPAddress } from '../api/client'
+import { formatRelative } from '../utils/time'
 import DetailDrawer from '../components/DetailDrawer'
 
 const STATUS_BADGE: Record<string, string> = {
@@ -41,6 +42,13 @@ export default function Addresses() {
   const { data: ipDhcpLeases } = useQuery({
     queryKey: ['dhcp-by-ip', selectedAddress?.address],
     queryFn: () => dhcpApi.byIp(selectedAddress!.address),
+    enabled: !!selectedAddress,
+    retry: false,
+  })
+
+  const { data: scanHistory } = useQuery({
+    queryKey: ['scan-history', selectedAddress?.id],
+    queryFn: () => scanHistoryApi.list(selectedAddress!.id),
     enabled: !!selectedAddress,
     retry: false,
   })
@@ -119,6 +127,66 @@ export default function Addresses() {
 
   const addressViewExtra = selectedAddress ? (
     <>
+      {scanHistory && scanHistory.length > 0 && (() => {
+        const last30 = scanHistory.slice(0, 30)
+        const totalUp = last30.reduce((s, r) => s + r.up_count, 0)
+        const totalScans = last30.reduce((s, r) => s + r.total_count, 0)
+        const uptime30 = totalScans > 0 ? Math.round(totalUp / totalScans * 100) : 0
+        const avgLatency = (() => {
+          const rows = last30.filter(r => r.avg_latency_ms !== null && r.up_count > 0)
+          if (!rows.length) return null
+          return Math.round(rows.reduce((s, r) => s + r.avg_latency_ms! * r.up_count, 0) /
+                            rows.reduce((s, r) => s + r.up_count, 0) * 10) / 10
+        })()
+        const uptimeColor = uptime30 >= 90 ? 'var(--success, #4ade80)'
+          : uptime30 >= 50 ? 'var(--warning, #facc15)'
+          : 'var(--danger, #f87171)'
+
+        // Build last-7-days dot array (newest last = rightmost)
+        const today = new Date()
+        const days7 = Array.from({ length: 7 }, (_, i) => {
+          const d = new Date(today)
+          d.setDate(d.getDate() - (6 - i))
+          const iso = d.toISOString().slice(0, 10)
+          const DAY_LABELS = ['S','M','T','W','T','F','S']
+          const label = DAY_LABELS[d.getDay()]
+          const row = last30.find(r => r.date === iso)
+          const color = !row ? '#555'
+            : row.uptime_pct >= 90 ? 'var(--success, #4ade80)'
+            : row.uptime_pct >= 50 ? 'var(--warning, #facc15)'
+            : 'var(--danger, #f87171)'
+          return { label, color }
+        })
+
+        return (
+          <div style={{ marginTop: '1rem' }}>
+            <div className="detail-section-title">Reachability</div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '0.4rem', margin: '0.5rem 0' }}>
+              <div style={{ background: 'var(--surface-2, #1e1e2e)', border: '1px solid var(--border)', borderRadius: '4px', padding: '0.4rem 0.5rem', textAlign: 'center' }}>
+                <div style={{ fontSize: '0.95rem', fontWeight: 700, color: uptimeColor }}>{uptime30}%</div>
+                <div style={{ fontSize: '0.6rem', color: 'var(--text-muted)', marginTop: '0.1rem' }}>30d uptime</div>
+              </div>
+              <div style={{ background: 'var(--surface-2, #1e1e2e)', border: '1px solid var(--border)', borderRadius: '4px', padding: '0.4rem 0.5rem', textAlign: 'center' }}>
+                <div style={{ fontSize: '0.95rem', fontWeight: 700 }}>{avgLatency !== null ? `${avgLatency} ms` : '—'}</div>
+                <div style={{ fontSize: '0.6rem', color: 'var(--text-muted)', marginTop: '0.1rem' }}>avg latency</div>
+              </div>
+              <div style={{ background: 'var(--surface-2, #1e1e2e)', border: '1px solid var(--border)', borderRadius: '4px', padding: '0.4rem 0.5rem', textAlign: 'center' }}>
+                <div style={{ fontSize: '0.85rem', fontWeight: 700 }}>{formatRelative(selectedAddress.last_seen)}</div>
+                <div style={{ fontSize: '0.6rem', color: 'var(--text-muted)', marginTop: '0.1rem' }}>last seen</div>
+              </div>
+            </div>
+            <div style={{ display: 'flex', gap: '3px', marginTop: '0.4rem' }}>
+              {days7.map((d, i) => (
+                <div key={i} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2px' }}>
+                  <div style={{ width: '100%', height: '16px', borderRadius: '2px', background: d.color }} />
+                  <span style={{ fontSize: '0.55rem', color: 'var(--text-muted)' }}>{d.label}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )
+      })()}
+
       <div style={{ marginTop: '1rem' }}>
         <div className="detail-section-title">DNS Records</div>
         {!ipDnsRecords ? (
@@ -293,12 +361,13 @@ export default function Addresses() {
                 <th>Status</th>
                 <th>MAC</th>
                 <th>Description</th>
+                <th>Last Seen</th>
                 <th style={{ width: '2.5rem' }}></th>
               </tr>
             </thead>
             <tbody>
               {filtered.length === 0 && (
-                <tr><td colSpan={6} className="empty-state">
+                <tr><td colSpan={7} className="empty-state">
                   {data?.length === 0 ? 'No addresses tracked. Add one above.' : 'No addresses match filters.'}
                 </td></tr>
               )}
@@ -313,6 +382,9 @@ export default function Addresses() {
                   </td>
                   <td><span className="font-mono">{a.mac_address ?? <span className="text-muted">—</span>}</span></td>
                   <td>{a.description ?? <span className="text-muted">—</span>}</td>
+                  <td style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>
+                    {formatRelative(a.last_seen)}
+                  </td>
                   <td onClick={e => e.stopPropagation()}>
                     <button
                       className="btn-danger btn-sm"
