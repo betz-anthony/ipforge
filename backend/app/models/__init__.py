@@ -6,7 +6,7 @@ from app.models.cache import (
     CachedDHCPScope, CachedDHCPLease,
     SyncStatus,
 )
-from app.models.scan import ScanResult, Collision, CollisionType
+from app.models.scan import ScanResult, Collision, CollisionType, ScanHistoryDay, AlertEvent
 from app.models.provider_config import ProviderConfig
 from app.models.user import User
 from app.models.audit_log import AuditLog
@@ -16,7 +16,7 @@ __all__ = [
     "CachedDNSZone", "CachedDNSRecord",
     "CachedDHCPScope", "CachedDHCPLease",
     "SyncStatus",
-    "ScanResult", "Collision", "CollisionType",
+    "ScanResult", "Collision", "CollisionType", "ScanHistoryDay", "AlertEvent",
     "ProviderConfig",
     "User",
     "AuditLog",

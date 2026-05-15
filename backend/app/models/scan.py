@@ -1,5 +1,4 @@
 import enum
-import json
 from datetime import datetime, date
 from sqlalchemy import String, Integer, Float, Boolean, DateTime, Date, Text, ForeignKey, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
