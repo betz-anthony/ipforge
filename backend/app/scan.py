@@ -6,7 +6,7 @@ import re
 import subprocess
 import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from datetime import date, datetime, timezone
+from datetime import datetime, timezone
 
 from sqlalchemy import func
 
