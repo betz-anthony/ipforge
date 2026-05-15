@@ -10,6 +10,7 @@ class SubnetCreate(BaseModel):
     description: str | None = None
     notes: str | None = None
     parent_id: int | None = None
+    scan_interval_minutes: int | None = None
 
 
 class SubnetUpdate(BaseModel):
@@ -18,6 +19,7 @@ class SubnetUpdate(BaseModel):
     description: str | None = None
     notes: str | None = None
     parent_id: int | None = None
+    scan_interval_minutes: int | None = None
 
 
 class SubnetRead(BaseModel):
@@ -30,6 +32,7 @@ class SubnetRead(BaseModel):
     notes: str | None
     created_at: datetime
     parent_id: int | None
+    scan_interval_minutes: int | None
 
     model_config = {"from_attributes": True}
 
