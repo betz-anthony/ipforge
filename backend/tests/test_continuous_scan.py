@@ -295,3 +295,58 @@ def test_scan_history_returns_empty_for_new_address(client, db):
     r = client.get(f"/api/addresses/{addr.id}/scan-history")
     assert r.status_code == 200
     assert r.json() == []
+
+
+def _make_alert(db, subnet_id, ip="10.0.0.1", event_type="went_unreachable"):
+    a = AlertEvent(
+        event_type=event_type, ip_address=ip,
+        subnet_id=subnet_id, detected_at=_utcnow(),
+        acknowledged=False,
+    )
+    db.add(a); db.commit(); db.refresh(a)
+    return a
+
+
+def test_list_alerts_returns_unacknowledged(client, db):
+    subnet = _make_subnet(db)
+    _make_alert(db, subnet.id)
+    r = client.get("/api/scan/alerts")
+    assert r.status_code == 200
+    alerts = r.json()
+    assert len(alerts) == 1
+    assert alerts[0]["event_type"] == "went_unreachable"
+    assert alerts[0]["acknowledged"] is False
+
+
+def test_list_alerts_excludes_acknowledged_by_default(client, db):
+    subnet = _make_subnet(db)
+    a = _make_alert(db, subnet.id)
+    a.acknowledged = True
+    db.commit()
+    r = client.get("/api/scan/alerts")
+    assert r.status_code == 200
+    assert r.json() == []
+
+
+def test_acknowledge_alert(client, db):
+    subnet = _make_subnet(db)
+    alert = _make_alert(db, subnet.id)
+    r = client.put(f"/api/scan/alerts/{alert.id}/acknowledge")
+    assert r.status_code == 200
+    assert r.json()["acknowledged"] is True
+
+    db.refresh(alert)
+    assert alert.acknowledged is True
+    assert alert.acknowledged_at is not None
+
+
+def test_acknowledge_all_alerts(client, db):
+    subnet = _make_subnet(db)
+    _make_alert(db, subnet.id, "10.0.0.1")
+    _make_alert(db, subnet.id, "10.0.0.2")
+    r = client.post("/api/scan/alerts/acknowledge-all")
+    assert r.status_code == 200
+    assert r.json()["count"] == 2
+
+    r2 = client.get("/api/scan/alerts")
+    assert r2.json() == []

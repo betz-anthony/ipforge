@@ -12,7 +12,7 @@ from app.database import get_db
 from app.models.address import IPAddress, AddressStatus
 from app.models.cache import CachedDHCPLease, CachedDNSRecord
 from app.models.cache import SyncStatus
-from app.models.scan import Collision, ScanResult
+from app.models.scan import Collision, ScanResult, AlertEvent
 from app.models.subnet import Subnet
 from app.models.user import User
 from app.providers.dhcp.base import DHCPReservation
@@ -78,6 +78,21 @@ class CollisionResolveRequest(BaseModel):
 class ResolveResponse(BaseModel):
     id: int
     resolved: bool
+
+
+class AlertEventRead(BaseModel):
+    id: int
+    event_type: str
+    ip_address: str
+    subnet_id: int
+    detected_at: str
+    details: str | None
+    acknowledged: bool
+    acknowledged_at: str | None
+
+
+class AcknowledgeAllResponse(BaseModel):
+    count: int
 
 
 # ── Endpoints ────────────────────────────────────────────────────────────────
@@ -307,3 +322,64 @@ def resolve_collision(
     )
     db.commit()
     return ResolveResponse(id=c.id, resolved=True)
+
+
+@router.get("/alerts", response_model=list[AlertEventRead])
+def list_alerts(
+    acknowledged: bool = Query(False),
+    subnet_id: int | None = Query(None),
+    limit: int = Query(50),
+    db: Session = Depends(get_db),
+):
+    q = db.query(AlertEvent).filter(AlertEvent.acknowledged == acknowledged)
+    if subnet_id is not None:
+        q = q.filter(AlertEvent.subnet_id == subnet_id)
+    alerts = q.order_by(AlertEvent.detected_at.desc()).limit(limit).all()
+    return [
+        AlertEventRead(
+            id=a.id,
+            event_type=a.event_type,
+            ip_address=a.ip_address,
+            subnet_id=a.subnet_id,
+            detected_at=a.detected_at.isoformat() + "Z",
+            details=a.details,
+            acknowledged=a.acknowledged,
+            acknowledged_at=a.acknowledged_at.isoformat() + "Z" if a.acknowledged_at else None,
+        )
+        for a in alerts
+    ]
+
+
+@router.post("/alerts/acknowledge-all", response_model=AcknowledgeAllResponse)
+def acknowledge_all_alerts(
+    subnet_id: int | None = Query(None),
+    db: Session = Depends(get_db),
+):
+    now = _utcnow()
+    q = db.query(AlertEvent).filter(AlertEvent.acknowledged == False)  # noqa: E712
+    if subnet_id is not None:
+        q = q.filter(AlertEvent.subnet_id == subnet_id)
+    count = q.update({"acknowledged": True, "acknowledged_at": now}, synchronize_session=False)
+    db.commit()
+    return AcknowledgeAllResponse(count=count)
+
+
+@router.put("/alerts/{alert_id}/acknowledge", response_model=AlertEventRead)
+def acknowledge_alert(alert_id: int, db: Session = Depends(get_db)):
+    alert = db.get(AlertEvent, alert_id)
+    if not alert:
+        raise HTTPException(404, "Alert not found")
+    alert.acknowledged = True
+    alert.acknowledged_at = _utcnow()
+    db.commit()
+    db.refresh(alert)
+    return AlertEventRead(
+        id=alert.id,
+        event_type=alert.event_type,
+        ip_address=alert.ip_address,
+        subnet_id=alert.subnet_id,
+        detected_at=alert.detected_at.isoformat() + "Z",
+        details=alert.details,
+        acknowledged=alert.acknowledged,
+        acknowledged_at=alert.acknowledged_at.isoformat() + "Z" if alert.acknowledged_at else None,
+    )
