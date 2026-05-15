@@ -232,3 +232,29 @@ def test_settings_update_scan_interval(client):
 
     r2 = client.get("/api/settings")
     assert r2.json()["scan_interval_minutes"] == 15
+
+
+def test_subnet_list_includes_scan_interval(client, db):
+    db.add(Subnet(name="Net", cidr="10.0.0.0/24", ip_version=4, scan_interval_minutes=15))
+    db.commit()
+    r = client.get("/api/subnets")
+    assert r.status_code == 200
+    s = r.json()[0]
+    assert s["scan_interval_minutes"] == 15
+
+
+def test_subnet_create_with_scan_interval(client):
+    r = client.post("/api/subnets", json={
+        "name": "Net", "cidr": "10.0.0.0/24", "ip_version": 4,
+        "scan_interval_minutes": 20,
+    })
+    assert r.status_code == 201
+    assert r.json()["scan_interval_minutes"] == 20
+
+
+def test_subnet_update_scan_interval(client, db):
+    s = Subnet(name="Net", cidr="10.0.0.0/24", ip_version=4)
+    db.add(s); db.commit(); db.refresh(s)
+    r = client.put(f"/api/subnets/{s.id}", json={"scan_interval_minutes": 60})
+    assert r.status_code == 200
+    assert r.json()["scan_interval_minutes"] == 60

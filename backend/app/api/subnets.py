@@ -54,6 +54,7 @@ def _build_stats_rows(subnets: list[Subnet], db: Session) -> list[dict]:
             "ip_version": s.ip_version, "vlan_id": s.vlan_id,
             "description": s.description, "notes": s.notes,
             "created_at": s.created_at, "parent_id": s.parent_id,
+            "scan_interval_minutes": s.scan_interval_minutes,
             "used_count": used, "total_count": total, "utilization_pct": pct,
             "rollup_used_count": used, "rollup_total_count": total,
             "rollup_utilization_pct": pct,
@@ -161,6 +162,7 @@ def create_subnet(
         name=data.name, cidr=data.cidr, ip_version=network.version,
         vlan_id=data.vlan_id, description=data.description,
         notes=data.notes, parent_id=data.parent_id,
+        scan_interval_minutes=data.scan_interval_minutes,
     )
     db.add(subnet)
     db.flush()
