@@ -9,10 +9,12 @@ router = APIRouter()
 
 INT_KEYS = {
     "util_warn_threshold", "util_critical_threshold", "util_dashboard_top_n",
+    "scan_interval_minutes",
 }
 
 SETTING_KEYS = [
     "util_warn_threshold", "util_critical_threshold", "util_dashboard_top_n",
+    "scan_interval_minutes",
 ]
 
 
@@ -20,12 +22,14 @@ class SettingsResponse(BaseModel):
     util_warn_threshold:     int
     util_critical_threshold: int
     util_dashboard_top_n:    int
+    scan_interval_minutes:   int
 
 
 class SettingsUpdate(BaseModel):
     util_warn_threshold:     int | None = None
     util_critical_threshold: int | None = None
     util_dashboard_top_n:    int | None = None
+    scan_interval_minutes:   int | None = None
 
 
 def apply_db_settings(db: Session) -> None:
@@ -52,6 +56,7 @@ def get_settings():
         util_warn_threshold=settings.util_warn_threshold,
         util_critical_threshold=settings.util_critical_threshold,
         util_dashboard_top_n=settings.util_dashboard_top_n,
+        scan_interval_minutes=settings.scan_interval_minutes,
     )
 
 
