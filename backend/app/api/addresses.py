@@ -1,13 +1,26 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
+from datetime import date, timedelta
 from app.database import get_db
 from app.models.address import IPAddress, AddressStatus
+from app.models.scan import ScanHistoryDay
 from app.models.user import User
 from app.schemas.address import AddressCreate, AddressRead, AddressUpdate
 from app.core.deps import require_operator
 from app.core.audit import write_audit
+from pydantic import BaseModel
 
 router = APIRouter()
+
+
+class ScanHistoryDayRead(BaseModel):
+    date: date
+    up_count: int
+    total_count: int
+    uptime_pct: float
+    avg_latency_ms: float | None
+
+    model_config = {"from_attributes": True}
 
 
 def _address_state(a: IPAddress) -> dict:
@@ -49,6 +62,24 @@ def create_address(
     db.commit()
     db.refresh(address)
     return address
+
+
+@router.get("/{address_id}/scan-history", response_model=list[ScanHistoryDayRead])
+def get_scan_history(address_id: int, db: Session = Depends(get_db)):
+    address = db.get(IPAddress, address_id)
+    if not address:
+        raise HTTPException(404, "Address not found")
+    from datetime import datetime, timezone
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
+    cutoff = now.date() - timedelta(days=29)
+    rows = (
+        db.query(ScanHistoryDay)
+        .filter_by(ip_address=address.address)
+        .filter(ScanHistoryDay.date >= cutoff)
+        .order_by(ScanHistoryDay.date.desc())
+        .all()
+    )
+    return rows
 
 
 @router.get("/by-ip/{address}", response_model=AddressRead)
