@@ -7,7 +7,7 @@ import subprocess
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import func
 
@@ -374,13 +374,22 @@ def _get_global_scan_interval(db) -> int:
     return settings.scan_interval_minutes
 
 
+_SCAN_RESULT_RETENTION_DAYS = 7
+
+
 def scan_scheduler_loop() -> None:
     while True:
         time.sleep(60)
         db = SessionLocal()
         try:
-            global_interval = _get_global_scan_interval(db)
             now = _utcnow()
+            cutoff = now - timedelta(days=_SCAN_RESULT_RETENTION_DAYS)
+            deleted = db.query(ScanResult).filter(ScanResult.scanned_at < cutoff).delete(synchronize_session=False)
+            if deleted:
+                logger.info("Pruned %d old scan results (older than %d days)", deleted, _SCAN_RESULT_RETENTION_DAYS)
+            db.commit()
+
+            global_interval = _get_global_scan_interval(db)
             subnets = db.query(Subnet).filter(Subnet.ip_version == 4).all()
             for s in subnets:
                 net = ipaddress.ip_network(s.cidr, strict=False)
