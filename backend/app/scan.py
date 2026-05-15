@@ -385,7 +385,7 @@ def scan_scheduler_loop() -> None:
             for s in subnets:
                 net = ipaddress.ip_network(s.cidr, strict=False)
                 if net.prefixlen < 24:
-                    continue  # _get_host_list raises for >/24 without explicit range
+                    continue  # skip subnets larger than /24; _get_host_list requires explicit range
                 interval = s.scan_interval_minutes or global_interval
                 status_row = db.get(SyncStatus, f"scan:{s.id}")
                 if status_row and status_row.status == "running":

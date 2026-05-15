@@ -16,6 +16,9 @@ class Settings(BaseSettings):
     util_critical_threshold: int = 95
     util_dashboard_top_n: int = 5
 
+    # Scan interval (minutes); per-subnet override takes precedence
+    scan_interval_minutes: int = 30
+
     # Deployment mode: "background" (docker-compose) or "disabled" (K8s CronJob handles sync)
     sync_mode: str = "background"
 
