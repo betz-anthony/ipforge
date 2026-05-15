@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect, useRef } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Plus, X, Scan, AlertTriangle } from 'lucide-react'
+import { Plus, X, Scan, AlertTriangle, GitBranch } from 'lucide-react'
 import { subnetsApi, dhcpApi, addressesApi, scanApi, settingsApi, type Subnet, type DHCPScope, type Collision } from '../api/client'
 import { ipInCidr } from '../utils/ip'
 import DetailDrawer from '../components/DetailDrawer'
@@ -417,7 +417,7 @@ export default function Subnets() {
             onClick={() => setTreeView(v => !v)}
             title={treeView ? 'Switch to flat table' : 'Switch to tree view'}
           >
-            {treeView ? '☰ Flat' : '🌲 Tree'}
+            {treeView ? '☰ Flat' : <><GitBranch size={13} /> Tree</>}
           </button>
           {!showForm && (
             <button className="btn-primary btn-sm" onClick={() => setShowForm(true)}>

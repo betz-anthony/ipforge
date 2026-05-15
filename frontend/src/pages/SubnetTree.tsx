@@ -146,7 +146,7 @@ export default function SubnetTree({ subnets, warnAt, criticalAt, onSelect, sele
     : []
 
   return (
-    <div style={{ display: 'flex', height: '100%', border: '1px solid var(--border)', borderRadius: '6px', overflow: 'hidden' }}>
+    <div style={{ display: 'flex', minHeight: '60vh', border: '1px solid var(--border)', borderRadius: '6px', overflow: 'hidden' }}>
       {/* Left: tree panel */}
       <div style={{ width: 260, flexShrink: 0, borderRight: '1px solid var(--border)', overflowY: 'auto' }}>
         {roots.length === 0 ? (
