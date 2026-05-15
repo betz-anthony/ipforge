@@ -350,3 +350,57 @@ def test_acknowledge_all_alerts(client, db):
 
     r2 = client.get("/api/scan/alerts")
     assert r2.json() == []
+
+
+# ---------------------------------------------------------------------------
+# Integration tests
+# ---------------------------------------------------------------------------
+
+from unittest.mock import patch
+
+
+def _mock_scan_host(results_map):
+    def _side(ip):
+        return results_map.get(ip, {"ip": ip, "reachable": False, "latency_ms": None})
+    return _side
+
+
+def test_scan_subnet_populates_last_seen_and_history(db):
+    subnet = _make_subnet(db, cidr="10.0.0.0/30")
+    addr = _make_address(db, subnet.id, "10.0.0.1")
+    mock = _mock_scan_host({"10.0.0.1": {"ip": "10.0.0.1", "reachable": True, "latency_ms": 3.0}})
+
+    with patch("app.scan._scan_host", side_effect=mock):
+        from app.scan import scan_subnet
+        scan_subnet(subnet.id, _db=db)
+
+    db.refresh(addr)
+    assert addr.last_seen is not None
+
+    history = db.query(ScanHistoryDay).filter_by(ip_address="10.0.0.1").all()
+    assert len(history) == 1
+    assert history[0].up_count == 1
+
+
+def test_scan_subnet_creates_alert_on_second_scan(db):
+    subnet = _make_subnet(db, cidr="10.0.0.0/30")
+    addr = _make_address(db, subnet.id, "10.0.0.1")
+
+    # First scan: reachable
+    with patch("app.scan._scan_host", side_effect=_mock_scan_host(
+        {"10.0.0.1": {"ip": "10.0.0.1", "reachable": True, "latency_ms": 2.0}}
+    )):
+        from app.scan import scan_subnet
+        scan_subnet(subnet.id, _db=db)
+
+    import time; time.sleep(0.01)
+
+    # Second scan: unreachable
+    with patch("app.scan._scan_host", side_effect=_mock_scan_host(
+        {"10.0.0.1": {"ip": "10.0.0.1", "reachable": False, "latency_ms": None}}
+    )):
+        scan_subnet(subnet.id, _db=db)
+
+    events = db.query(AlertEvent).filter_by(event_type="went_unreachable").all()
+    assert len(events) == 1
+    assert events[0].ip_address == "10.0.0.1"
