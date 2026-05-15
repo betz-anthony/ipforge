@@ -6,14 +6,14 @@ import re
 import subprocess
 import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 
 from sqlalchemy import func
 
 from app.database import SessionLocal
 from app.models.address import IPAddress, AddressStatus
 from app.models.cache import CachedDHCPLease, CachedDNSRecord, SyncStatus
-from app.models.scan import Collision, CollisionType, ScanResult
+from app.models.scan import Collision, CollisionType, ScanResult, ScanHistoryDay, AlertEvent
 from app.models.subnet import Subnet
 from app.utils import ip_in_cidr
 
@@ -93,6 +93,91 @@ def _get_host_list(subnet: Subnet, start_ip: str | None, end_ip: str | None) -> 
         hosts.append(str(current))
         current += 1
     return hosts
+
+
+def _update_last_seen(db, reachable_ips: set[str], now: datetime) -> None:
+    if not reachable_ips:
+        return
+    db.query(IPAddress).filter(
+        IPAddress.address.in_(reachable_ips)
+    ).update({"last_seen": now}, synchronize_session=False)
+
+
+def _upsert_daily_history(db, subnet_id: int, results: list[dict], now: datetime) -> None:
+    today = now.date()
+    for r in results:
+        row = db.query(ScanHistoryDay).filter_by(
+            ip_address=r["ip"], date=today
+        ).first()
+        if row is None:
+            row = ScanHistoryDay(
+                ip_address=r["ip"], subnet_id=subnet_id, date=today,
+                up_count=0, total_count=0, avg_latency_ms=None, uptime_pct=0.0,
+            )
+            db.add(row)
+        row.total_count += 1
+        if r["reachable"]:
+            prev_up = row.up_count
+            row.up_count += 1
+            if r["latency_ms"] is not None:
+                if row.avg_latency_ms is None:
+                    row.avg_latency_ms = r["latency_ms"]
+                else:
+                    row.avg_latency_ms = (
+                        (row.avg_latency_ms * prev_up + r["latency_ms"]) / row.up_count
+                    )
+        row.uptime_pct = row.up_count / row.total_count * 100
+
+
+def _detect_reachability_changes(db, subnet_id: int, now: datetime) -> None:
+    current_results = (
+        db.query(ScanResult)
+        .filter_by(subnet_id=subnet_id)
+        .filter(ScanResult.scanned_at == now)
+        .all()
+    )
+    current_reachable = {r.ip_address for r in current_results if r.reachable}
+    current_scanned   = {r.ip_address for r in current_results}
+
+    prev_time_row = (
+        db.query(ScanResult.scanned_at)
+        .filter_by(subnet_id=subnet_id)
+        .filter(ScanResult.scanned_at < now)
+        .order_by(ScanResult.scanned_at.desc())
+        .first()
+    )
+    if prev_time_row is None:
+        return
+
+    prev_results = (
+        db.query(ScanResult)
+        .filter_by(subnet_id=subnet_id)
+        .filter(ScanResult.scanned_at == prev_time_row.scanned_at)
+        .all()
+    )
+    prev_reachable = {r.ip_address for r in prev_results if r.reachable}
+    prev_scanned   = {r.ip_address for r in prev_results}
+
+    for ip in current_scanned & prev_scanned:
+        was_up = ip in prev_reachable
+        is_up  = ip in current_reachable
+        if was_up and not is_up:
+            addr = db.query(IPAddress).filter_by(address=ip).first()
+            db.add(AlertEvent(
+                event_type="went_unreachable",
+                ip_address=ip,
+                subnet_id=subnet_id,
+                detected_at=now,
+                details=json.dumps({"hostname": addr.hostname if addr else None}),
+            ))
+        elif not was_up and is_up:
+            db.add(AlertEvent(
+                event_type="came_back",
+                ip_address=ip,
+                subnet_id=subnet_id,
+                detected_at=now,
+                details=None,
+            ))
 
 
 def _detect_collisions(db, subnet_id: int) -> None:
@@ -220,11 +305,17 @@ def scan_subnet(
 
         existing_ips = {row.address for row in db.query(IPAddress.address).all()}
 
+        all_results: list[dict] = []
+        reachable_ips: set[str] = set()
+
         with ThreadPoolExecutor(max_workers=50) as ex:
             futures = {ex.submit(_scan_host, ip): ip for ip in hosts}
             for future in as_completed(futures):
                 result = future.result()
                 ip = result["ip"]
+                all_results.append(result)
+                if result["reachable"]:
+                    reachable_ips.add(ip)
                 db.add(ScanResult(
                     subnet_id=subnet_id,
                     ip_address=ip,
@@ -240,6 +331,11 @@ def scan_subnet(
                     ))
                     existing_ips.add(ip)
 
+        db.commit()
+        _update_last_seen(db, reachable_ips, now)
+        _upsert_daily_history(db, subnet_id, all_results, now)
+        db.commit()
+        _detect_reachability_changes(db, subnet_id, now)
         db.commit()
         _detect_collisions(db, subnet_id)
         _set_scan_status(db, subnet_id, "ok")
