@@ -4,6 +4,11 @@ from pydantic_settings import BaseSettings
 class Settings(BaseSettings):
     database_url: str = "postgresql://ipam:ipam@localhost:5432/ipam"
 
+    # Credential encryption: Fernet key (base64-urlsafe, 32 bytes).
+    # Generate: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+    # If empty, secrets stored as plaintext (backward-compatible).
+    secret_key: str = ""
+
     # Auth
     jwt_secret_key: str = "change-me-in-production-use-a-long-random-string"
     jwt_algorithm: str = "HS256"

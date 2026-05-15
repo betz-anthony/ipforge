@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.models.provider_config import ProviderConfig, SECRET_FIELDS
 from app.providers.registry import invalidate_provider_cache
+from app.core.crypto import encrypt_secret
 
 router = APIRouter()
 
@@ -13,6 +14,11 @@ _SLUG_RE = re.compile(r'^[a-z0-9][a-z0-9_-]{0,62}$')
 
 DNS_TYPES  = {"msdns", "pihole", "bind"}
 DHCP_TYPES = {"msdhcp", "pihole", "keadhcp"}
+
+
+def _encrypt_secrets(provider_type: str, cfg: dict) -> dict:
+    secrets = SECRET_FIELDS.get(provider_type, [])
+    return {k: (encrypt_secret(v) if k in secrets and v else v) for k, v in cfg.items()}
 
 
 def _mask_config(provider_type: str, cfg: dict) -> tuple[dict, dict[str, bool]]:
@@ -74,7 +80,7 @@ def create_provider_config(body: ProviderConfigCreate, db: Session = Depends(get
         category=body.category,
         provider_type=body.provider_type,
         name=body.name,
-        config=json.dumps(body.config),
+        config=json.dumps(_encrypt_secrets(body.provider_type, body.config)),
         enabled=body.enabled,
         sort_order=body.sort_order,
     )
@@ -106,10 +112,10 @@ def update_provider_config(config_id: int, body: ProviderConfigUpdate, db: Sessi
         merged = dict(existing_cfg)
         for k, v in body.config.items():
             if k in secrets and v == "":
-                pass  # blank = keep existing
+                pass  # blank = keep existing encrypted value
             else:
                 merged[k] = v
-        row.config = json.dumps(merged)
+        row.config = json.dumps(_encrypt_secrets(row.provider_type, merged))
 
     if body.enabled is not None:
         row.enabled = body.enabled

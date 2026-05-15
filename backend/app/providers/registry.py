@@ -1,6 +1,7 @@
 import json
 from app.providers.dns.base import DNSProvider
 from app.providers.dhcp.base import DHCPProvider
+from app.core.crypto import decrypt_secret
 
 _dns_cache: list[DNSProvider] | None = None
 _dhcp_cache: list[DHCPProvider] | None = None
@@ -47,7 +48,10 @@ def _load_from_db() -> tuple[list[DNSProvider], list[DHCPProvider]]:
         dns: list[DNSProvider] = []
         dhcp: list[DHCPProvider] = []
         for row in rows:
-            cfg = json.loads(row.config or "{}")
+            raw = json.loads(row.config or "{}")
+            from app.models.provider_config import SECRET_FIELDS
+            secrets = SECRET_FIELDS.get(row.provider_type, [])
+            cfg = {k: (decrypt_secret(v) if k in secrets and v else v) for k, v in raw.items()}
             try:
                 if row.category == "dns":
                     dns.append(_make_dns(row.provider_type, cfg, row.name))
