@@ -216,3 +216,19 @@ def test_detect_no_event_if_stable_reachable(db):
     db.commit()
 
     assert db.query(AlertEvent).count() == 0
+
+
+def test_settings_includes_scan_interval(client):
+    r = client.get("/api/settings")
+    assert r.status_code == 200
+    assert "scan_interval_minutes" in r.json()
+    assert r.json()["scan_interval_minutes"] == 30
+
+
+def test_settings_update_scan_interval(client):
+    r = client.put("/api/settings", json={"scan_interval_minutes": 15})
+    assert r.status_code == 200
+    assert r.json()["scan_interval_minutes"] == 15
+
+    r2 = client.get("/api/settings")
+    assert r2.json()["scan_interval_minutes"] == 15
