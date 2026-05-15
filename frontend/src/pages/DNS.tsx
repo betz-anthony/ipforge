@@ -54,7 +54,8 @@ function SortArrow({ col, sortCol, sortDir }: { col: SortCol; sortCol: SortCol |
 }
 
 export default function DNS() {
-  const [selectedZone, setSelectedZone]     = useState<string | null>(null)
+  const [selectedZone, setSelectedZone]         = useState<string | null>(null)
+  const [selectedZoneSource, setSelectedZoneSource] = useState<string | null>(null)
   const [filter, setFilter]                 = useState('')
   const [typeFilter, setTypeFilter]         = useState<string>('')
   const [sortCol, setSortCol]               = useState<SortCol | null>(null)
@@ -236,8 +237,10 @@ export default function DNS() {
     (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
       setForm(f => ({ ...f, [key]: key === 'ttl' ? Number(e.target.value) : e.target.value }))
 
-  const resetZone = (z: string) => {
-    setSelectedZone(z); setFilter(''); setTypeFilter('')
+  const resetZone = (z: string, source?: string) => {
+    setSelectedZone(z)
+    setSelectedZoneSource(source ?? filteredZones.find(fz => fz.zone === z)?.source ?? null)
+    setFilter(''); setTypeFilter('')
     setSortCol(null); setShowForm(false); setSelectedRecord(null)
   }
 
@@ -309,7 +312,7 @@ export default function DNS() {
     <div
       key={key}
       className={'panel-list-item' + (selectedZone === z.zone ? ' active' : '')}
-      onClick={() => resetZone(z.zone)}
+      onClick={() => resetZone(z.zone, z.source)}
     >
       {z.zone}
     </div>
@@ -403,7 +406,14 @@ export default function DNS() {
                     />
                   </div>
                   {!showForm && (
-                    <button className="btn-primary btn-sm" onClick={() => setShowForm(true)}>
+                    <button
+                      className="btn-primary btn-sm"
+                      onClick={() => {
+                        const defaultSource = selectedZoneSource ?? dnsProviders[0] ?? ''
+                        setForm({ ...emptyForm, source: defaultSource })
+                        setShowForm(true)
+                      }}
+                    >
                       <Plus size={13} /> Add Record
                     </button>
                   )}
