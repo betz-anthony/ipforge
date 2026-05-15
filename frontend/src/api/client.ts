@@ -72,6 +72,7 @@ export interface Subnet {
   rollup_used_count: number
   rollup_total_count: number
   rollup_utilization_pct: number
+  scan_interval_minutes: number | null
 }
 
 export interface IPAddress {
@@ -85,11 +86,12 @@ export interface IPAddress {
   notes: string | null
   created_at: string
   updated_at: string
+  last_seen: string | null
 }
 
 export const subnetsApi = {
   list: () => api.get<Subnet[]>('/subnets').then(r => r.data),
-  create: (data: Omit<Subnet, 'id' | 'created_at' | 'notes' | 'used_count' | 'total_count' | 'utilization_pct' | 'rollup_used_count' | 'rollup_total_count' | 'rollup_utilization_pct' | 'parent_id'> & { notes?: string | null; parent_id?: number | null }) =>
+  create: (data: Omit<Subnet, 'id' | 'created_at' | 'notes' | 'used_count' | 'total_count' | 'utilization_pct' | 'rollup_used_count' | 'rollup_total_count' | 'rollup_utilization_pct' | 'parent_id' | 'scan_interval_minutes'> & { notes?: string | null; parent_id?: number | null; scan_interval_minutes?: number | null }) =>
     api.post<Subnet>('/subnets', data).then(r => r.data),
   update: (id: number, data: Partial<Omit<Subnet, 'id' | 'created_at' | 'used_count' | 'total_count' | 'utilization_pct' | 'rollup_used_count' | 'rollup_total_count' | 'rollup_utilization_pct'>>) =>
     api.put<Subnet>(`/subnets/${id}`, data).then(r => r.data),
@@ -101,7 +103,7 @@ export const subnetsApi = {
 export const addressesApi = {
   list: (params?: { subnet_id?: number; status?: string }) =>
     api.get<IPAddress[]>('/addresses', { params }).then(r => r.data),
-  create: (data: Omit<IPAddress, 'id' | 'created_at' | 'updated_at' | 'notes'> & { notes?: string | null }) =>
+  create: (data: Omit<IPAddress, 'id' | 'created_at' | 'updated_at' | 'notes' | 'last_seen'> & { notes?: string | null }) =>
     api.post<IPAddress>('/addresses', data).then(r => r.data),
   update: (id: number, data: Partial<IPAddress>) =>
     api.put<IPAddress>(`/addresses/${id}`, data).then(r => r.data),
@@ -195,12 +197,14 @@ export interface AppSettings {
   util_warn_threshold:     number
   util_critical_threshold: number
   util_dashboard_top_n:    number
+  scan_interval_minutes:   number
 }
 
 export interface AppSettingsUpdate {
   util_warn_threshold?:     number
   util_critical_threshold?: number
   util_dashboard_top_n?:    number
+  scan_interval_minutes?:   number
 }
 
 export interface ProviderConfig {
@@ -365,4 +369,38 @@ export const auditApi = {
     limit?: number
     offset?: number
   }) => api.get<AuditEntry[]>('/audit', { params }).then(r => r.data),
+}
+
+export interface ScanHistoryDay {
+  date: string
+  up_count: number
+  total_count: number
+  uptime_pct: number
+  avg_latency_ms: number | null
+}
+
+export interface AlertEvent {
+  id: number
+  event_type: 'went_unreachable' | 'came_back'
+  ip_address: string
+  subnet_id: number
+  detected_at: string
+  details: string | null
+  acknowledged: boolean
+  acknowledged_at: string | null
+}
+
+export const scanHistoryApi = {
+  list: (address_id: number) =>
+    api.get<ScanHistoryDay[]>(`/addresses/${address_id}/scan-history`).then(r => r.data),
+}
+
+export const scanAlertsApi = {
+  list: (params?: { acknowledged?: boolean; subnet_id?: number; limit?: number }) =>
+    api.get<AlertEvent[]>('/scan/alerts', { params }).then(r => r.data),
+  acknowledge: (id: number) =>
+    api.put<AlertEvent>(`/scan/alerts/${id}/acknowledge`).then(r => r.data),
+  acknowledgeAll: (subnet_id?: number) =>
+    api.post<{ count: number }>('/scan/alerts/acknowledge-all', null,
+      { params: subnet_id !== undefined ? { subnet_id } : {} }).then(r => r.data),
 }
