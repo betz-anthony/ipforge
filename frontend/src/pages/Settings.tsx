@@ -526,6 +526,7 @@ export default function SettingsPage() {
     util_warn_threshold:     80,
     util_critical_threshold: 95,
     util_dashboard_top_n:    5,
+    scan_interval_minutes:   30,
   })
   const [saved, setSaved] = useState(false)
 
@@ -535,6 +536,7 @@ export default function SettingsPage() {
       util_warn_threshold:     settingsData.util_warn_threshold,
       util_critical_threshold: settingsData.util_critical_threshold,
       util_dashboard_top_n:    settingsData.util_dashboard_top_n,
+      scan_interval_minutes:   settingsData.scan_interval_minutes,
     })
   }, [settingsData])
 
@@ -574,6 +576,14 @@ export default function SettingsPage() {
             </Field>
             <Field label="Dashboard top N subnets" hint="default 5">
               <input type="number" min={1} max={20} value={form.util_dashboard_top_n ?? 5} onChange={s('util_dashboard_top_n')} />
+            </Field>
+            <Field label="Default scan interval (min)" hint="default 30">
+              <input
+                type="number"
+                min={1}
+                value={form.scan_interval_minutes ?? 30}
+                onChange={s('scan_interval_minutes')}
+              />
             </Field>
           </div>
         </div>
