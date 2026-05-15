@@ -310,9 +310,10 @@ def test_collision_hostname_mismatch_via_dns(db):
     assert details["dns"] == "webserver01"
 
 
-def test_scan_all_eligible_skips_ipv6(db):
-    _make_subnet(db, cidr="10.0.0.0/24", name="v4", ip_version=4)
-    _make_subnet(db, cidr="2001:db8::/32",  name="v6", ip_version=6)
+def test_scan_all_eligible_includes_small_ipv6(db):
+    _make_subnet(db, cidr="10.0.0.0/24",   name="v4",         ip_version=4)
+    _make_subnet(db, cidr="2001:db8::/120", name="v6-small",   ip_version=6)
+    _make_subnet(db, cidr="2001:db8::/32",  name="v6-large",   ip_version=6)
 
     scanned_ids = []
 
@@ -323,10 +324,12 @@ def test_scan_all_eligible_skips_ipv6(db):
         from app.scan import scan_all_eligible
         scan_all_eligible(_db=db)
 
-    v4 = db.query(Subnet).filter_by(name="v4").first()
-    v6 = db.query(Subnet).filter_by(name="v6").first()
-    assert v4.id in scanned_ids
-    assert v6.id not in scanned_ids
+    v4       = db.query(Subnet).filter_by(name="v4").first()
+    v6_small = db.query(Subnet).filter_by(name="v6-small").first()
+    v6_large = db.query(Subnet).filter_by(name="v6-large").first()
+    assert v4.id       in scanned_ids       # IPv4 /24 — eligible
+    assert v6_small.id in scanned_ids       # IPv6 /120 — eligible
+    assert v6_large.id not in scanned_ids   # IPv6 /32 — too large, needs range
 
 
 def test_scan_all_eligible_skips_large_subnets(db):
@@ -660,3 +663,106 @@ def test_resolve_multi_dhcp_scope_rolls_back_on_failure(client, db):
     mock_dhcp1.add_reservation.assert_called_once()
     db.refresh(c)
     assert c.resolved is False
+
+
+# ── IPv6 scan tests ──────────────────────────────────────────────────────────
+
+def test_get_host_list_ipv6_auto_scan_ok(db):
+    subnet = _make_subnet(db, cidr="2001:db8::/120", ip_version=6)
+    from app.scan import _get_host_list
+    hosts = _get_host_list(subnet, None, None)
+    assert len(hosts) == 255  # /120 has 256 addresses; IPv6 hosts() excludes only the subnet-router anycast (first)
+    assert all(":" in h for h in hosts)
+
+
+def test_get_host_list_ipv6_too_large_requires_range(db):
+    subnet = _make_subnet(db, cidr="2001:db8::/64", ip_version=6)
+    from app.scan import _get_host_list
+    import pytest
+    with pytest.raises(ValueError, match="start_ip and end_ip"):
+        _get_host_list(subnet, None, None)
+
+
+def test_get_host_list_ipv6_with_explicit_range(db):
+    subnet = _make_subnet(db, cidr="2001:db8::/64", ip_version=6)
+    from app.scan import _get_host_list
+    hosts = _get_host_list(subnet, "2001:db8::1", "2001:db8::5")
+    assert hosts == [
+        "2001:db8::1", "2001:db8::2", "2001:db8::3", "2001:db8::4", "2001:db8::5",
+    ]
+
+
+def test_scan_subnet_ipv6(db):
+    subnet = _make_subnet(db, cidr="2001:db8::/120", ip_version=6)
+    mock_results = {
+        "2001:db8::1": {"ip": "2001:db8::1", "reachable": True,  "latency_ms": 0.5},
+        "2001:db8::2": {"ip": "2001:db8::2", "reachable": False, "latency_ms": None},
+    }
+    with patch("app.scan._scan_host", side_effect=_mock_scan(mock_results)):
+        from app.scan import scan_subnet
+        scan_subnet(subnet.id, start_ip="2001:db8::1", end_ip="2001:db8::2", _db=db)
+
+    results = db.query(ScanResult).filter_by(subnet_id=subnet.id).all()
+    assert len(results) == 2
+    reachable = [r for r in results if r.reachable]
+    assert len(reachable) == 1
+    assert reachable[0].ip_address == "2001:db8::1"
+
+
+def test_scan_host_uses_ping6_for_ipv6(monkeypatch):
+    captured = {}
+
+    def fake_run(cmd, **kwargs):
+        captured["cmd"] = cmd
+        m = MagicMock()
+        m.stdout = "1 packets transmitted, 0 received, 100% packet loss"
+        m.stderr = ""
+        return m
+
+    monkeypatch.setattr("subprocess.run", fake_run)
+    import platform
+    monkeypatch.setattr(platform, "system", lambda: "Linux")
+
+    from app.scan import _scan_host
+    _scan_host("2001:db8::1")
+    assert captured["cmd"][0] == "ping6"
+
+
+def test_scan_host_uses_ping_dash6_on_darwin(monkeypatch):
+    captured = {}
+
+    def fake_run(cmd, **kwargs):
+        captured["cmd"] = cmd
+        m = MagicMock()
+        m.stdout = "1 packets transmitted, 0 received, 100% packet loss"
+        m.stderr = ""
+        return m
+
+    monkeypatch.setattr("subprocess.run", fake_run)
+    import platform
+    monkeypatch.setattr(platform, "system", lambda: "Darwin")
+
+    from app.scan import _scan_host
+    _scan_host("2001:db8::1")
+    assert captured["cmd"][0] == "ping"
+    assert "-6" in captured["cmd"]
+
+
+def test_scan_host_ipv4_unchanged_on_linux(monkeypatch):
+    captured = {}
+
+    def fake_run(cmd, **kwargs):
+        captured["cmd"] = cmd
+        m = MagicMock()
+        m.stdout = "1 packets transmitted, 0 received, 100% packet loss"
+        m.stderr = ""
+        return m
+
+    monkeypatch.setattr("subprocess.run", fake_run)
+    import platform
+    monkeypatch.setattr(platform, "system", lambda: "Linux")
+
+    from app.scan import _scan_host
+    _scan_host("10.0.0.1")
+    assert captured["cmd"][0] == "ping"
+    assert "ping6" not in captured["cmd"][0]

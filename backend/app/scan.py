@@ -49,10 +49,17 @@ def _set_scan_status(db, subnet_id: int, status: str, error: str | None = None) 
 
 def _scan_host(ip: str) -> dict:
     system = platform.system()
-    cmd = (
-        ["ping", "-c", "1", "-W", "1000", ip] if system == "Darwin"
-        else ["ping", "-c", "1", "-W", "1", ip]
-    )
+    is_v6 = ":" in ip
+    if is_v6:
+        cmd = (
+            ["ping", "-6", "-c", "1", "-W", "1000", ip] if system == "Darwin"
+            else ["ping6", "-c", "1", "-W", "1", ip]
+        )
+    else:
+        cmd = (
+            ["ping", "-c", "1", "-W", "1000", ip] if system == "Darwin"
+            else ["ping", "-c", "1", "-W", "1", ip]
+        )
     try:
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=3)
         output = result.stdout + result.stderr
@@ -71,13 +78,19 @@ def _scan_host(ip: str) -> dict:
     return {"ip": ip, "reachable": reachable, "latency_ms": latency_ms}
 
 
+# IPv6 equivalent of /24 is /120 (256 addresses). Scheduler uses this to guard
+# auto-scan without explicit range — larger subnets require start_ip/end_ip.
+_MAX_AUTO_PREFIXLEN = {4: 24, 6: 120}
+
+
 def _get_host_list(subnet: Subnet, start_ip: str | None, end_ip: str | None) -> list[str]:
     network = ipaddress.ip_network(subnet.cidr, strict=False)
+    min_prefix = _MAX_AUTO_PREFIXLEN[network.version]
 
     if start_ip is None and end_ip is None:
-        if network.prefixlen < 24:
+        if network.prefixlen < min_prefix:
             raise ValueError(
-                f"Subnet {subnet.cidr} is larger than /24. Provide start_ip and end_ip."
+                f"Subnet {subnet.cidr} is larger than /{min_prefix}. Provide start_ip and end_ip."
             )
         return [str(h) for h in network.hosts()]
 
@@ -358,14 +371,14 @@ def scan_all_eligible(_db=None) -> None:
     own_db = _db is None
     db = SessionLocal() if own_db else _db
     try:
-        subnets = db.query(Subnet).filter(Subnet.ip_version == 4).all()
+        subnets = db.query(Subnet).all()
     finally:
         if own_db:
             db.close()
 
     for s in subnets:
         net = ipaddress.ip_network(s.cidr, strict=False)
-        if net.prefixlen >= 24:
+        if net.prefixlen >= _MAX_AUTO_PREFIXLEN[net.version]:
             scan_subnet(s.id)
 
 
@@ -390,11 +403,11 @@ def scan_scheduler_loop() -> None:
             db.commit()
 
             global_interval = _get_global_scan_interval(db)
-            subnets = db.query(Subnet).filter(Subnet.ip_version == 4).all()
+            subnets = db.query(Subnet).all()
             for s in subnets:
                 net = ipaddress.ip_network(s.cidr, strict=False)
-                if net.prefixlen < 24:
-                    continue  # skip subnets larger than /24; _get_host_list requires explicit range
+                if net.prefixlen < _MAX_AUTO_PREFIXLEN[net.version]:
+                    continue  # too large for auto-scan; requires explicit start_ip/end_ip
                 interval = s.scan_interval_minutes or global_interval
                 status_row = db.get(SyncStatus, f"scan:{s.id}")
                 if status_row and status_row.status == "running":
