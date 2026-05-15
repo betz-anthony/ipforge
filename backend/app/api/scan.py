@@ -354,6 +354,7 @@ def list_alerts(
 def acknowledge_all_alerts(
     subnet_id: int | None = Query(None),
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     now = _utcnow()
     q = db.query(AlertEvent).filter(AlertEvent.acknowledged == False)  # noqa: E712
@@ -365,7 +366,7 @@ def acknowledge_all_alerts(
 
 
 @router.put("/alerts/{alert_id}/acknowledge", response_model=AlertEventRead)
-def acknowledge_alert(alert_id: int, db: Session = Depends(get_db)):
+def acknowledge_alert(alert_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     alert = db.get(AlertEvent, alert_id)
     if not alert:
         raise HTTPException(404, "Alert not found")
