@@ -63,6 +63,8 @@ async def lifespan(app: FastAPI):
         from app.sync import sync_all, start_background_sync
         threading.Thread(target=sync_all, daemon=True, name="ipam-initial-sync").start()
         start_background_sync()
+    from app.scan import scan_scheduler_loop
+    threading.Thread(target=scan_scheduler_loop, daemon=True, name="ipam-scan-scheduler").start()
     yield
 
 

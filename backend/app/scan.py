@@ -5,6 +5,7 @@ import platform
 import re
 import subprocess
 import threading
+import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
 
@@ -366,3 +367,36 @@ def scan_all_eligible(_db=None) -> None:
         net = ipaddress.ip_network(s.cidr, strict=False)
         if net.prefixlen >= 24:
             scan_subnet(s.id)
+
+
+def _get_global_scan_interval(db) -> int:
+    from app.config import settings
+    return settings.scan_interval_minutes
+
+
+def scan_scheduler_loop() -> None:
+    while True:
+        time.sleep(60)
+        db = SessionLocal()
+        try:
+            global_interval = _get_global_scan_interval(db)
+            now = _utcnow()
+            subnets = db.query(Subnet).filter(Subnet.ip_version == 4).all()
+            for s in subnets:
+                net = ipaddress.ip_network(s.cidr, strict=False)
+                if net.prefixlen < 24:
+                    continue  # _get_host_list raises for >/24 without explicit range
+                interval = s.scan_interval_minutes or global_interval
+                status_row = db.get(SyncStatus, f"scan:{s.id}")
+                if status_row and status_row.status == "running":
+                    continue
+                last = status_row.synced_at if status_row else None
+                if last is None or (now - last).total_seconds() >= interval * 60:
+                    threading.Thread(
+                        target=scan_subnet, args=(s.id,), daemon=True,
+                        name=f"ipam-scan-{s.id}",
+                    ).start()
+        except Exception:
+            logger.exception("scan_scheduler_loop error")
+        finally:
+            db.close()
