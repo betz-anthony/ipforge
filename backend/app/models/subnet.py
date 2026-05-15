@@ -18,6 +18,7 @@ class Subnet(Base):
     parent_id: Mapped[int | None] = mapped_column(
         Integer, ForeignKey("subnets.id"), nullable=True
     )
+    scan_interval_minutes: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
     addresses: Mapped[list["IPAddress"]] = relationship(
         "IPAddress", back_populates="subnet", cascade="all, delete-orphan"
