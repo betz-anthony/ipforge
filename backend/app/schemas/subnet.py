@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from datetime import datetime
 
 
@@ -10,7 +10,7 @@ class SubnetCreate(BaseModel):
     description: str | None = None
     notes: str | None = None
     parent_id: int | None = None
-    scan_interval_minutes: int | None = None
+    scan_interval_minutes: int | None = Field(default=None, ge=1)
 
 
 class SubnetUpdate(BaseModel):
@@ -19,7 +19,7 @@ class SubnetUpdate(BaseModel):
     description: str | None = None
     notes: str | None = None
     parent_id: int | None = None
-    scan_interval_minutes: int | None = None
+    scan_interval_minutes: int | None = Field(default=None, ge=1)
 
 
 class SubnetRead(BaseModel):

@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 from app.database import get_db
 from app.models.setting import AppSetting
@@ -29,7 +29,7 @@ class SettingsUpdate(BaseModel):
     util_warn_threshold:     int | None = None
     util_critical_threshold: int | None = None
     util_dashboard_top_n:    int | None = None
-    scan_interval_minutes:   int | None = None
+    scan_interval_minutes:   int | None = Field(default=None, ge=1)
 
 
 def apply_db_settings(db: Session) -> None:
