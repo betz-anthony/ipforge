@@ -46,6 +46,7 @@ export interface UserRecord {
   username: string
   role: string
   enabled: boolean
+  auth_source: string   // "local" | "ldap"
 }
 
 export const usersApi = {
@@ -255,6 +256,27 @@ export interface ProviderConfigUpdate {
 export const settingsApi = {
   get: () => api.get<AppSettings>('/settings').then(r => r.data),
   update: (data: AppSettingsUpdate) => api.put<AppSettings>('/settings', data).then(r => r.data),
+}
+
+export interface LdapSettings {
+  ldap_enabled:        boolean
+  ldap_host:           string
+  ldap_port:           number
+  ldap_use_ssl:        boolean
+  ldap_bind_dn:        string
+  ldap_bind_password:  string
+  ldap_base_dn:        string
+  ldap_user_filter:    string
+  ldap_group_admin:    string
+  ldap_group_operator: string
+  ldap_group_readonly: string
+  ldap_default_role:   string
+}
+
+export const ldapApi = {
+  get:    () => api.get<LdapSettings>('/settings/ldap').then(r => r.data),
+  update: (data: Partial<LdapSettings>) =>
+    api.put<LdapSettings>('/settings/ldap', data).then(r => r.data),
 }
 
 export const providerConfigsApi = {
