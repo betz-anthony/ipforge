@@ -41,8 +41,8 @@ def test_allocate_skips_dot_255(client, db):
     db.commit()
     r = client.post(f"/api/subnets/{s.id}/allocate", json={"hostname": "h"})
     assert r.status_code == 201
-    # 10.0.0.255 is skipped; next candidate is 10.0.1.2
-    assert r.json()["address"] == "10.0.1.2"
+    # 10.0.0.255 is skipped; next candidate is 10.0.1.0
+    assert r.json()["address"] == "10.0.1.0"
 
 
 def test_allocate_skips_discovered(client, db):

@@ -1,9 +1,13 @@
 import ipaddress
+import logging
+import re
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 from sqlalchemy.orm import Session
 from sqlalchemy import func
+
+logger = logging.getLogger(__name__)
 
 from app.core.deps import require_operator
 from app.core.audit import write_audit
@@ -36,6 +40,25 @@ class AllocateRequest(BaseModel):
     dns_provider: str | None = None
     dhcp_provider: str | None = None
 
+    @field_validator("hostname")
+    @classmethod
+    def validate_hostname(cls, v: str | None) -> str | None:
+        if v is None:
+            return v
+        v = v.strip().lower()
+        if not re.match(r'^[a-z0-9][a-z0-9\-]*$', v) or len(v) > 63:
+            raise ValueError("hostname must be 1-63 chars, start with alphanumeric, contain only a-z, 0-9, hyphen")
+        return v
+
+    @field_validator("mac_address")
+    @classmethod
+    def validate_mac(cls, v: str | None) -> str | None:
+        if v is None:
+            return v
+        if not re.match(r'^([0-9A-Fa-f]{2}[:\-]){5}[0-9A-Fa-f]{2}$', v):
+            raise ValueError("mac_address must be in format aa:bb:cc:dd:ee:ff")
+        return v
+
 
 def _find_candidate(db: Session, subnet_id: int, cidr: str) -> str | None:
     taken = {
@@ -47,7 +70,7 @@ def _find_candidate(db: Session, subnet_id: int, cidr: str) -> str | None:
     }
     for ip in ipaddress.ip_network(cidr, strict=False).hosts():
         s = str(ip)
-        if s.endswith(".0") or s.endswith(".1") or s.endswith(".255"):  # skip gateway, broadcast, and network-like addresses
+        if s.endswith(".1") or s.endswith(".255"):  # skip gateway and broadcast-like addresses
             continue
         if s in taken:
             continue
@@ -82,7 +105,9 @@ def allocate_ip(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_operator),
 ):
-    hostname = (body.hostname or "").strip().lower()
+    # Hostname idempotency relies on a single allocator — concurrent calls for the
+    # same new hostname may both pass the existing-check and allocate different IPs.
+    hostname = body.hostname or ""
     if not hostname:
         raise HTTPException(422, "hostname is required")
 
@@ -141,7 +166,7 @@ def allocate_ip(
                 description=body.description, notes=body.notes,
             )
             db.add(addr)
-        db.flush()
+        db.flush()  # populates addr.id before audit and provider calls
 
     dns_registered = dhcp_registered = False
 
@@ -169,8 +194,8 @@ def allocate_ip(
                             name=hostname, record_type="A",
                             value=addr.address, zone=body.dns_zone or "",
                         ))
-                    except Exception:
-                        pass
+                    except Exception as cleanup_exc:
+                        logger.warning("DNS rollback failed for %s: %s", hostname, cleanup_exc)
                 db.rollback()
             raise HTTPException(502, f"DHCP provider error fetching scopes: {exc}")
         if scope_id is None:
@@ -181,8 +206,8 @@ def allocate_ip(
                             name=hostname, record_type="A",
                             value=addr.address, zone=body.dns_zone or "",
                         ))
-                    except Exception:
-                        pass
+                    except Exception as cleanup_exc:
+                        logger.warning("DNS rollback failed for %s: %s", hostname, cleanup_exc)
                 db.rollback()
             raise HTTPException(400, f"No DHCP scope found containing {addr.address}")
         reservation = DHCPReservation(
@@ -202,8 +227,8 @@ def allocate_ip(
                             name=hostname, record_type="A",
                             value=addr.address, zone=body.dns_zone or "",
                         ))
-                    except Exception:
-                        pass
+                    except Exception as cleanup_exc:
+                        logger.warning("DNS rollback failed for %s: %s", hostname, cleanup_exc)
                 db.rollback()
             raise HTTPException(502, f"DHCP registration failed: {exc}")
 
