@@ -1,6 +1,17 @@
 import os
 os.environ["DATABASE_URL"] = "sqlite:///:memory:"
 
+# Passlib's bcrypt backend runs a detect_wrap_bug() check during initialisation
+# that sends a 256-byte dummy password through bcrypt.hashpw().  Newer bcrypt
+# wheels (4.x) reject passwords longer than 72 bytes, causing a ValueError that
+# crashes the backend init.  Truncate the input in hashpw() so the probe
+# succeeds; this has no effect on real passwords used in tests (all ≤ 72 B).
+import bcrypt as _bcrypt_mod
+_orig_hashpw = _bcrypt_mod.hashpw
+def _safe_hashpw(password: bytes, salt: bytes) -> bytes:
+    return _orig_hashpw(password[:72], salt)
+_bcrypt_mod.hashpw = _safe_hashpw
+
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
