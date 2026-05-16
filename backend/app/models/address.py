@@ -27,5 +27,6 @@ class IPAddress(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     last_seen: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    reclaim_dismissed_until: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
     subnet: Mapped["Subnet"] = relationship("Subnet", back_populates="addresses")
