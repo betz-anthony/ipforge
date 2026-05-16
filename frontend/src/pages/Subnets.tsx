@@ -8,9 +8,9 @@ import UtilBar from '../components/UtilBar'
 import CollisionResolveDialog from './CollisionResolveDialog'
 import SubnetTree from './SubnetTree'
 
-const emptyForm = { name: '', cidr: '', vlan_id: '', description: '', scan_interval_minutes: '' }
+const emptyForm = { name: '', cidr: '', vlan_id: '', description: '', scan_interval_minutes: '', dns_provider_name: '', dhcp_provider_name: '' }
 
-const emptyEditForm = { name: '', vlan_id: '', description: '', notes: '', scan_interval_minutes: '' }
+const emptyEditForm = { name: '', vlan_id: '', description: '', notes: '', scan_interval_minutes: '', dns_provider_name: '', dhcp_provider_name: '' }
 
 export default function Subnets() {
   const [showForm, setShowForm]             = useState(false)
@@ -144,6 +144,8 @@ export default function Subnets() {
       notes:                 null,
       parent_id:             formParentId,
       scan_interval_minutes: form.scan_interval_minutes ? Number(form.scan_interval_minutes) : null,
+      dns_provider_name:  form.dns_provider_name || null,
+      dhcp_provider_name: form.dhcp_provider_name || null,
     }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['subnets'] })
@@ -161,6 +163,8 @@ export default function Subnets() {
       description:           editForm.description || null,
       notes:                 editForm.notes       || null,
       scan_interval_minutes: editForm.scan_interval_minutes ? Number(editForm.scan_interval_minutes) : null,
+      dns_provider_name:  editForm.dns_provider_name || null,
+      dhcp_provider_name: editForm.dhcp_provider_name || null,
       ...(editParentId !== undefined ? { parent_id: editParentId } : {}),
     }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['subnets'] }),
@@ -187,6 +191,8 @@ export default function Subnets() {
       description:           s.description ?? '',
       notes:                 s.notes       ?? '',
       scan_interval_minutes: s.scan_interval_minutes ? String(s.scan_interval_minutes) : '',
+      dns_provider_name:  s.dns_provider_name ?? '',
+      dhcp_provider_name: s.dhcp_provider_name ?? '',
     })
     setEditParentId(s.parent_id ?? null)
     setShowRangePicker(false)
@@ -519,6 +525,14 @@ export default function Subnets() {
                 onChange={set('scan_interval_minutes')}
               />
             </div>
+            <div className="form-field">
+              <label>DNS Provider</label>
+              <input placeholder="Optional provider name" value={form.dns_provider_name} onChange={set('dns_provider_name')} />
+            </div>
+            <div className="form-field">
+              <label>DHCP Provider</label>
+              <input placeholder="Optional provider name" value={form.dhcp_provider_name} onChange={set('dhcp_provider_name')} />
+            </div>
             <div className="form-field" style={{ gridColumn: '1 / -1' }}>
               <label>Parent Subnet</label>
               <select
@@ -684,6 +698,14 @@ export default function Subnets() {
               value={editForm.scan_interval_minutes}
               onChange={setEdit('scan_interval_minutes')}
             />
+          </div>
+          <div className="form-field">
+            <label>DNS Provider</label>
+            <input value={editForm.dns_provider_name} onChange={setEdit('dns_provider_name')} />
+          </div>
+          <div className="form-field">
+            <label>DHCP Provider</label>
+            <input value={editForm.dhcp_provider_name} onChange={setEdit('dhcp_provider_name')} />
           </div>
           <div className="form-field" style={{ gridColumn: '1 / -1' }}>
             <label>Parent Subnet</label>

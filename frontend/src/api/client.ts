@@ -73,6 +73,8 @@ export interface Subnet {
   rollup_total_count: number
   rollup_utilization_pct: number
   scan_interval_minutes: number | null
+  dns_provider_name: string | null
+  dhcp_provider_name: string | null
 }
 
 export interface IPAddress {
