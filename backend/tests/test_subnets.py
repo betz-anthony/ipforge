@@ -222,3 +222,14 @@ def test_update_subnet_reparent_cidr_mismatch_returns_422(client, db):
 
     r = client.put(f"/api/subnets/{child.id}", json={"parent_id": unrelated.id})
     assert r.status_code == 422
+
+
+def test_subnet_stores_provider_names(client, db):
+    r = client.post("/api/subnets", json={
+        "name": "test", "cidr": "10.9.0.0/24",
+        "dns_provider_name": "msdns-prod",
+        "dhcp_provider_name": "msdhcp-prod",
+    })
+    assert r.status_code == 201
+    assert r.json()["dns_provider_name"] == "msdns-prod"
+    assert r.json()["dhcp_provider_name"] == "msdhcp-prod"
