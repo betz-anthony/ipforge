@@ -18,6 +18,7 @@ from app.api import provider_configs as provider_configs_router
 from app.api import auth as auth_router
 from app.api import users as users_router
 from app.api import audit as audit_router
+from app.api import cache as cache_router
 import app.models  # noqa: F401
 
 logger = logging.getLogger(__name__)
@@ -105,6 +106,7 @@ app.include_router(scan_router.router,   prefix="/api/scan",  tags=["scan"],  de
 _adm = [Depends(require_admin)]
 app.include_router(settings_router.router,        prefix="/api/settings",         tags=["settings"],        dependencies=_adm)
 app.include_router(provider_configs_router.router, prefix="/api/provider-configs", tags=["provider-configs"], dependencies=_adm)
+app.include_router(cache_router.router,            prefix="/api/cache",            tags=["cache"],            dependencies=_adm)
 app.include_router(users_router.router,            prefix="/api/users",            tags=["users"],            dependencies=_adm)
 
 

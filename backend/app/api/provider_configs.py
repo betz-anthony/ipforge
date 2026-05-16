@@ -7,6 +7,7 @@ from app.database import get_db
 from app.models.provider_config import ProviderConfig, SECRET_FIELDS
 from app.providers.registry import invalidate_provider_cache
 from app.core.crypto import encrypt_secret
+from app.api.cache import purge_cache
 
 router = APIRouter()
 
@@ -133,6 +134,9 @@ def delete_provider_config(config_id: int, db: Session = Depends(get_db)):
     row = db.get(ProviderConfig, config_id)
     if not row:
         raise HTTPException(404, "Provider config not found")
+    source   = row.name
+    category = row.category
     db.delete(row)
+    purge_cache(db, category, source)
     db.commit()
     invalidate_provider_cache()
