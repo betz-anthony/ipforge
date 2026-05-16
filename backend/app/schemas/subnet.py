@@ -11,6 +11,8 @@ class SubnetCreate(BaseModel):
     notes: str | None = None
     parent_id: int | None = None
     scan_interval_minutes: int | None = Field(default=None, ge=1)
+    dns_provider_name: str | None = None
+    dhcp_provider_name: str | None = None
 
 
 class SubnetUpdate(BaseModel):
@@ -20,6 +22,8 @@ class SubnetUpdate(BaseModel):
     notes: str | None = None
     parent_id: int | None = None
     scan_interval_minutes: int | None = Field(default=None, ge=1)
+    dns_provider_name: str | None = None
+    dhcp_provider_name: str | None = None
 
 
 class SubnetRead(BaseModel):
@@ -33,6 +37,8 @@ class SubnetRead(BaseModel):
     created_at: datetime
     parent_id: int | None
     scan_interval_minutes: int | None
+    dns_provider_name: str | None
+    dhcp_provider_name: str | None
 
     model_config = {"from_attributes": True}
 
