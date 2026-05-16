@@ -19,6 +19,7 @@ from app.api import auth as auth_router
 from app.api import users as users_router
 from app.api import audit as audit_router
 from app.api import cache as cache_router
+from app.api import importexport as importexport_router
 import app.models  # noqa: F401
 
 logger = logging.getLogger(__name__)
@@ -96,6 +97,7 @@ app.include_router(search_router.router, prefix="/api/search",     tags=["search
 app.include_router(stats_router.router,  prefix="/api/stats",      tags=["stats"],      dependencies=_ro)
 app.include_router(tools_router.router,  prefix="/api/tools",      tags=["tools"],      dependencies=_ro)
 app.include_router(audit_router.router,  prefix="/api/audit",      tags=["audit"],      dependencies=_ro)
+app.include_router(importexport_router.router, prefix="/api/importexport", tags=["importexport"], dependencies=_ro)
 
 # Operator+
 _op = [Depends(require_operator)]

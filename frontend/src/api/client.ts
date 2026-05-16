@@ -409,3 +409,25 @@ export const scanAlertsApi = {
     api.post<{ count: number }>('/scan/alerts/acknowledge-all', null,
       { params: subnet_id !== undefined ? { subnet_id } : {} }).then(r => r.data),
 }
+
+export interface ImportResult {
+  created: number
+  updated: number
+  skipped: number
+  errors: string[]
+}
+
+export const importExportApi = {
+  exportSubnetsUrl: () => '/api/importexport/subnets.csv',
+  exportAddressesUrl: () => '/api/importexport/addresses.csv',
+  importSubnets: (file: File) => {
+    const form = new FormData()
+    form.append('file', file)
+    return api.post<ImportResult>('/importexport/subnets', form).then(r => r.data)
+  },
+  importAddresses: (file: File) => {
+    const form = new FormData()
+    form.append('file', file)
+    return api.post<ImportResult>('/importexport/addresses', form).then(r => r.data)
+  },
+}
