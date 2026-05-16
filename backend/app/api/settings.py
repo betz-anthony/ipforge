@@ -9,12 +9,12 @@ router = APIRouter()
 
 INT_KEYS = {
     "util_warn_threshold", "util_critical_threshold", "util_dashboard_top_n",
-    "scan_interval_minutes",
+    "scan_interval_minutes", "stale_reclaim_days",
 }
 
 SETTING_KEYS = [
     "util_warn_threshold", "util_critical_threshold", "util_dashboard_top_n",
-    "scan_interval_minutes",
+    "scan_interval_minutes", "stale_reclaim_days",
 ]
 
 
@@ -23,6 +23,7 @@ class SettingsResponse(BaseModel):
     util_critical_threshold: int
     util_dashboard_top_n:    int
     scan_interval_minutes:   int
+    stale_reclaim_days:      int
 
 
 class SettingsUpdate(BaseModel):
@@ -30,6 +31,7 @@ class SettingsUpdate(BaseModel):
     util_critical_threshold: int | None = None
     util_dashboard_top_n:    int | None = None
     scan_interval_minutes:   int | None = Field(default=None, ge=1)
+    stale_reclaim_days:      int | None = Field(default=None, ge=0)
 
 
 def apply_db_settings(db: Session) -> None:
@@ -57,6 +59,7 @@ def get_settings():
         util_critical_threshold=settings.util_critical_threshold,
         util_dashboard_top_n=settings.util_dashboard_top_n,
         scan_interval_minutes=settings.scan_interval_minutes,
+        stale_reclaim_days=settings.stale_reclaim_days,
     )
 
 
