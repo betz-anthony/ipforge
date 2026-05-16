@@ -1,0 +1,40 @@
+---
+# Allocate the next free IP in a subnet and register DNS + DHCP.
+# Safe to re-run: hostname is the idempotency key (status 200 = already allocated).
+#
+# Required variables:
+#   ipam_url    - base URL, e.g. https://ipam.example.com
+#   ipam_token  - JWT token from POST /api/auth/login
+#   subnet_id   - integer ID of the target subnet
+#   hostname    - desired hostname (case-insensitive)
+#   mac_address - MAC address for DHCP reservation
+#   dns_zone    - DNS zone for A record, e.g. example.com
+
+- name: Allocate IP for {{ hostname }}
+  ansible.builtin.uri:
+    url: "{{ ipam_url }}/api/subnets/{{ subnet_id }}/allocate"
+    method: POST
+    headers:
+      Authorization: "Bearer {{ ipam_token }}"
+    body_format: json
+    body:
+      hostname: "{{ hostname }}"
+      mac_address: "{{ mac_address }}"
+      register_dns: true
+      dns_zone: "{{ dns_zone }}"
+      register_dhcp: true
+    status_code: [200, 201]
+  register: ipam_result
+
+- name: Store allocated address as fact
+  ansible.builtin.set_fact:
+    allocated_ip: "{{ ipam_result.json.address }}"
+    allocation_is_new: "{{ ipam_result.json.is_new }}"
+
+- name: Show result
+  ansible.builtin.debug:
+    msg: >
+      {{ 'Allocated' if allocation_is_new else 'Existing' }} IP for {{ hostname }}:
+      {{ allocated_ip }}
+      (DNS: {{ ipam_result.json.dns_registered }},
+       DHCP: {{ ipam_result.json.dhcp_registered }})
