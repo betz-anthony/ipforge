@@ -21,6 +21,7 @@ from app.api import audit as audit_router
 from app.api import cache as cache_router
 from app.api import importexport as importexport_router
 from app.api import allocation as allocation_router
+from app.api import reclaim as reclaim_router
 import app.models  # noqa: F401
 
 logger = logging.getLogger(__name__)
@@ -90,6 +91,7 @@ app.include_router(auth_router.router, prefix="/api/auth", tags=["auth"])
 
 # Read-only+ (any authenticated user)
 _ro = [Depends(get_current_user)]
+app.include_router(reclaim_router.ro_router, prefix="/api/addresses", tags=["reclaim"], dependencies=_ro)
 app.include_router(subnets.router,       prefix="/api/subnets",    tags=["subnets"],    dependencies=_ro)
 app.include_router(addresses.router,     prefix="/api/addresses",  tags=["addresses"],  dependencies=_ro)
 app.include_router(dns.router,           prefix="/api/dns",        tags=["dns"],        dependencies=_ro)
@@ -105,6 +107,7 @@ _op = [Depends(require_operator)]
 app.include_router(sync_router.router,   prefix="/api/sync",  tags=["sync"],  dependencies=_op)
 app.include_router(scan_router.router,   prefix="/api/scan",  tags=["scan"],  dependencies=_op)
 app.include_router(allocation_router.router, prefix="/api/subnets", tags=["allocation"], dependencies=_op)
+app.include_router(reclaim_router.router, prefix="/api/addresses", tags=["reclaim"], dependencies=_op)
 
 # Admin only
 _adm = [Depends(require_admin)]

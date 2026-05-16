@@ -91,6 +91,20 @@ export interface IPAddress {
   last_seen: string | null
 }
 
+export interface StaleAddress {
+  id: number
+  address: string
+  subnet_id: number
+  subnet_cidr: string
+  hostname: string | null
+  status: 'reserved' | 'assigned'
+  mac_address: string | null
+  last_seen: string | null
+  days_stale: number
+}
+
+export type ReclaimAction = 'deprecate' | 'extend' | 'dismiss'
+
 export const subnetsApi = {
   list: () => api.get<Subnet[]>('/subnets').then(r => r.data),
   create: (data: Omit<Subnet, 'id' | 'created_at' | 'notes' | 'used_count' | 'total_count' | 'utilization_pct' | 'rollup_used_count' | 'rollup_total_count' | 'rollup_utilization_pct' | 'parent_id' | 'scan_interval_minutes'> & { notes?: string | null; parent_id?: number | null; scan_interval_minutes?: number | null }) =>
@@ -200,6 +214,7 @@ export interface AppSettings {
   util_critical_threshold: number
   util_dashboard_top_n:    number
   scan_interval_minutes:   number
+  stale_reclaim_days:      number
 }
 
 export interface AppSettingsUpdate {
@@ -207,6 +222,7 @@ export interface AppSettingsUpdate {
   util_critical_threshold?: number
   util_dashboard_top_n?:    number
   scan_interval_minutes?:   number
+  stale_reclaim_days?:      number
 }
 
 export interface ProviderConfig {
@@ -410,6 +426,17 @@ export const scanAlertsApi = {
   acknowledgeAll: (subnet_id?: number) =>
     api.post<{ count: number }>('/scan/alerts/acknowledge-all', null,
       { params: subnet_id !== undefined ? { subnet_id } : {} }).then(r => r.data),
+}
+
+export const reclaimApi = {
+  listStale: (params?: { subnet_id?: number; limit?: number; offset?: number }) =>
+    api.get<StaleAddress[]>('/addresses/stale', { params }).then(r => r.data),
+  countStale: () =>
+    api.get<{ count: number }>('/addresses/stale/count').then(r => r.data),
+  reclaim: (id: number, action: ReclaimAction) =>
+    api.put<StaleAddress>(`/addresses/${id}/reclaim`, { action }).then(r => r.data),
+  bulkDeprecate: (subnet_id: number) =>
+    api.post<{ deprecated: number }>('/addresses/stale/bulk-deprecate', { subnet_id }).then(r => r.data),
 }
 
 export interface ImportResult {

@@ -27,6 +27,9 @@ class Settings(BaseSettings):
     # Deployment mode: "background" (docker-compose) or "disabled" (K8s CronJob handles sync)
     sync_mode: str = "background"
 
+    # Stale IP reclamation: number of days without activity before an IP is considered stale
+    stale_reclaim_days: int = 30
+
     class Config:
         env_file = ".env"
 

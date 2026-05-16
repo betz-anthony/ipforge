@@ -1,8 +1,11 @@
 import { Routes, Route, NavLink } from 'react-router-dom'
 import {
-  LayoutDashboard, Network, List, Server, Globe, Search, Settings, LogOut, ClipboardList
+  LayoutDashboard, Network, List, Server, Globe, Search, Settings, LogOut, ClipboardList,
+  ArchiveRestore,
 } from 'lucide-react'
+import { useQuery } from '@tanstack/react-query'
 import { useAuth } from './contexts/AuthContext'
+import { reclaimApi } from './api/client'
 import Dashboard from './pages/Dashboard'
 import Subnets from './pages/Subnets'
 import Addresses from './pages/Addresses'
@@ -11,6 +14,7 @@ import DNS from './pages/DNS'
 import SearchPage from './pages/Search'
 import SettingsPage from './pages/Settings'
 import AuditPage from './pages/Audit'
+import ReclaimPage from './pages/Reclaim'
 import Login from './pages/Login'
 
 const NAV = [
@@ -24,10 +28,18 @@ const NAV = [
 export default function App() {
   const { user, loading, logout } = useAuth()
 
+  const { data: staleCount } = useQuery({
+    queryKey: ['stale-count'],
+    queryFn: reclaimApi.countStale,
+    enabled: !!user && user.role !== 'readonly',
+    refetchInterval: 5 * 60 * 1000,
+  })
+
   if (loading) return null
   if (!user)   return <Login />
 
-  const isAdmin = user.role === 'admin'
+  const isAdmin    = user.role === 'admin'
+  const isOperator = user.role !== 'readonly'
 
   return (
     <div className="app-shell">
@@ -58,6 +70,28 @@ export default function App() {
             <ClipboardList size={15} strokeWidth={1.75} />
             Audit
           </NavLink>
+
+          {isOperator && (
+            <NavLink to="/reclaim" className={({ isActive }) => 'nav-link' + (isActive ? ' active' : '')}>
+              <ArchiveRestore size={15} strokeWidth={1.75} />
+              Reclaim
+              {staleCount && staleCount.count > 0 && (
+                <span style={{
+                  marginLeft: 'auto',
+                  background: 'var(--warning, #f59e0b)',
+                  color: '#000',
+                  borderRadius: '9999px',
+                  fontSize: '0.6rem',
+                  fontWeight: 700,
+                  padding: '0.05rem 0.35rem',
+                  minWidth: '1.2rem',
+                  textAlign: 'center',
+                }}>
+                  {staleCount.count > 99 ? '99+' : staleCount.count}
+                </span>
+              )}
+            </NavLink>
+          )}
 
           {isAdmin && (
             <NavLink to="/settings" className={({ isActive }) => 'nav-link' + (isActive ? ' active' : '')}>
@@ -96,6 +130,7 @@ export default function App() {
           <Route path="/dns"       element={<DNS />} />
           <Route path="/search"    element={<SearchPage />} />
           <Route path="/audit"     element={<AuditPage />} />
+          {isOperator && <Route path="/reclaim" element={<ReclaimPage />} />}
           {isAdmin && <Route path="/settings" element={<SettingsPage />} />}
         </Routes>
       </main>
