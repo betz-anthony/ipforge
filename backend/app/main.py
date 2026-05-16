@@ -73,7 +73,7 @@ async def lifespan(app: FastAPI):
     yield
 
 
-app = FastAPI(title="IPAM Forge", lifespan=lifespan)
+app = FastAPI(title="IPForge", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,

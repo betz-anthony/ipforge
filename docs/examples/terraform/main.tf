@@ -8,7 +8,7 @@ terraform {
 }
 
 variable "ipam_token" {
-  description = "IPAM Forge JWT token (generate via POST /api/auth/login)"
+  description = "IPForge JWT token (generate via POST /api/auth/login)"
   sensitive   = true
 }
 
