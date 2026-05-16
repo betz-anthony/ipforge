@@ -22,6 +22,8 @@ def _subnet_state(s: Subnet) -> dict:
         "description": s.description, "notes": s.notes,
         "parent_id": s.parent_id,
         "created_at": str(s.created_at) if s.created_at else None,
+        "dns_provider_name": s.dns_provider_name,
+        "dhcp_provider_name": s.dhcp_provider_name,
     }
 
 
@@ -55,6 +57,8 @@ def _build_stats_rows(subnets: list[Subnet], db: Session) -> list[dict]:
             "description": s.description, "notes": s.notes,
             "created_at": s.created_at, "parent_id": s.parent_id,
             "scan_interval_minutes": s.scan_interval_minutes,
+            "dns_provider_name": s.dns_provider_name,
+            "dhcp_provider_name": s.dhcp_provider_name,
             "used_count": used, "total_count": total, "utilization_pct": pct,
             "rollup_used_count": used, "rollup_total_count": total,
             "rollup_utilization_pct": pct,
@@ -163,6 +167,8 @@ def create_subnet(
         vlan_id=data.vlan_id, description=data.description,
         notes=data.notes, parent_id=data.parent_id,
         scan_interval_minutes=data.scan_interval_minutes,
+        dns_provider_name=data.dns_provider_name,
+        dhcp_provider_name=data.dhcp_provider_name,
     )
     db.add(subnet)
     db.flush()
