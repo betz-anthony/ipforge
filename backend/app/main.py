@@ -20,6 +20,7 @@ from app.api import users as users_router
 from app.api import audit as audit_router
 from app.api import cache as cache_router
 from app.api import importexport as importexport_router
+from app.api import allocation as allocation_router
 import app.models  # noqa: F401
 
 logger = logging.getLogger(__name__)
@@ -103,6 +104,7 @@ app.include_router(importexport_router.router, prefix="/api/importexport", tags=
 _op = [Depends(require_operator)]
 app.include_router(sync_router.router,   prefix="/api/sync",  tags=["sync"],  dependencies=_op)
 app.include_router(scan_router.router,   prefix="/api/scan",  tags=["scan"],  dependencies=_op)
+app.include_router(allocation_router.router, prefix="/api/subnets", tags=["allocation"], dependencies=_op)
 
 # Admin only
 _adm = [Depends(require_admin)]
