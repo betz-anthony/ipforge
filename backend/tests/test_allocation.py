@@ -131,3 +131,14 @@ def test_allocate_idempotent_does_not_overwrite_existing_mac(client, db):
     addr = db.query(IPAddress).filter_by(hostname="web-01").first()
     db.refresh(addr)
     assert addr.mac_address == "11:22:33:44:55:66"  # original preserved
+
+
+def test_allocate_deprecated_hostname_gets_new_ip(client, db):
+    s = _subnet(db)
+    db.add(IPAddress(address="10.0.1.2", subnet_id=s.id,
+                     hostname="web-01", status=AddressStatus.deprecated))
+    db.commit()
+    r = client.post(f"/api/subnets/{s.id}/allocate", json={"hostname": "web-01"})
+    assert r.status_code == 201
+    assert r.json()["is_new"] is True
+    assert r.json()["address"] == "10.0.1.3"  # deprecated is in _INELIGIBLE, so .2 is skipped

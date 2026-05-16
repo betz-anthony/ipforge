@@ -47,7 +47,7 @@ def _find_candidate(db: Session, subnet_id: int, cidr: str) -> str | None:
     }
     for ip in ipaddress.ip_network(cidr, strict=False).hosts():
         s = str(ip)
-        if s.endswith(".0") or s.endswith(".1") or s.endswith(".255"):
+        if s.endswith(".0") or s.endswith(".1") or s.endswith(".255"):  # skip gateway, broadcast, and network-like addresses
             continue
         if s in taken:
             continue
@@ -63,18 +63,15 @@ def _resolve_provider(request_name: str | None, subnet_default: str | None, prov
 
 
 def _find_dhcp_scope(provider, ip_address: str) -> str | None:
-    try:
-        target = ipaddress.ip_address(ip_address)
-        for scope in provider.get_scopes():
-            try:
-                start = ipaddress.ip_address(scope.start_range)
-                end   = ipaddress.ip_address(scope.end_range)
-                if start <= target <= end:
-                    return scope.scope_id
-            except ValueError:
-                continue
-    except Exception:
-        pass
+    target = ipaddress.ip_address(ip_address)  # ValueError if bad IP
+    for scope in provider.get_scopes():
+        try:
+            start = ipaddress.ip_address(scope.start_range)
+            end   = ipaddress.ip_address(scope.end_range)
+            if start <= target <= end:
+                return scope.scope_id
+        except ValueError:
+            continue
     return None
 
 
@@ -162,7 +159,20 @@ def allocate_ip(
             raise HTTPException(502, f"DNS registration failed: {exc}")
 
     if body.register_dhcp and dhcp_prov:
-        scope_id = _find_dhcp_scope(dhcp_prov, addr.address)
+        try:
+            scope_id = _find_dhcp_scope(dhcp_prov, addr.address)
+        except Exception as exc:
+            if is_new:
+                if dns_registered and dns_prov:
+                    try:
+                        dns_prov.delete_record(DNSRecord(
+                            name=hostname, record_type="A",
+                            value=addr.address, zone=body.dns_zone or "",
+                        ))
+                    except Exception:
+                        pass
+                db.rollback()
+            raise HTTPException(502, f"DHCP provider error fetching scopes: {exc}")
         if scope_id is None:
             if is_new:
                 if dns_registered and dns_prov:
