@@ -12,7 +12,8 @@ ROLES = {"readonly", "operator", "admin"}
 
 
 def _row(u: User) -> dict:
-    return {"id": u.id, "username": u.username, "role": u.role, "enabled": u.enabled}
+    return {"id": u.id, "username": u.username, "role": u.role, "enabled": u.enabled,
+            "auth_source": u.auth_source}
 
 
 class UserCreate(BaseModel):

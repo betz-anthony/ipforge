@@ -3,8 +3,9 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Eye, EyeOff, Save, Plus, Pencil, Trash2, Check, X } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import {
-  settingsApi, providerConfigsApi, cacheApi, usersApi,
+  settingsApi, providerConfigsApi, cacheApi, usersApi, ldapApi,
   type AppSettingsUpdate, type ProviderConfig, type ProviderConfigCreate, type UserRecord,
+  type LdapSettings,
 } from '../api/client'
 
 // ── Provider field definitions ─────────────────────────────────────────────
@@ -426,14 +427,16 @@ function UsersSection({ currentUsername }: { currentUsername: string }) {
                     {ROLE_OPTIONS.map(r => <option key={r} value={r}>{r}</option>)}
                   </select>
                 </Field>
-                <Field label="New Password" hint="leave blank to keep">
-                  <input
-                    type="password"
-                    value={editPassword}
-                    onChange={e => setEditPassword(e.target.value)}
-                    placeholder="Leave blank to keep"
-                  />
-                </Field>
+                {u.auth_source !== 'ldap' && (
+                  <Field label="New Password" hint="leave blank to keep">
+                    <input
+                      type="password"
+                      value={editPassword}
+                      onChange={e => setEditPassword(e.target.value)}
+                      placeholder="Leave blank to keep"
+                    />
+                  </Field>
+                )}
                 {u.username !== currentUsername && (
                   <Field label="Enabled">
                     <select value={editEnabled ? 'yes' : 'no'} onChange={e => setEditEnabled(e.target.value === 'yes')}>
@@ -449,7 +452,7 @@ function UsersSection({ currentUsername }: { currentUsername: string }) {
                   disabled={updateMut.isPending}
                   onClick={() => {
                     const data: Parameters<typeof usersApi.update>[1] = { role: editRole, enabled: editEnabled }
-                    if (editPassword) data.password = editPassword
+                    if (editPassword && u.auth_source !== 'ldap') data.password = editPassword
                     updateMut.mutate({ id: u.id, data })
                   }}
                 >
@@ -472,6 +475,9 @@ function UsersSection({ currentUsername }: { currentUsername: string }) {
             }}>
               <span style={{ flex: 1, fontSize: '0.82rem', fontFamily: 'var(--font-mono)' }}>{u.username}</span>
               <span className="badge badge-gray" style={{ fontSize: '0.6rem' }}>{u.role}</span>
+              {u.auth_source === 'ldap' && (
+                <span className="badge badge-blue" style={{ fontSize: '0.6rem' }}>ldap</span>
+              )}
               {!u.enabled && (
                 <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>disabled</span>
               )}
@@ -527,6 +533,138 @@ function UsersSection({ currentUsername }: { currentUsername: string }) {
   )
 }
 
+// ── LDAP settings section ──────────────────────────────────────────────────
+
+function LdapSection() {
+  const qc = useQueryClient()
+  const { data, isLoading } = useQuery({ queryKey: ['ldap-settings'], queryFn: ldapApi.get })
+
+  const defaults: LdapSettings = {
+    ldap_enabled: false,
+    ldap_host: '', ldap_port: 389, ldap_use_ssl: false,
+    ldap_bind_dn: '', ldap_bind_password: '', ldap_base_dn: '',
+    ldap_user_filter: '(sAMAccountName={username})',
+    ldap_group_admin: '', ldap_group_operator: '', ldap_group_readonly: '',
+    ldap_default_role: 'readonly',
+  }
+  const [form, setForm] = useState<LdapSettings>(defaults)
+  const [showPass, setShowPass] = useState(false)
+  const [saved, setSaved] = useState(false)
+
+  useEffect(() => {
+    if (data) setForm({ ...data, ldap_bind_password: '' })
+  }, [data])
+
+  const mutation = useMutation({
+    mutationFn: () => {
+      const payload: Partial<LdapSettings> = { ...form }
+      if (!payload.ldap_bind_password) delete payload.ldap_bind_password
+      return ldapApi.update(payload)
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['ldap-settings'] })
+      setSaved(true)
+      setTimeout(() => setSaved(false), 3000)
+    },
+  })
+
+  const set = (key: keyof LdapSettings) =>
+    (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+      const val = e.target.type === 'checkbox'
+        ? (e.target as HTMLInputElement).checked
+        : e.target.type === 'number' ? Number(e.target.value) : e.target.value
+      setForm(f => ({ ...f, [key]: val }))
+    }
+
+  if (isLoading) return null
+
+  return (
+    <div className="settings-section">
+      <SectionTitle>LDAP / Active Directory</SectionTitle>
+      <form onSubmit={e => { e.preventDefault(); mutation.mutate() }}>
+        <div className="form-grid">
+          <Field label="Enable LDAP">
+            <select value={form.ldap_enabled ? 'yes' : 'no'}
+              onChange={e => setForm(f => ({ ...f, ldap_enabled: e.target.value === 'yes' }))}>
+              <option value="no">Disabled</option>
+              <option value="yes">Enabled</option>
+            </select>
+          </Field>
+          <Field label="LDAP Host">
+            <input value={form.ldap_host} onChange={set('ldap_host')} placeholder="ldap.example.com" />
+          </Field>
+          <Field label="Port">
+            <input type="number" value={form.ldap_port} onChange={set('ldap_port')} />
+          </Field>
+          <Field label="Use SSL (LDAPS)">
+            <select value={form.ldap_use_ssl ? 'yes' : 'no'}
+              onChange={e => setForm(f => ({ ...f, ldap_use_ssl: e.target.value === 'yes' }))}>
+              <option value="no">No</option>
+              <option value="yes">Yes</option>
+            </select>
+          </Field>
+          <Field label="Bind DN">
+            <input value={form.ldap_bind_dn} onChange={set('ldap_bind_dn')}
+              placeholder="cn=svc-ipam,dc=example,dc=com" />
+          </Field>
+          <Field label="Bind Password" hint="leave blank to keep existing">
+            <div className="password-wrap">
+              <input
+                type={showPass ? 'text' : 'password'}
+                value={form.ldap_bind_password}
+                onChange={set('ldap_bind_password')}
+                placeholder="Leave blank to keep"
+              />
+              <button type="button" className="btn-ghost btn-sm"
+                onClick={() => setShowPass(s => !s)}>
+                {showPass ? <EyeOff size={13} /> : <Eye size={13} />}
+              </button>
+            </div>
+          </Field>
+          <Field label="Base DN">
+            <input value={form.ldap_base_dn} onChange={set('ldap_base_dn')}
+              placeholder="dc=example,dc=com" />
+          </Field>
+          <Field label="User Filter" hint="{username} replaced at runtime">
+            <input value={form.ldap_user_filter} onChange={set('ldap_user_filter')}
+              placeholder="(sAMAccountName={username})" />
+          </Field>
+          <Field label="Admin Group DN" hint="optional">
+            <input value={form.ldap_group_admin} onChange={set('ldap_group_admin')}
+              placeholder="CN=IPAM-Admins,dc=example,dc=com" />
+          </Field>
+          <Field label="Operator Group DN" hint="optional">
+            <input value={form.ldap_group_operator} onChange={set('ldap_group_operator')}
+              placeholder="CN=IPAM-Ops,dc=example,dc=com" />
+          </Field>
+          <Field label="Readonly Group DN" hint="optional">
+            <input value={form.ldap_group_readonly} onChange={set('ldap_group_readonly')}
+              placeholder="CN=IPAM-RO,dc=example,dc=com" />
+          </Field>
+          <Field label="Default Role" hint="when no group match">
+            <select value={form.ldap_default_role}
+              onChange={e => setForm(f => ({ ...f, ldap_default_role: e.target.value }))}>
+              <option value="readonly">readonly</option>
+              <option value="operator">operator</option>
+              <option value="admin">admin</option>
+            </select>
+          </Field>
+        </div>
+        <div className="form-actions">
+          <button type="submit" className="btn-primary" disabled={mutation.isPending}>
+            <Save size={13} />
+            {mutation.isPending ? 'Saving…' : 'Save LDAP Settings'}
+          </button>
+          {saved && <span className="feedback-success">Saved.</span>}
+          {mutation.isError && (
+            <span className="feedback-error">{String((mutation.error as Error).message)}</span>
+          )}
+        </div>
+      </form>
+    </div>
+  )
+}
+
 // ── Main settings page ─────────────────────────────────────────────────────
 
 export default function SettingsPage() {
@@ -577,6 +715,9 @@ export default function SettingsPage() {
       {/* ── Providers ── */}
       <ProviderSection category="dns"  providers={providerConfigs} qc={qc} />
       <ProviderSection category="dhcp" providers={providerConfigs} qc={qc} />
+
+      {/* ── LDAP ── */}
+      <LdapSection />
 
       {/* ── Utilization ── */}
       <form onSubmit={e => { e.preventDefault(); mutation.mutate() }}>
