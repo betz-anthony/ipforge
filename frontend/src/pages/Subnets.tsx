@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect, useRef } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Plus, X, Scan, AlertTriangle, GitBranch } from 'lucide-react'
-import { subnetsApi, dhcpApi, addressesApi, scanApi, settingsApi, type Subnet, type DHCPScope, type Collision } from '../api/client'
+import { Plus, X, Scan, AlertTriangle, GitBranch, Download, Upload } from 'lucide-react'
+import { subnetsApi, dhcpApi, addressesApi, scanApi, settingsApi, importExportApi, type Subnet, type DHCPScope, type Collision, type ImportResult } from '../api/client'
 import { ipInCidr } from '../utils/ip'
 import DetailDrawer from '../components/DetailDrawer'
 import UtilBar from '../components/UtilBar'
@@ -20,6 +20,10 @@ export default function Subnets() {
   const qc = useQueryClient()
   const [showRangePicker, setShowRangePicker] = useState(false)
   const [rangeForm, setRangeForm]             = useState({ start_ip: '', end_ip: '' })
+
+  const [importResult, setImportResult] = useState<ImportResult | null>(null)
+  const importRef = useRef<HTMLInputElement>(null)
+  const [importing, setImporting] = useState(false)
 
   const [formParentId, setFormParentId]                 = useState<number | null>(null)
   const [parentCandidates, setParentCandidates]         = useState<Subnet[]>([])
@@ -422,6 +426,44 @@ export default function Subnets() {
           >
             {treeView ? '☰ Flat' : <><GitBranch size={13} /> Tree</>}
           </button>
+          <a
+            className="btn-ghost btn-sm"
+            href={importExportApi.exportSubnetsUrl()}
+            download="subnets.csv"
+            title="Export subnets to CSV"
+          >
+            <Download size={13} /> Export
+          </a>
+          <button
+            className="btn-ghost btn-sm"
+            onClick={() => importRef.current?.click()}
+            disabled={importing}
+            title="Import subnets from CSV"
+          >
+            <Upload size={13} /> {importing ? 'Importing…' : 'Import'}
+          </button>
+          <input
+            ref={importRef}
+            type="file"
+            accept=".csv"
+            style={{ display: 'none' }}
+            onChange={async e => {
+              const file = e.target.files?.[0]
+              if (!file) return
+              setImporting(true)
+              setImportResult(null)
+              try {
+                const result = await importExportApi.importSubnets(file)
+                setImportResult(result)
+                qc.invalidateQueries({ queryKey: ['subnets'] })
+              } catch {
+                setImportResult({ created: 0, updated: 0, skipped: 0, errors: ['Upload failed'] })
+              } finally {
+                setImporting(false)
+                e.target.value = ''
+              }
+            }}
+          />
           {!showForm && (
             <button className="btn-primary btn-sm" onClick={() => setShowForm(true)}>
               <Plus size={13} /> Add Subnet
@@ -429,6 +471,24 @@ export default function Subnets() {
           )}
         </div>
       </div>
+
+      {importResult && (
+        <div className={`inline-form ${importResult.errors.length ? 'border-l-4 border-yellow-500' : 'border-l-4 border-green-500'}`} style={{ marginBottom: '1rem' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+            <div>
+              <strong>Import complete:</strong> {importResult.created} created, {importResult.updated} updated, {importResult.skipped} skipped
+              {importResult.errors.length > 0 && (
+                <ul style={{ marginTop: '0.5rem', paddingLeft: '1rem', fontSize: '0.85em', color: 'var(--color-warn, #b45309)' }}>
+                  {importResult.errors.map((e, i) => <li key={i}>{e}</li>)}
+                </ul>
+              )}
+            </div>
+            <button className="btn-ghost btn-sm" onClick={() => setImportResult(null)}>
+              <X size={13} />
+            </button>
+          </div>
+        </div>
+      )}
 
       {showForm && (
         <div className="inline-form">

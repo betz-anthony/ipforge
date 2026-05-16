@@ -1,7 +1,7 @@
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Plus, X } from 'lucide-react'
-import { addressesApi, subnetsApi, dnsApi, dhcpApi, scanHistoryApi, type IPAddress } from '../api/client'
+import { Plus, X, Download, Upload } from 'lucide-react'
+import { addressesApi, subnetsApi, dnsApi, dhcpApi, scanHistoryApi, importExportApi, type IPAddress, type ImportResult } from '../api/client'
 import { formatRelative } from '../utils/time'
 import DetailDrawer from '../components/DetailDrawer'
 
@@ -31,6 +31,9 @@ export default function Addresses() {
   const [selectedAddress, setSelectedAddress] = useState<IPAddress | null>(null)
   const [editForm, setEditForm]               = useState(emptyEditForm)
   const qc = useQueryClient()
+  const [importResult, setImportResult] = useState<ImportResult | null>(null)
+  const importRef = useRef<HTMLInputElement>(null)
+  const [importing, setImporting] = useState(false)
 
   const { data: ipDnsRecords } = useQuery({
     queryKey: ['dns-by-ip', selectedAddress?.address],
@@ -285,6 +288,44 @@ export default function Addresses() {
               <option key={s.id} value={s.id}>{s.name} ({s.cidr})</option>
             ))}
           </select>
+          <a
+            className="btn-ghost btn-sm"
+            href={importExportApi.exportAddressesUrl()}
+            download="addresses.csv"
+            title="Export addresses to CSV"
+          >
+            <Download size={13} /> Export
+          </a>
+          <button
+            className="btn-ghost btn-sm"
+            onClick={() => importRef.current?.click()}
+            disabled={importing}
+            title="Import addresses from CSV"
+          >
+            <Upload size={13} /> {importing ? 'Importing…' : 'Import'}
+          </button>
+          <input
+            ref={importRef}
+            type="file"
+            accept=".csv"
+            style={{ display: 'none' }}
+            onChange={async e => {
+              const file = e.target.files?.[0]
+              if (!file) return
+              setImporting(true)
+              setImportResult(null)
+              try {
+                const result = await importExportApi.importAddresses(file)
+                setImportResult(result)
+                qc.invalidateQueries({ queryKey: ['addresses'] })
+              } catch {
+                setImportResult({ created: 0, updated: 0, skipped: 0, errors: ['Upload failed'] })
+              } finally {
+                setImporting(false)
+                e.target.value = ''
+              }
+            }}
+          />
           {!showForm && (
             <button className="btn-primary btn-sm" onClick={() => setShowForm(true)}>
               <Plus size={13} /> Add Address
@@ -292,6 +333,24 @@ export default function Addresses() {
           )}
         </div>
       </div>
+
+      {importResult && (
+        <div className={`inline-form ${importResult.errors.length ? 'border-l-4 border-yellow-500' : 'border-l-4 border-green-500'}`} style={{ marginBottom: '1rem' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+            <div>
+              <strong>Import complete:</strong> {importResult.created} created, {importResult.updated} updated, {importResult.skipped} skipped
+              {importResult.errors.length > 0 && (
+                <ul style={{ marginTop: '0.5rem', paddingLeft: '1rem', fontSize: '0.85em', color: 'var(--color-warn, #b45309)' }}>
+                  {importResult.errors.map((e, i) => <li key={i}>{e}</li>)}
+                </ul>
+              )}
+            </div>
+            <button className="btn-ghost btn-sm" onClick={() => setImportResult(null)}>
+              <X size={13} />
+            </button>
+          </div>
+        </div>
+      )}
 
       {showForm && (
         <div className="inline-form">
