@@ -38,7 +38,7 @@ export default function Login() {
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1.5rem' }}>
           <Network size={20} />
-          <span style={{ fontWeight: 600, fontSize: '1.1rem' }}>IPAM Forge</span>
+          <span style={{ fontWeight: 600, fontSize: '1.1rem' }}>IPForge</span>
         </div>
 
         <form onSubmit={submit}>
