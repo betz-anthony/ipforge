@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useQuery, useMutation } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
 import { Network, List, Server, Globe, Search } from 'lucide-react'
-import { statsApi, dnsApi, dhcpApi, scanApi, subnetsApi, settingsApi, scanAlertsApi, type Collision } from '../api/client'
+import { statsApi, dnsApi, dhcpApi, scanApi, subnetsApi, settingsApi, scanAlertsApi, reclaimApi, type Collision } from '../api/client'
 import { formatRelative } from '../utils/time'
 import SlidePanel from '../components/SlidePanel'
 import UtilBar from '../components/UtilBar'
@@ -57,6 +57,11 @@ export default function Dashboard() {
   const acknowledgeAllMutation = useMutation({
     mutationFn: () => scanAlertsApi.acknowledgeAll(),
     onSuccess: () => refetchAlerts(),
+  })
+
+  const { data: staleCount } = useQuery({
+    queryKey: ['stale-count'],
+    queryFn: reclaimApi.countStale,
   })
 
   const { data: subnets }      = useQuery({ queryKey: ['subnets'],  queryFn: subnetsApi.list })
@@ -143,6 +148,20 @@ export default function Dashboard() {
           <div className="stat-label">Scan Alerts</div>
           <div className="stat-sub">unacknowledged</div>
         </div>
+        <Link
+          to="/reclaim"
+          className="stat-card"
+          style={{ textDecoration: 'none', cursor: 'pointer' }}
+        >
+          <div
+            className="stat-value"
+            style={{ color: staleCount && staleCount.count > 0 ? 'var(--warning, #f59e0b)' : undefined }}
+          >
+            {staleCount?.count ?? '—'}
+          </div>
+          <div className="stat-label">Stale IPs</div>
+          <div className="stat-sub">needs review</div>
+        </Link>
       </div>
 
       <p className="section-label">Sections</p>
