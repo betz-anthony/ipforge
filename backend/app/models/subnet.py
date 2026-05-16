@@ -19,6 +19,8 @@ class Subnet(Base):
         Integer, ForeignKey("subnets.id"), nullable=True
     )
     scan_interval_minutes: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    dns_provider_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    dhcp_provider_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
 
     addresses: Mapped[list["IPAddress"]] = relationship(
         "IPAddress", back_populates="subnet", cascade="all, delete-orphan"
