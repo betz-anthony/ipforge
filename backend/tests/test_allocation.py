@@ -244,3 +244,115 @@ def test_allocate_request_overrides_subnet_dns_provider(client, db):
     assert r.status_code == 201
     mock_override.add_record.assert_called_once()
     mock_default.add_record.assert_not_called()
+
+
+# ── DHCP registration ─────────────────────────────────────────────────────────
+
+def _mock_dhcp(source="msdhcp", scope_start="10.0.1.1", scope_end="10.0.1.254"):
+    mock = MagicMock()
+    mock.source = source
+    mock.get_scopes.return_value = [
+        DHCPScope(
+            scope_id="10.0.1.0", name="test", subnet_mask="/24",
+            start_range=scope_start, end_range=scope_end,
+        )
+    ]
+    mock.add_reservation = MagicMock()
+    mock.delete_reservation = MagicMock()
+    return mock
+
+
+def test_allocate_register_dhcp_missing_mac(client, db):
+    s = _subnet(db)
+    mock_dhcp = _mock_dhcp()
+    with patch("app.api.allocation.get_dhcp_providers", return_value=[mock_dhcp]):
+        r = client.post(f"/api/subnets/{s.id}/allocate",
+                        json={"hostname": "web-01", "register_dhcp": True})
+    assert r.status_code == 422
+    assert "mac_address" in r.json()["detail"]
+
+
+def test_allocate_register_dhcp_no_provider(client, db):
+    s = _subnet(db)
+    with patch("app.api.allocation.get_dhcp_providers", return_value=[]):
+        r = client.post(f"/api/subnets/{s.id}/allocate",
+                        json={"hostname": "web-01", "register_dhcp": True,
+                              "mac_address": "aa:bb:cc:dd:ee:ff"})
+    assert r.status_code == 400
+
+
+def test_allocate_register_dhcp_success(client, db):
+    s = _subnet(db)
+    mock_dhcp = _mock_dhcp()
+    with patch("app.api.allocation.get_dhcp_providers", return_value=[mock_dhcp]):
+        r = client.post(f"/api/subnets/{s.id}/allocate",
+                        json={"hostname": "web-01", "register_dhcp": True,
+                              "mac_address": "aa:bb:cc:dd:ee:ff"})
+    assert r.status_code == 201
+    assert r.json()["dhcp_registered"] is True
+    mock_dhcp.add_reservation.assert_called_once()
+    call_res = mock_dhcp.add_reservation.call_args[0][0]
+    assert call_res.ip_address == "10.0.1.2"
+    assert call_res.mac_address == "aa:bb:cc:dd:ee:ff"
+    assert call_res.name == "web-01"
+
+
+def test_allocate_dhcp_no_matching_scope(client, db):
+    # Scope doesn't contain the allocated IP → 400, IP rolled back
+    s = _subnet(db)
+    mock_dhcp = _mock_dhcp(scope_start="192.168.1.1", scope_end="192.168.1.254")
+    with patch("app.api.allocation.get_dhcp_providers", return_value=[mock_dhcp]):
+        r = client.post(f"/api/subnets/{s.id}/allocate",
+                        json={"hostname": "web-01", "register_dhcp": True,
+                              "mac_address": "aa:bb:cc:dd:ee:ff"})
+    assert r.status_code == 400
+    assert db.query(IPAddress).filter_by(subnet_id=s.id).count() == 0
+
+
+def test_allocate_dhcp_failure_rolls_back_ip(client, db):
+    s = _subnet(db)
+    mock_dhcp = _mock_dhcp()
+    mock_dhcp.add_reservation = MagicMock(side_effect=Exception("DHCP error"))
+    with patch("app.api.allocation.get_dhcp_providers", return_value=[mock_dhcp]):
+        r = client.post(f"/api/subnets/{s.id}/allocate",
+                        json={"hostname": "web-01", "register_dhcp": True,
+                              "mac_address": "aa:bb:cc:dd:ee:ff"})
+    assert r.status_code == 502
+    assert "DHCP registration failed" in r.json()["detail"]
+    assert db.query(IPAddress).filter_by(subnet_id=s.id).count() == 0
+
+
+def test_allocate_dhcp_failure_rolls_back_ip_and_dns(client, db):
+    s = _subnet(db)
+    mock_dns = MagicMock()
+    mock_dns.source = "msdns"
+    mock_dns.add_record = MagicMock()
+    mock_dns.delete_record = MagicMock()
+    mock_dhcp = _mock_dhcp()
+    mock_dhcp.add_reservation = MagicMock(side_effect=Exception("DHCP error"))
+    with patch("app.api.allocation.get_dns_providers", return_value=[mock_dns]), \
+         patch("app.api.allocation.get_dhcp_providers", return_value=[mock_dhcp]):
+        r = client.post(f"/api/subnets/{s.id}/allocate",
+                        json={"hostname": "web-01", "register_dns": True,
+                              "dns_zone": "example.com", "register_dhcp": True,
+                              "mac_address": "aa:bb:cc:dd:ee:ff"})
+    assert r.status_code == 502
+    assert db.query(IPAddress).filter_by(subnet_id=s.id).count() == 0
+    mock_dns.delete_record.assert_called_once()
+    deleted = mock_dns.delete_record.call_args[0][0]
+    assert deleted.name == "web-01"
+    assert deleted.zone == "example.com"
+
+
+def test_allocate_uses_subnet_dhcp_provider(client, db):
+    s = _subnet(db, dhcp_provider_name="preferred-dhcp")
+    mock_preferred = _mock_dhcp(source="preferred-dhcp")
+    mock_other = _mock_dhcp(source="other-dhcp")
+    with patch("app.api.allocation.get_dhcp_providers",
+               return_value=[mock_other, mock_preferred]):
+        r = client.post(f"/api/subnets/{s.id}/allocate",
+                        json={"hostname": "web-01", "register_dhcp": True,
+                              "mac_address": "aa:bb:cc:dd:ee:ff"})
+    assert r.status_code == 201
+    mock_preferred.add_reservation.assert_called_once()
+    mock_other.add_reservation.assert_not_called()
