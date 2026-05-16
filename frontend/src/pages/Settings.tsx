@@ -540,6 +540,7 @@ export default function SettingsPage() {
     util_critical_threshold: 95,
     util_dashboard_top_n:    5,
     scan_interval_minutes:   30,
+    stale_reclaim_days:      30,
   })
   const [saved, setSaved] = useState(false)
 
@@ -550,6 +551,7 @@ export default function SettingsPage() {
       util_critical_threshold: settingsData.util_critical_threshold,
       util_dashboard_top_n:    settingsData.util_dashboard_top_n,
       scan_interval_minutes:   settingsData.scan_interval_minutes,
+      stale_reclaim_days:      settingsData.stale_reclaim_days,
     })
   }, [settingsData])
 
@@ -596,6 +598,14 @@ export default function SettingsPage() {
                 min={1}
                 value={form.scan_interval_minutes ?? 30}
                 onChange={s('scan_interval_minutes')}
+              />
+            </Field>
+            <Field label="Stale Reclaim Threshold (days)" hint="0 = disabled, default 30">
+              <input
+                type="number"
+                min={0}
+                value={form.stale_reclaim_days ?? 30}
+                onChange={s('stale_reclaim_days')}
               />
             </Field>
           </div>
