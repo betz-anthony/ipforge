@@ -142,3 +142,105 @@ def test_allocate_deprecated_hostname_gets_new_ip(client, db):
     assert r.status_code == 201
     assert r.json()["is_new"] is True
     assert r.json()["address"] == "10.0.1.3"  # deprecated is in _INELIGIBLE, so .2 is skipped
+
+
+# ── DNS registration ──────────────────────────────────────────────────────────
+
+def test_allocate_register_dns_missing_zone(client, db):
+    s = _subnet(db)
+    r = client.post(f"/api/subnets/{s.id}/allocate",
+                    json={"hostname": "web-01", "register_dns": True})
+    assert r.status_code == 422
+    assert "dns_zone" in r.json()["detail"]
+
+
+def test_allocate_register_dns_no_provider(client, db):
+    s = _subnet(db)
+    with patch("app.api.allocation.get_dns_providers", return_value=[]):
+        r = client.post(f"/api/subnets/{s.id}/allocate",
+                        json={"hostname": "web-01", "register_dns": True,
+                              "dns_zone": "example.com"})
+    assert r.status_code == 400
+
+
+def test_allocate_register_dns_success(client, db):
+    s = _subnet(db)
+    mock_dns = MagicMock()
+    mock_dns.source = "msdns"
+    mock_dns.add_record = MagicMock()
+    with patch("app.api.allocation.get_dns_providers", return_value=[mock_dns]):
+        r = client.post(f"/api/subnets/{s.id}/allocate",
+                        json={"hostname": "web-01", "register_dns": True,
+                              "dns_zone": "example.com"})
+    assert r.status_code == 201
+    assert r.json()["dns_registered"] is True
+    mock_dns.add_record.assert_called_once()
+    call_record = mock_dns.add_record.call_args[0][0]
+    assert call_record.name == "web-01"
+    assert call_record.record_type == "A"
+    assert call_record.zone == "example.com"
+    assert call_record.value == "10.0.1.2"
+
+
+def test_allocate_register_dns_failure_rolls_back_ip(client, db):
+    s = _subnet(db)
+    mock_dns = MagicMock()
+    mock_dns.source = "msdns"
+    mock_dns.add_record = MagicMock(side_effect=Exception("DNS timeout"))
+    with patch("app.api.allocation.get_dns_providers", return_value=[mock_dns]):
+        r = client.post(f"/api/subnets/{s.id}/allocate",
+                        json={"hostname": "web-01", "register_dns": True,
+                              "dns_zone": "example.com"})
+    assert r.status_code == 502
+    assert "DNS registration failed" in r.json()["detail"]
+    assert db.query(IPAddress).filter_by(subnet_id=s.id).count() == 0
+
+
+def test_allocate_dns_failure_idempotent_hit_keeps_ip(client, db):
+    # Idempotent hit: existing IP should NOT be deleted on DNS failure
+    s = _subnet(db)
+    client.post(f"/api/subnets/{s.id}/allocate", json={"hostname": "web-01"})
+    mock_dns = MagicMock()
+    mock_dns.source = "msdns"
+    mock_dns.add_record = MagicMock(side_effect=Exception("DNS timeout"))
+    with patch("app.api.allocation.get_dns_providers", return_value=[mock_dns]):
+        r = client.post(f"/api/subnets/{s.id}/allocate",
+                        json={"hostname": "web-01", "register_dns": True,
+                              "dns_zone": "example.com"})
+    assert r.status_code == 502
+    assert db.query(IPAddress).filter_by(subnet_id=s.id).count() == 1  # still exists
+
+
+def test_allocate_uses_subnet_dns_provider(client, db):
+    s = _subnet(db, dns_provider_name="preferred-dns")
+    mock_preferred = MagicMock()
+    mock_preferred.source = "preferred-dns"
+    mock_preferred.add_record = MagicMock()
+    mock_other = MagicMock()
+    mock_other.source = "other-dns"
+    with patch("app.api.allocation.get_dns_providers",
+               return_value=[mock_other, mock_preferred]):
+        r = client.post(f"/api/subnets/{s.id}/allocate",
+                        json={"hostname": "web-01", "register_dns": True,
+                              "dns_zone": "example.com"})
+    assert r.status_code == 201
+    mock_preferred.add_record.assert_called_once()
+    mock_other.add_record.assert_not_called()
+
+
+def test_allocate_request_overrides_subnet_dns_provider(client, db):
+    s = _subnet(db, dns_provider_name="subnet-default")
+    mock_override = MagicMock()
+    mock_override.source = "explicit-provider"
+    mock_override.add_record = MagicMock()
+    mock_default = MagicMock()
+    mock_default.source = "subnet-default"
+    with patch("app.api.allocation.get_dns_providers",
+               return_value=[mock_default, mock_override]):
+        r = client.post(f"/api/subnets/{s.id}/allocate",
+                        json={"hostname": "web-01", "register_dns": True,
+                              "dns_zone": "example.com",
+                              "dns_provider": "explicit-provider"})
+    assert r.status_code == 201
+    mock_override.add_record.assert_called_once()
+    mock_default.add_record.assert_not_called()
