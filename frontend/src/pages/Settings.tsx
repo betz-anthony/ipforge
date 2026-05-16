@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Eye, EyeOff, Save, Plus, Pencil, Trash2, Check, X } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import {
-  settingsApi, providerConfigsApi, usersApi,
+  settingsApi, providerConfigsApi, cacheApi, usersApi,
   type AppSettingsUpdate, type ProviderConfig, type ProviderConfigCreate, type UserRecord,
 } from '../api/client'
 
@@ -246,6 +246,11 @@ function ProviderSection({
     onSuccess: () => { invalidate() },
   })
 
+  const cachePurgeMut = useMutation({
+    mutationFn: ({ source }: { source: string }) =>
+      cacheApi.purge(category as 'dns' | 'dhcp', source),
+  })
+
   const toggleMut = useMutation({
     mutationFn: ({ id, enabled }: { id: number; enabled: boolean }) =>
       providerConfigsApi.update(id, { enabled }),
@@ -312,6 +317,14 @@ function ProviderSection({
                 title="Edit"
               >
                 <Pencil size={12} />
+              </button>
+              <button
+                className="btn-ghost btn-sm"
+                onClick={() => window.confirm(`Clear all cached ${category.toUpperCase()} data for "${p.name}"?`) && cachePurgeMut.mutate({ source: p.name })}
+                title="Clear Cache"
+                style={{ fontSize: '0.65rem' }}
+              >
+                Clear Cache
               </button>
               <button
                 className="btn-danger btn-sm"

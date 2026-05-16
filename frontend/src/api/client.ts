@@ -246,6 +246,11 @@ export const providerConfigsApi = {
   delete: (id: number)                           => api.delete(`/provider-configs/${id}`),
 }
 
+export const cacheApi = {
+  purge: (category: 'dns' | 'dhcp', source: string) =>
+    api.delete<{ category: string; source: string; deleted: number }>(`/cache/${category}`, { params: { source } }).then(r => r.data),
+}
+
 export interface SyncInfo {
   synced_at: string | null
   age_seconds: number | null
