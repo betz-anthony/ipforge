@@ -52,3 +52,23 @@ def test_reclaim_dismissed_until_column_exists(db):
     a = _ip(db, s.id, "10.0.1.2", last_seen_days_ago=40)
     assert hasattr(a, "reclaim_dismissed_until")
     assert a.reclaim_dismissed_until is None
+
+
+# ── settings ──────────────────────────────────────────────────────────────────
+
+def test_settings_returns_stale_reclaim_days_default(client):
+    r = client.get("/api/settings")
+    assert r.status_code == 200
+    assert r.json()["stale_reclaim_days"] == 30
+
+
+def test_settings_update_stale_reclaim_days(client):
+    r = client.put("/api/settings", json={"stale_reclaim_days": 60})
+    assert r.status_code == 200
+    assert r.json()["stale_reclaim_days"] == 60
+
+
+def test_settings_stale_reclaim_days_zero_allowed(client):
+    r = client.put("/api/settings", json={"stale_reclaim_days": 0})
+    assert r.status_code == 200
+    assert r.json()["stale_reclaim_days"] == 0
