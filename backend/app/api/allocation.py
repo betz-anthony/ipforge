@@ -178,6 +178,8 @@ def allocate_ip(
         try:
             dns_prov.add_record(record)
             dns_registered = True
+            addr.dns_provider = dns_prov.source
+            addr.dns_zone = body.dns_zone or ""
         except Exception as exc:
             if is_new:
                 db.rollback()
@@ -219,6 +221,8 @@ def allocate_ip(
         try:
             dhcp_prov.add_reservation(reservation)
             dhcp_registered = True
+            addr.dhcp_provider = dhcp_prov.source
+            addr.dhcp_scope_id = scope_id
         except Exception as exc:
             if is_new:
                 if dns_registered and dns_prov:

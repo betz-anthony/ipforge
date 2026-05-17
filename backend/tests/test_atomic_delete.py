@@ -1,5 +1,8 @@
+from unittest.mock import MagicMock, patch
+
 from app.models.address import IPAddress
 from app.models.subnet import Subnet
+from app.providers.dhcp.base import DHCPScope
 
 
 def _subnet(db, cidr="10.1.0.0/24"):
@@ -42,3 +45,41 @@ def test_address_read_schema_exposes_provider_fields(client, db):
     assert row["dns_zone"] == "example.com"
     assert row["dhcp_provider"] == "pihole"
     assert row["dhcp_scope_id"] == "pihole"
+
+
+def test_allocation_sets_dns_provider(client, db):
+    s = _subnet(db)
+    mock_dns = MagicMock()
+    mock_dns.source = "bind01"
+    mock_dns.add_record = MagicMock()
+    with patch("app.api.allocation.get_dns_providers", return_value=[mock_dns]):
+        r = client.post(f"/api/subnets/{s.id}/allocate", json={
+            "hostname": "web01",
+            "register_dns": True,
+            "dns_zone": "example.com",
+        })
+    assert r.status_code == 201
+    addr = db.query(IPAddress).filter_by(address=r.json()["address"]).first()
+    assert addr.dns_provider == "bind01"
+    assert addr.dns_zone == "example.com"
+
+
+def test_allocation_sets_dhcp_provider(client, db):
+    s = _subnet(db)
+    mock_dhcp = MagicMock()
+    mock_dhcp.source = "pihole"
+    mock_dhcp.add_reservation = MagicMock()
+    mock_dhcp.get_scopes = MagicMock(return_value=[
+        DHCPScope(scope_id="pihole", name="pihole", subnet_mask="", start_range="10.1.0.1",
+                  end_range="10.1.0.254", description="", active=True),
+    ])
+    with patch("app.api.allocation.get_dhcp_providers", return_value=[mock_dhcp]):
+        r = client.post(f"/api/subnets/{s.id}/allocate", json={
+            "hostname": "web02",
+            "register_dhcp": True,
+            "mac_address": "aa:bb:cc:dd:ee:ff",
+        })
+    assert r.status_code == 201
+    addr = db.query(IPAddress).filter_by(address=r.json()["address"]).first()
+    assert addr.dhcp_provider == "pihole"
+    assert addr.dhcp_scope_id == "pihole"
