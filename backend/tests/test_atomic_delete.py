@@ -237,3 +237,19 @@ def test_delete_rollback_on_provider_failure(client, db):
                            json={"cleanup_keys": [dns_key]})
     assert r.status_code == 502
     assert db.get(IPAddress, addr_id) is not None  # DB row intact
+
+
+def test_subnet_delete_blocked_when_has_addresses(client, db):
+    s = _subnet(db, "10.11.0.0/24")
+    _ip(db, s, "10.11.0.2")
+    r = client.delete(f"/api/subnets/{s.id}")
+    assert r.status_code == 409
+    assert "1 addresses remain" in r.json()["detail"]
+    assert db.get(Subnet, s.id) is not None
+
+
+def test_subnet_delete_succeeds_when_empty(client, db):
+    s = _subnet(db, "10.12.0.0/24")
+    r = client.delete(f"/api/subnets/{s.id}")
+    assert r.status_code == 204
+    assert db.get(Subnet, s.id) is None

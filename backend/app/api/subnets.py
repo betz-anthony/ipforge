@@ -238,6 +238,9 @@ def delete_subnet(
         raise HTTPException(404, "Subnet not found")
     if db.query(Subnet).filter(Subnet.parent_id == subnet_id).first():
         raise HTTPException(409, "Cannot delete subnet with children")
+    count = db.query(IPAddress).filter(IPAddress.subnet_id == subnet_id).count()
+    if count > 0:
+        raise HTTPException(409, f"Subnet must be empty before deletion ({count} addresses remain)")
     write_audit(db, current_user.username, "delete", "subnet", str(subnet.id),
                 f"{subnet.cidr} ({subnet.name})", before=_subnet_state(subnet))
     db.delete(subnet)
