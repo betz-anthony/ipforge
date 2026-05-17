@@ -1,4 +1,6 @@
-from fastapi import APIRouter, Depends, HTTPException, Query
+import logging
+
+from fastapi import APIRouter, Body, Depends, HTTPException, Query
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
 from datetime import date, timedelta
@@ -10,7 +12,12 @@ from app.models.user import User
 from app.schemas.address import AddressCreate, AddressRead, AddressUpdate
 from app.core.deps import require_operator
 from app.core.audit import write_audit
+from app.providers.registry import get_dns_providers, get_dhcp_providers
+from app.providers.dns.base import DNSRecord
+from app.providers.dhcp.base import DHCPReservation
 from pydantic import BaseModel
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -140,6 +147,10 @@ class DeletePreview(BaseModel):
     items: list[DeletePreviewItem]
 
 
+class DeleteRequest(BaseModel):
+    cleanup_keys: list[str] = []
+
+
 def _build_preview_items(address: IPAddress, db: Session) -> list[DeletePreviewItem]:
     seen: dict[str, DeletePreviewItem] = {}
 
@@ -191,6 +202,34 @@ def _build_preview_items(address: IPAddress, db: Session) -> list[DeletePreviewI
     return list(seen.values())
 
 
+def _rollback_provider_deletes(
+    completed: list[DeletePreviewItem],
+    dns_providers: dict,
+    dhcp_providers: dict,
+    hostname: str | None,
+) -> None:
+    for item in reversed(completed):
+        try:
+            if item.type == "dns":
+                prov = dns_providers.get(item.provider)
+                if prov:
+                    prov.add_record(DNSRecord(
+                        name=item.name or "", record_type=item.record_type or "A",
+                        value=item.value or "", zone=item.zone or "",
+                    ))
+            elif item.type == "dhcp":
+                prov = dhcp_providers.get(item.provider)
+                if prov:
+                    prov.add_reservation(DHCPReservation(
+                        scope_id=item.scope_id or "",
+                        ip_address=item.ip_address or "",
+                        mac_address=item.mac_address or "",
+                        name=hostname or "",
+                    ))
+        except Exception as rollback_exc:
+            logger.warning("Rollback failed for %s %s: %s", item.type, item.key, rollback_exc)
+
+
 @router.get("/{address_id}/delete-preview", response_model=DeletePreview)
 def get_delete_preview(
     address_id: int,
@@ -210,13 +249,51 @@ def get_delete_preview(
 @router.delete("/{address_id}", status_code=204)
 def delete_address(
     address_id: int,
+    body: DeleteRequest | None = Body(default=None),
     db: Session = Depends(get_db),
     current_user: User = Depends(require_operator),
 ):
     address = db.get(IPAddress, address_id)
     if not address:
         raise HTTPException(404, "Address not found")
+
+    cleanup_keys = set(body.cleanup_keys if body else [])
+
+    if cleanup_keys:
+        preview_items = _build_preview_items(address, db)
+        to_clean = [item for item in preview_items if item.key in cleanup_keys]
+        dns_prov_map = {p.source: p for p in get_dns_providers()}
+        dhcp_prov_map = {p.source: p for p in get_dhcp_providers()}
+        completed: list[DeletePreviewItem] = []
+        try:
+            for item in to_clean:
+                if item.type == "dns":
+                    prov = dns_prov_map.get(item.provider)
+                    if prov is None:
+                        raise RuntimeError(f"DNS provider '{item.provider}' not available")
+                    prov.delete_record(DNSRecord(
+                        name=item.name or "", record_type=item.record_type or "A",
+                        value=item.value or "", zone=item.zone or "",
+                    ))
+                    completed.append(item)
+                elif item.type == "dhcp":
+                    prov = dhcp_prov_map.get(item.provider)
+                    if prov is None:
+                        raise RuntimeError(f"DHCP provider '{item.provider}' not available")
+                    prov.delete_reservation(item.scope_id or "", item.ip_address or "")
+                    completed.append(item)
+        except Exception as exc:
+            _rollback_provider_deletes(completed, dns_prov_map, dhcp_prov_map, address.hostname)
+            raise HTTPException(
+                502,
+                f"Provider deletion failed: {exc}. "
+                f"Attempted rollback of {len(completed)} completed operation(s).",
+            )
+        audit_after: dict | None = {"cleanup": f"{len(completed)} provider record(s) removed"}
+    else:
+        audit_after = None
+
     write_audit(db, current_user.username, "delete", "address", str(address.id),
-                address.address, before=_address_state(address))
+                address.address, before=_address_state(address), after=audit_after)
     db.delete(address)
     db.commit()
