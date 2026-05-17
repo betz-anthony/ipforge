@@ -83,3 +83,13 @@ class PiholeDHCPProvider(DHCPProvider):
                 self._req("DELETE", f"/config/dhcp/hosts/{quote(entry, safe='')}")
                 return
         raise RuntimeError(f"No static reservation found for {ip_address}")
+
+    def update_reservation_name(self, scope_id: str, ip_address: str, name: str) -> None:
+        for entry in self._static_hosts_raw():
+            parts = entry.split(",")
+            if len(parts) >= 2 and parts[1] == ip_address:
+                self._req("DELETE", f"/config/dhcp/hosts/{quote(entry, safe='')}")
+                new_entry = f"{parts[0]},{ip_address},{name}"
+                self._req("PUT", f"/config/dhcp/hosts/{quote(new_entry, safe='')}")
+                return
+        raise RuntimeError(f"No static reservation found for {ip_address}")
