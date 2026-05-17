@@ -36,5 +36,9 @@ class AddressRead(AddressCreate):
     created_at: datetime
     updated_at: datetime
     last_seen: datetime | None = None
+    dns_provider:  str | None = None
+    dns_zone:      str | None = None
+    dhcp_provider: str | None = None
+    dhcp_scope_id: str | None = None
 
     model_config = {"from_attributes": True}
