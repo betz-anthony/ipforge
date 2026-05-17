@@ -1,9 +1,10 @@
 import { useState, useRef } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Plus, X, Download, Upload } from 'lucide-react'
-import { addressesApi, subnetsApi, dnsApi, dhcpApi, scanHistoryApi, importExportApi, type IPAddress, type ImportResult } from '../api/client'
+import { addressesApi, subnetsApi, dnsApi, dhcpApi, scanHistoryApi, importExportApi, type IPAddress, type ImportResult, type DeletePreview } from '../api/client'
 import { formatRelative } from '../utils/time'
 import DetailDrawer from '../components/DetailDrawer'
+import { useToast } from '../contexts/ToastContext'
 
 const STATUS_BADGE: Record<string, string> = {
   available:  'badge-green',
@@ -31,6 +32,11 @@ export default function Addresses() {
   const [selectedAddress, setSelectedAddress] = useState<IPAddress | null>(null)
   const [editForm, setEditForm]               = useState(emptyEditForm)
   const qc = useQueryClient()
+  const { showToast } = useToast()
+  const [deletingId, setDeletingId]         = useState<number | null>(null)
+  const [deletePreview, setDeletePreview]   = useState<DeletePreview | null>(null)
+  const [previewLoading, setPreviewLoading] = useState(false)
+  const [checkedKeys, setCheckedKeys]       = useState<Set<string>>(new Set())
   const [importResult, setImportResult] = useState<ImportResult | null>(null)
   const importRef = useRef<HTMLInputElement>(null)
   const [importing, setImporting] = useState(false)
@@ -94,9 +100,27 @@ export default function Addresses() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ['addresses'] }),
   })
 
-  const deleteMutation = useMutation({
-    mutationFn: (id: number) => addressesApi.delete(id),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['addresses'] }),
+  const deleteWithCleanupMutation = useMutation({
+    mutationFn: ({ id, keys }: { id: number; keys: string[] }) =>
+      addressesApi.deleteWithCleanup(id, keys),
+    onSuccess: (_, { keys }) => {
+      qc.invalidateQueries({ queryKey: ['addresses'] })
+      qc.invalidateQueries({ queryKey: ['stale-count'] })
+      showToast(
+        keys.length
+          ? `Address deleted (${keys.length} provider record${keys.length > 1 ? 's' : ''} cleaned up)`
+          : 'Address deleted',
+        'success',
+      )
+      setDeletingId(null)
+      setDeletePreview(null)
+    },
+    onError: (err: any) => {
+      const msg = err?.response?.data?.detail ?? 'Delete failed'
+      showToast(msg, 'error')
+      setDeletingId(null)
+      setDeletePreview(null)
+    },
   })
 
   const set = (key: keyof typeof emptyForm) =>
@@ -447,19 +471,82 @@ export default function Addresses() {
                   <td onClick={e => e.stopPropagation()}>
                     <button
                       className="btn-danger btn-sm"
-                      onClick={() =>
-                        window.confirm(`Delete address ${a.address}?`) &&
-                        deleteMutation.mutate(a.id)
-                      }
-                      disabled={deleteMutation.isPending}
+                      disabled={previewLoading && deletingId === a.id}
+                      onClick={async () => {
+                        setPreviewLoading(true)
+                        setDeletingId(a.id)
+                        try {
+                          const preview = await addressesApi.deletePreview(a.id)
+                          setDeletePreview(preview)
+                          setCheckedKeys(new Set(preview.items.map(i => i.key)))
+                        } catch {
+                          showToast('Failed to load delete preview', 'error')
+                          setDeletingId(null)
+                        } finally {
+                          setPreviewLoading(false)
+                        }
+                      }}
                     >
-                      <X size={12} />
+                      {previewLoading && deletingId === a.id ? '…' : <X size={12} />}
                     </button>
                   </td>
                 </tr>
               ))}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {deletePreview && deletingId !== null && (
+        <div className="modal-backdrop" onClick={() => { setDeletingId(null); setDeletePreview(null) }}>
+          <div className="modal" onClick={e => e.stopPropagation()}>
+            <h2 className="modal-title">
+              Delete {deletePreview.address}{deletePreview.hostname ? ` (${deletePreview.hostname})` : ''}?
+            </h2>
+            {deletePreview.items.length > 0 ? (
+              <>
+                <p className="modal-section-title">Provider cleanup</p>
+                <div className="modal-checklist">
+                  {deletePreview.items.map(item => (
+                    <label key={item.key} className="modal-checklist-item">
+                      <input
+                        type="checkbox"
+                        checked={checkedKeys.has(item.key)}
+                        onChange={() => setCheckedKeys(prev => {
+                          const next = new Set(prev)
+                          next.has(item.key) ? next.delete(item.key) : next.add(item.key)
+                          return next
+                        })}
+                      />
+                      {item.type === 'dns'
+                        ? `DNS ${item.record_type} "${item.name}" → ${item.value} [${item.provider}]`
+                        : `DHCP reservation ${item.ip_address} (${item.mac_address}) [${item.provider}]`}
+                    </label>
+                  ))}
+                </div>
+              </>
+            ) : (
+              <p className="modal-empty-note">
+                No provider records found — address will be removed from IPAM only.
+              </p>
+            )}
+            <div className="modal-actions">
+              <button className="btn btn-ghost"
+                      onClick={() => { setDeletingId(null); setDeletePreview(null) }}>
+                Cancel
+              </button>
+              <button
+                className="btn btn-danger"
+                disabled={deleteWithCleanupMutation.isPending}
+                onClick={() => deleteWithCleanupMutation.mutate({
+                  id: deletingId,
+                  keys: [...checkedKeys],
+                })}
+              >
+                {deleteWithCleanupMutation.isPending ? 'Deleting…' : 'Delete'}
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
