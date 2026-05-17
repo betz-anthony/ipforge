@@ -28,5 +28,9 @@ class IPAddress(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     last_seen: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     reclaim_dismissed_until: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    dns_provider:  Mapped[str | None] = mapped_column(String(255), nullable=True)
+    dns_zone:      Mapped[str | None] = mapped_column(String(255), nullable=True)
+    dhcp_provider: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    dhcp_scope_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
 
     subnet: Mapped["Subnet"] = relationship("Subnet", back_populates="addresses")
