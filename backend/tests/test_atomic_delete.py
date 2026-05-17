@@ -1,8 +1,11 @@
+from datetime import datetime, timezone
 from unittest.mock import MagicMock, patch
 
 from app.models.address import IPAddress
+from app.models.cache import CachedDNSRecord, CachedDHCPLease
 from app.models.subnet import Subnet
 from app.providers.dhcp.base import DHCPScope
+from app.sync import _backfill_dns_providers, _backfill_dhcp_providers
 
 
 def _subnet(db, cidr="10.1.0.0/24"):
@@ -83,3 +86,51 @@ def test_allocation_sets_dhcp_provider(client, db):
     addr = db.query(IPAddress).filter_by(address=r.json()["address"]).first()
     assert addr.dhcp_provider == "pihole"
     assert addr.dhcp_scope_id == "pihole"
+
+
+def _utcnow():
+    return datetime.now(timezone.utc).replace(tzinfo=None)
+
+
+def test_sync_backfills_dns_provider(db):
+    s = _subnet(db, "10.2.0.0/24")
+    a = _ip(db, s, "10.2.0.2")
+    assert a.dns_provider is None
+    db.add(CachedDNSRecord(
+        name="host1", record_type="A", value="10.2.0.2",
+        zone="example.com", ttl=3600, source="bind01", synced_at=_utcnow(),
+    ))
+    db.commit()
+    _backfill_dns_providers(db)
+    db.refresh(a)
+    assert a.dns_provider == "bind01"
+    assert a.dns_zone == "example.com"
+
+
+def test_sync_backfill_does_not_overwrite_existing(db):
+    s = _subnet(db, "10.3.0.0/24")
+    a = _ip(db, s, "10.3.0.2", dns_provider="original", dns_zone="orig.com")
+    db.add(CachedDNSRecord(
+        name="host1", record_type="A", value="10.3.0.2",
+        zone="new.com", ttl=3600, source="newprov", synced_at=_utcnow(),
+    ))
+    db.commit()
+    _backfill_dns_providers(db)
+    db.refresh(a)
+    assert a.dns_provider == "original"
+    assert a.dns_zone == "orig.com"
+
+
+def test_sync_backfills_dhcp_provider(db):
+    s = _subnet(db, "10.4.0.0/24")
+    a = _ip(db, s, "10.4.0.2")
+    assert a.dhcp_provider is None
+    db.add(CachedDHCPLease(
+        scope_id="lan", ip_address="10.4.0.2", mac_address="aa:bb:cc:00:00:01",
+        name="host1", source="pihole", synced_at=_utcnow(),
+    ))
+    db.commit()
+    _backfill_dhcp_providers(db)
+    db.refresh(a)
+    assert a.dhcp_provider == "pihole"
+    assert a.dhcp_scope_id == "lan"

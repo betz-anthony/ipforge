@@ -84,6 +84,34 @@ def _auto_populate_from_cache(db) -> None:
         logger.info("Auto-populated %d IPAM address records from DNS/DHCP cache", created)
 
 
+def _backfill_dns_providers(db) -> None:
+    from app.models.address import IPAddress
+    addr_map: dict[str, IPAddress] = {
+        a.address: a
+        for a in db.query(IPAddress).filter(IPAddress.dns_provider.is_(None)).all()
+    }
+    for r in db.query(CachedDNSRecord).filter(CachedDNSRecord.record_type == "A").all():
+        addr = addr_map.get(r.value.strip())
+        if addr is not None:
+            addr.dns_provider = r.source
+            addr.dns_zone = r.zone
+    db.commit()
+
+
+def _backfill_dhcp_providers(db) -> None:
+    from app.models.address import IPAddress
+    addr_map: dict[str, IPAddress] = {
+        a.address: a
+        for a in db.query(IPAddress).filter(IPAddress.dhcp_provider.is_(None)).all()
+    }
+    for l in db.query(CachedDHCPLease).all():
+        addr = addr_map.get(l.ip_address.strip())
+        if addr is not None:
+            addr.dhcp_provider = l.source
+            addr.dhcp_scope_id = l.scope_id
+    db.commit()
+
+
 def _utcnow() -> datetime:
     return datetime.now(timezone.utc).replace(tzinfo=None)
 
@@ -147,6 +175,7 @@ def sync_dns() -> None:
                 db.commit()
 
         _auto_populate_from_cache(db)
+        _backfill_dns_providers(db)
         _set_status(db, "dns", "ok")
     except Exception as e:
         logger.error("DNS sync failed: %s", e, exc_info=True)
@@ -212,6 +241,7 @@ def sync_dhcp() -> None:
                 db.commit()
 
         _auto_populate_from_cache(db)
+        _backfill_dhcp_providers(db)
         _set_status(db, "dhcp", "ok")
     except Exception as e:
         logger.error("DHCP sync failed: %s", e, exc_info=True)
