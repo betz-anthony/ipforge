@@ -1,8 +1,10 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 from datetime import date, timedelta
 from app.database import get_db
 from app.models.address import IPAddress, AddressStatus
+from app.models.cache import CachedDNSRecord, CachedDHCPLease
 from app.models.scan import ScanHistoryDay
 from app.models.user import User
 from app.schemas.address import AddressCreate, AddressRead, AddressUpdate
@@ -117,6 +119,92 @@ def update_address(
     db.commit()
     db.refresh(address)
     return address
+
+
+class DeletePreviewItem(BaseModel):
+    key: str
+    type: str
+    provider: str
+    zone: str | None = None
+    record_type: str | None = None
+    name: str | None = None
+    value: str | None = None
+    scope_id: str | None = None
+    ip_address: str | None = None
+    mac_address: str | None = None
+
+
+class DeletePreview(BaseModel):
+    address: str
+    hostname: str | None
+    items: list[DeletePreviewItem]
+
+
+def _build_preview_items(address: IPAddress, db: Session) -> list[DeletePreviewItem]:
+    seen: dict[str, DeletePreviewItem] = {}
+
+    # Stored provider fields
+    if address.dns_provider and address.dns_zone:
+        key = f"dns-{address.dns_provider}-{address.dns_zone}-{address.hostname or address.address}"
+        seen[key] = DeletePreviewItem(
+            key=key, type="dns",
+            provider=address.dns_provider, zone=address.dns_zone,
+            record_type="A", name=address.hostname or "", value=address.address,
+        )
+
+    if address.dhcp_provider and address.dhcp_scope_id:
+        key = f"dhcp-{address.dhcp_provider}-{address.dhcp_scope_id}-{address.address}"
+        seen[key] = DeletePreviewItem(
+            key=key, type="dhcp",
+            provider=address.dhcp_provider, scope_id=address.dhcp_scope_id,
+            ip_address=address.address, mac_address=address.mac_address or "",
+        )
+
+    # Cache: DNS A records matching IP or hostname
+    dns_filters = [CachedDNSRecord.value == address.address]
+    if address.hostname:
+        dns_filters.append(CachedDNSRecord.name == address.hostname)
+    for r in db.query(CachedDNSRecord).filter(
+        CachedDNSRecord.record_type == "A",
+        or_(*dns_filters),
+    ).all():
+        key = f"dns-{r.source}-{r.zone}-{r.name}"
+        if key not in seen:
+            seen[key] = DeletePreviewItem(
+                key=key, type="dns",
+                provider=r.source, zone=r.zone,
+                record_type=r.record_type, name=r.name, value=r.value,
+            )
+
+    # Cache: DHCP leases matching IP
+    for l in db.query(CachedDHCPLease).filter(
+        CachedDHCPLease.ip_address == address.address
+    ).all():
+        key = f"dhcp-{l.source}-{l.scope_id}-{l.ip_address}"
+        if key not in seen:
+            seen[key] = DeletePreviewItem(
+                key=key, type="dhcp",
+                provider=l.source, scope_id=l.scope_id,
+                ip_address=l.ip_address, mac_address=l.mac_address or "",
+            )
+
+    return list(seen.values())
+
+
+@router.get("/{address_id}/delete-preview", response_model=DeletePreview)
+def get_delete_preview(
+    address_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_operator),
+):
+    address = db.get(IPAddress, address_id)
+    if not address:
+        raise HTTPException(404, "Address not found")
+    return DeletePreview(
+        address=address.address,
+        hostname=address.hostname,
+        items=_build_preview_items(address, db),
+    )
 
 
 @router.delete("/{address_id}", status_code=204)

@@ -134,3 +134,57 @@ def test_sync_backfills_dhcp_provider(db):
     db.refresh(a)
     assert a.dhcp_provider == "pihole"
     assert a.dhcp_scope_id == "lan"
+
+
+def test_delete_preview_returns_stored_fields(client, db):
+    s = _subnet(db, "10.5.0.0/24")
+    _ip(db, s, "10.5.0.2", hostname="web01",
+        dns_provider="bind01", dns_zone="example.com",
+        dhcp_provider="pihole", dhcp_scope_id="lan")
+    a = db.query(IPAddress).filter_by(address="10.5.0.2").first()
+    r = client.get(f"/api/addresses/{a.id}/delete-preview")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["address"] == "10.5.0.2"
+    assert body["hostname"] == "web01"
+    keys = {item["key"] for item in body["items"]}
+    assert any("bind01" in k and "example.com" in k for k in keys)
+    assert any("pihole" in k and "lan" in k for k in keys)
+
+
+def test_delete_preview_returns_cache_hits(client, db):
+    s = _subnet(db, "10.6.0.0/24")
+    _ip(db, s, "10.6.0.2", hostname="web02")
+    a = db.query(IPAddress).filter_by(address="10.6.0.2").first()
+    db.add(CachedDNSRecord(
+        name="web02", record_type="A", value="10.6.0.2",
+        zone="test.local", ttl=300, source="msdns", synced_at=_utcnow(),
+    ))
+    db.add(CachedDHCPLease(
+        scope_id="scope1", ip_address="10.6.0.2", mac_address="",
+        name="web02", source="msdhcp", synced_at=_utcnow(),
+    ))
+    db.commit()
+    r = client.get(f"/api/addresses/{a.id}/delete-preview")
+    assert r.status_code == 200
+    items = r.json()["items"]
+    assert len(items) == 2
+    types = {i["type"] for i in items}
+    assert types == {"dns", "dhcp"}
+
+
+def test_delete_preview_deduplicates_stored_and_cache(client, db):
+    s = _subnet(db, "10.7.0.0/24")
+    _ip(db, s, "10.7.0.2", hostname="web03",
+        dns_provider="bind01", dns_zone="example.com")
+    a = db.query(IPAddress).filter_by(address="10.7.0.2").first()
+    # cache has same record as stored fields
+    db.add(CachedDNSRecord(
+        name="web03", record_type="A", value="10.7.0.2",
+        zone="example.com", ttl=300, source="bind01", synced_at=_utcnow(),
+    ))
+    db.commit()
+    r = client.get(f"/api/addresses/{a.id}/delete-preview")
+    assert r.status_code == 200
+    dns_items = [i for i in r.json()["items"] if i["type"] == "dns"]
+    assert len(dns_items) == 1
