@@ -90,6 +90,29 @@ export interface IPAddress {
   created_at: string
   updated_at: string
   last_seen: string | null
+  dns_provider?: string | null
+  dns_zone?: string | null
+  dhcp_provider?: string | null
+  dhcp_scope_id?: string | null
+}
+
+export interface DeletePreviewItem {
+  key: string
+  type: 'dns' | 'dhcp'
+  provider: string
+  zone?: string
+  record_type?: string
+  name?: string
+  value?: string
+  scope_id?: string
+  ip_address?: string
+  mac_address?: string
+}
+
+export interface DeletePreview {
+  address: string
+  hostname: string | null
+  items: DeletePreviewItem[]
 }
 
 export interface StaleAddress {
@@ -127,6 +150,10 @@ export const addressesApi = {
   delete: (id: number) => api.delete(`/addresses/${id}`),
   byIp: (address: string) =>
     api.get<IPAddress>(`/addresses/by-ip/${encodeURIComponent(address)}`).then(r => r.data),
+  deletePreview: (id: number) =>
+    api.get<DeletePreview>(`/addresses/${id}/delete-preview`).then(r => r.data),
+  deleteWithCleanup: (id: number, cleanupKeys: string[]) =>
+    api.delete(`/addresses/${id}`, { data: { cleanup_keys: cleanupKeys } }),
 }
 
 export interface DHCPScope {
