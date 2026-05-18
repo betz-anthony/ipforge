@@ -229,10 +229,10 @@ export const dnsApi = {
   listZones: () => api.get<DNSZone[]>('/dns/zones').then(r => r.data),
   listRecords: (zone: string) =>
     api.get<DNSRecord[]>(`/dns/zones/${zone}/records`).then(r => r.data),
-  createRecord: (zone: string, data: Omit<DNSRecord, 'zone'>) =>
+  createRecord: (zone: string, data: Omit<DNSRecord, 'zone'> & { register_ptr?: boolean }) =>
     api.post<DNSRecord>(`/dns/zones/${zone}/records`, data).then(r => r.data),
-  deleteRecord: (zone: string, record: DNSRecord) =>
-    api.delete(`/dns/zones/${zone}/records`, { data: record }),
+  deleteRecord: (zone: string, record: DNSRecord, opts?: { delete_ptr?: boolean }) =>
+    api.delete(`/dns/zones/${zone}/records`, { data: { ...record, ...opts } }),
   byIp: (address: string) =>
     api.get<DNSRecord[]>(`/dns/by-ip/${encodeURIComponent(address)}`).then(r => r.data),
 }

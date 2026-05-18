@@ -1,4 +1,5 @@
 import { useEffect } from 'react'
+import type React from 'react'
 import { createPortal } from 'react-dom'
 
 interface ConfirmModalProps {
@@ -8,10 +9,11 @@ interface ConfirmModalProps {
   danger?: boolean
   onConfirm: () => void
   onCancel: () => void
+  extra?: React.ReactNode
 }
 
 export default function ConfirmModal({
-  title, message, confirmLabel = 'Delete', danger = true, onConfirm, onCancel,
+  title, message, confirmLabel = 'Delete', danger = true, onConfirm, onCancel, extra,
 }: ConfirmModalProps) {
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
@@ -27,6 +29,7 @@ export default function ConfirmModal({
       <div className="modal" onClick={e => e.stopPropagation()}>
         <h2 className="modal-title">{title}</h2>
         <p className="modal-message">{message}</p>
+        {extra}
         <div className="modal-actions">
           <button className="btn btn-ghost" onClick={onCancel}>Cancel</button>
           <button

@@ -68,6 +68,8 @@ export default function DNS() {
   const [selectedRecord, setSelectedRecord] = useState<DNSRecord | null>(null)
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set())
   const [confirmRecord, setConfirmRecord] = useState<DNSRecord | null>(null)
+  const [registerPtr, setRegisterPtr]   = useState(false)
+  const [deletePtr, setDeletePtr]       = useState(true)
   const { showToast } = useToast()
   const [editingNotes, setEditingNotes]           = useState(false)
   const [notesValue, setNotesValue]               = useState('')
@@ -86,6 +88,10 @@ export default function DNS() {
 
   const dnsProviders = providers?.dns ?? []
 
+  const selectedZoneIsPihole = selectedZoneSource
+    ? selectedZoneSource.toLowerCase().includes('pihole')
+    : false
+
   const { data: records, isLoading: loadingRecords } = useQuery({
     queryKey: ['dns-records', selectedZone],
     queryFn: () => dnsApi.listRecords(selectedZone!),
@@ -93,18 +99,28 @@ export default function DNS() {
   })
 
   const createMutation = useMutation({
-    mutationFn: () => dnsApi.createRecord(selectedZone!, form),
+    mutationFn: () => dnsApi.createRecord(selectedZone!, {
+      ...form,
+      ...(form.record_type === 'A' && registerPtr ? { register_ptr: true } : {}),
+    }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['dns-records', selectedZone] })
       setForm(f => ({ ...emptyForm, source: f.source }))
+      setRegisterPtr(false)
       setShowForm(false)
     },
   })
 
   const deleteMutation = useMutation({
-    mutationFn: (record: DNSRecord) => dnsApi.deleteRecord(selectedZone!, record),
+    mutationFn: (record: DNSRecord) =>
+      dnsApi.deleteRecord(
+        selectedZone!,
+        record,
+        record.record_type === 'A' ? { delete_ptr: deletePtr } : undefined,
+      ),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['dns-records', selectedZone] })
+      setConfirmRecord(null)
       showToast('Record deleted', 'success')
     },
     onError: (err: any) => {
@@ -476,6 +492,26 @@ export default function DNS() {
                       </div>
                     )}
                   </div>
+                  {form.record_type === 'A' && (
+                    <div className="form-field" style={{ gridColumn: '1 / -1' }}>
+                      <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: selectedZoneIsPihole ? 'not-allowed' : 'pointer' }}>
+                        <input
+                          type="checkbox"
+                          checked={registerPtr}
+                          onChange={e => setRegisterPtr(e.target.checked)}
+                          disabled={selectedZoneIsPihole}
+                        />
+                        <span style={{ opacity: selectedZoneIsPihole ? 0.5 : 1 }}>
+                          Also create PTR record
+                          {selectedZoneIsPihole && (
+                            <span className="text-muted" style={{ marginLeft: '0.4rem', fontSize: '0.75rem' }}>
+                              (provider does not support PTR)
+                            </span>
+                          )}
+                        </span>
+                      </label>
+                    </div>
+                  )}
                   <div className="form-actions">
                     <button
                       className="btn-primary btn-sm"
@@ -484,7 +520,7 @@ export default function DNS() {
                     >
                       {createMutation.isPending ? 'Adding…' : 'Add'}
                     </button>
-                    <button className="btn-ghost btn-sm" onClick={() => { setShowForm(false); setForm(emptyForm) }}>
+                    <button className="btn-ghost btn-sm" onClick={() => { setShowForm(false); setForm(emptyForm); setRegisterPtr(false) }}>
                       <X size={13} /> Cancel
                     </button>
                     {createMutation.isError && (
@@ -528,7 +564,17 @@ export default function DNS() {
           title="Delete DNS Record"
           message={`Delete ${confirmRecord.record_type} record "${confirmRecord.name}"?`}
           onConfirm={() => { deleteMutation.mutate(confirmRecord); setConfirmRecord(null) }}
-          onCancel={() => setConfirmRecord(null)}
+          onCancel={() => { setConfirmRecord(null); setDeletePtr(true) }}
+          extra={confirmRecord.record_type === 'A' ? (
+            <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginTop: '0.75rem', cursor: 'pointer', fontSize: '0.875rem' }}>
+              <input
+                type="checkbox"
+                checked={deletePtr}
+                onChange={e => setDeletePtr(e.target.checked)}
+              />
+              Also delete matching PTR record
+            </label>
+          ) : undefined}
         />
       )}
 
