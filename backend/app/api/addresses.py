@@ -177,6 +177,7 @@ def _build_preview_items(address: IPAddress, db: Session) -> list[DeletePreviewI
             address.address,
             address.hostname or address.address,
             address.ptr_zone,
+            provider=address.dns_provider or "",
         )
         key = f"ptr-{address.dns_provider}-{address.ptr_zone}-{ptr_rec.name}"
         seen[key] = DeletePreviewItem(
