@@ -44,3 +44,74 @@ def test_ptr_zone_in_schema_populated(db):
     a = _ip(db, s, ptr_zone="1.0.10.in-addr.arpa")
     r = AddressRead.model_validate(a)
     assert r.ptr_zone == "1.0.10.in-addr.arpa"
+
+
+# ── Task 2: ptr.py utility ───────────────────────────────────────────────────
+
+from app.core.ptr import find_reverse_zone, build_ptr_record
+
+
+def test_find_zone_returns_most_specific():
+    zones = ["2.1.10.in-addr.arpa", "1.10.in-addr.arpa", "10.in-addr.arpa"]
+    assert find_reverse_zone("10.1.2.5", zones) == "2.1.10.in-addr.arpa"
+
+
+def test_find_zone_falls_back_to_less_specific():
+    zones = ["1.10.in-addr.arpa", "10.in-addr.arpa"]
+    assert find_reverse_zone("10.1.2.5", zones) == "1.10.in-addr.arpa"
+
+
+def test_find_zone_returns_none_when_no_match():
+    zones = ["example.com", "example.net"]
+    assert find_reverse_zone("10.1.2.5", zones) is None
+
+
+def test_find_zone_empty_list():
+    assert find_reverse_zone("10.1.2.5", []) is None
+
+
+def test_find_zone_ipv6():
+    # Zone covers the first 12 nibbles of 2001:db8::/32
+    zones = ["0.0.0.0.8.b.d.0.1.0.0.2.ip6.arpa"]
+    result = find_reverse_zone("2001:db8::1", zones)
+    assert result == "0.0.0.0.8.b.d.0.1.0.0.2.ip6.arpa"
+
+
+def test_build_ptr_name_is_host_portion_of_zone():
+    r = build_ptr_record("10.1.2.5", "web01", "2.1.10.in-addr.arpa")
+    assert r.name == "5"
+
+
+def test_build_ptr_name_with_less_specific_zone():
+    r = build_ptr_record("10.1.2.5", "web01", "1.10.in-addr.arpa")
+    assert r.name == "5.2"
+
+
+def test_build_ptr_value_has_trailing_dot():
+    r = build_ptr_record("10.1.2.5", "web01", "2.1.10.in-addr.arpa")
+    assert r.value == "web01."
+
+
+def test_build_ptr_fqdn_value_gets_trailing_dot():
+    r = build_ptr_record("10.1.2.5", "web01.example.com", "2.1.10.in-addr.arpa")
+    assert r.value == "web01.example.com."
+
+
+def test_build_ptr_record_type_is_PTR():
+    r = build_ptr_record("10.1.2.5", "web01", "2.1.10.in-addr.arpa")
+    assert r.record_type == "PTR"
+
+
+def test_build_ptr_zone_is_reverse_zone():
+    r = build_ptr_record("10.1.2.5", "web01", "2.1.10.in-addr.arpa")
+    assert r.zone == "2.1.10.in-addr.arpa"
+
+
+def test_build_ptr_sets_provider():
+    r = build_ptr_record("10.1.2.5", "web01", "2.1.10.in-addr.arpa", provider="bind01")
+    assert r.source == "bind01"
+
+
+def test_build_ptr_sets_ttl():
+    r = build_ptr_record("10.1.2.5", "web01", "2.1.10.in-addr.arpa", ttl=7200)
+    assert r.ttl == 7200
