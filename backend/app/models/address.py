@@ -32,5 +32,6 @@ class IPAddress(Base):
     dns_zone:      Mapped[str | None] = mapped_column(String(255), nullable=True)
     dhcp_provider: Mapped[str | None] = mapped_column(String(255), nullable=True)
     dhcp_scope_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    ptr_zone:      Mapped[str | None] = mapped_column(String(255), nullable=True)
 
     subnet: Mapped["Subnet"] = relationship("Subnet", back_populates="addresses")

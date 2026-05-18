@@ -40,5 +40,6 @@ class AddressRead(AddressCreate):
     dns_zone:      str | None = None
     dhcp_provider: str | None = None
     dhcp_scope_id: str | None = None
+    ptr_zone:      str | None = None
 
     model_config = {"from_attributes": True}
