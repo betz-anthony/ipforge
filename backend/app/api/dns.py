@@ -90,6 +90,7 @@ def create_record(
         logger.error("DNS %s add_record: %s", target.source, e, exc_info=True)
         raise HTTPException(502, str(e))
 
+    now = _utcnow()
     if record.register_ptr and record.record_type == "A":
         zones = [row.zone for row in db.query(CachedDNSZone).filter_by(source=record.source).all()]
         reverse_zone = find_reverse_zone(record.value, zones)
@@ -110,11 +111,11 @@ def create_record(
                 logger.warning("A record rollback failed: %s", ce)
             raise HTTPException(502, f"PTR registration failed: {e}")
 
-        now = _utcnow()
         db.add(CRow(name=ptr_record.name, record_type="PTR", value=ptr_record.value,
                     zone=reverse_zone, ttl=ptr_record.ttl, source=record.source, synced_at=now))
+        if db.get(CachedDNSZone, (reverse_zone, record.source)) is None:
+            db.add(CachedDNSZone(zone=reverse_zone, source=record.source, synced_at=now))
 
-    now = _utcnow()
     db.add(CRow(name=record.name, record_type=record.record_type, value=record.value,
                 zone=zone, ttl=record.ttl, source=record.source, synced_at=now))
     if db.get(CachedDNSZone, (zone, record.source)) is None:
