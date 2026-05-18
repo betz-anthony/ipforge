@@ -7,6 +7,8 @@ import DetailDrawer from '../components/DetailDrawer'
 import UtilBar from '../components/UtilBar'
 import CollisionResolveDialog from './CollisionResolveDialog'
 import SubnetTree from './SubnetTree'
+import ConfirmModal from '../components/ConfirmModal'
+import { useToast } from '../contexts/ToastContext'
 
 const emptyForm = { name: '', cidr: '', vlan_id: '', description: '', scan_interval_minutes: '', dns_provider_name: '', dhcp_provider_name: '' }
 
@@ -121,6 +123,8 @@ export default function Subnets() {
   })
 
   const [resolveTarget, setResolveTarget] = useState<Collision | null>(null)
+  const [confirmSubnet, setConfirmSubnet] = useState<Subnet | null>(null)
+  const { showToast } = useToast()
 
   const [treeView, setTreeView]           = useState(false)
   const [treeSelectedId, setTreeSelectedId] = useState<number | null>(null)
@@ -172,7 +176,15 @@ export default function Subnets() {
 
   const deleteMutation = useMutation({
     mutationFn: (id: number) => subnetsApi.delete(id),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['subnets'] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['subnets'] })
+      showToast('Subnet deleted', 'success')
+      setConfirmSubnet(null)
+    },
+    onError: (err: any) => {
+      showToast(err?.response?.data?.detail ?? 'Delete failed', 'error')
+      setConfirmSubnet(null)
+    },
   })
 
   const set = (key: keyof typeof emptyForm) =>
@@ -620,11 +632,9 @@ export default function Subnets() {
                   <td onClick={e => e.stopPropagation()}>
                     <button
                       className="btn-danger btn-sm"
-                      onClick={() =>
-                        window.confirm(`Delete subnet "${s.name}" (${s.cidr})?`) &&
-                        deleteMutation.mutate(s.id)
-                      }
-                      disabled={deleteMutation.isPending}
+                      title={s.used_count > 0 ? 'Remove all addresses first' : 'Delete subnet'}
+                      disabled={deleteMutation.isPending || s.used_count > 0}
+                      onClick={() => setConfirmSubnet(s)}
                     >
                       <X size={12} />
                     </button>
@@ -646,6 +656,15 @@ export default function Subnets() {
             setTreeSelectedId(s.id)
             openDrawer(s)
           }}
+        />
+      )}
+
+      {confirmSubnet && (
+        <ConfirmModal
+          title="Delete Subnet"
+          message={`Delete subnet "${confirmSubnet.name}" (${confirmSubnet.cidr})?`}
+          onConfirm={() => deleteMutation.mutate(confirmSubnet.id)}
+          onCancel={() => setConfirmSubnet(null)}
         />
       )}
 
