@@ -186,6 +186,9 @@ def test_allocation_register_ptr_no_reverse_zone_rolls_back_a(client, db):
     assert r.status_code == 422
     assert "reverse zone" in r.json()["detail"].lower()
     mock_prov.delete_record.assert_called_once()
+    # DB row was rolled back (is_new path)
+    addr = db.query(IPAddressModel).filter_by(hostname="web03").first()
+    assert addr is None
 
 
 def test_allocation_register_ptr_success_sets_ptr_zone(client, db):
@@ -243,4 +246,29 @@ def test_allocation_register_ptr_failure_rolls_back_a(client, db):
     assert "PTR registration failed" in r.json()["detail"]
     mock_prov.delete_record.assert_called_once()
     addr = db.query(IPAddressModel).filter_by(hostname="web05").first()
+    assert addr is None
+
+
+def test_allocation_register_ptr_get_zones_failure_rolls_back_a(client, db):
+    s = _alloc_subnet(db)
+    mock_prov = MagicMock()
+    mock_prov.source = "bind01"
+    mock_prov.add_record = MagicMock()
+    mock_prov.delete_record = MagicMock()
+    mock_prov.get_zones = MagicMock(side_effect=Exception("zones fetch error"))
+
+    with patch("app.api.allocation.get_dns_providers", return_value=[mock_prov]), \
+         patch("app.api.allocation.get_dhcp_providers", return_value=[]):
+        r = client.post(f"/api/subnets/{s.id}/allocate", json={
+            "hostname": "web06",
+            "register_dns": True,
+            "register_ptr": True,
+            "dns_zone": "example.com",
+        })
+    assert r.status_code == 502
+    assert "zones" in r.json()["detail"].lower()
+    # A record rolled back
+    mock_prov.delete_record.assert_called_once()
+    # DB row rolled back
+    addr = db.query(IPAddressModel).filter_by(hostname="web06").first()
     assert addr is None
