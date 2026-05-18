@@ -156,7 +156,7 @@ def _build_preview_items(address: IPAddress, db: Session) -> list[DeletePreviewI
 
     # Stored provider fields
     if address.dns_provider and address.dns_zone:
-        key = f"dns-{address.dns_provider}-{address.dns_zone}-{address.hostname or address.address}"
+        key = f"dns-{address.dns_provider}-{address.dns_zone}-{address.hostname or address.address}-A-{address.address}"
         seen[key] = DeletePreviewItem(
             key=key, type="dns",
             provider=address.dns_provider, zone=address.dns_zone,
@@ -179,7 +179,7 @@ def _build_preview_items(address: IPAddress, db: Session) -> list[DeletePreviewI
         CachedDNSRecord.record_type == "A",
         or_(*dns_filters),
     ).all():
-        key = f"dns-{r.source}-{r.zone}-{r.name}"
+        key = f"dns-{r.source}-{r.zone}-{r.name}-{r.record_type}-{r.value}"
         if key not in seen:
             seen[key] = DeletePreviewItem(
                 key=key, type="dns",
@@ -293,7 +293,13 @@ def delete_address(
     else:
         audit_after = None
 
-    write_audit(db, current_user.username, "delete", "address", str(address.id),
-                address.address, before=_address_state(address), after=audit_after)
+    try:
+        write_audit(db, current_user.username, "delete", "address", str(address.id),
+                    address.address, before=_address_state(address), after=audit_after)
+    except Exception as audit_exc:
+        logger.critical(
+            "Audit write failed for address %s delete (providers already cleaned up): %s",
+            address.id, audit_exc,
+        )
     db.delete(address)
     db.commit()

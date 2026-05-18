@@ -209,7 +209,7 @@ def test_delete_with_cleanup_keys_calls_providers(client, db):
     mock_dhcp = MagicMock()
     mock_dhcp.source = "pihole"
     mock_dhcp.delete_reservation = MagicMock()
-    dns_key = f"dns-bind01-example.com-web04"
+    dns_key = f"dns-bind01-example.com-web04-A-10.9.0.2"
     dhcp_key = f"dhcp-pihole-lan-10.9.0.2"
     with patch("app.api.addresses.get_dns_providers", return_value=[mock_dns]), \
          patch("app.api.addresses.get_dhcp_providers", return_value=[mock_dhcp]):
@@ -230,7 +230,7 @@ def test_delete_rollback_on_provider_failure(client, db):
     mock_dns.source = "bind01"
     mock_dns.delete_record = MagicMock(side_effect=Exception("DNS unreachable"))
     mock_dns.add_record = MagicMock()
-    dns_key = f"dns-bind01-example.com-web05"
+    dns_key = f"dns-bind01-example.com-web05-A-10.10.0.2"
     with patch("app.api.addresses.get_dns_providers", return_value=[mock_dns]), \
          patch("app.api.addresses.get_dhcp_providers", return_value=[]):
         r = client.request("DELETE", f"/api/addresses/{addr_id}",
