@@ -88,9 +88,7 @@ export default function DNS() {
 
   const dnsProviders = providers?.dns ?? []
 
-  const selectedZoneIsPihole = selectedZoneSource
-    ? selectedZoneSource.toLowerCase().includes('pihole')
-    : false
+  const selectedZoneIsPihole = selectedZoneSource === 'pihole'
 
   const { data: records, isLoading: loadingRecords } = useQuery({
     queryKey: ['dns-records', selectedZone],
@@ -121,6 +119,7 @@ export default function DNS() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['dns-records', selectedZone] })
       setConfirmRecord(null)
+      setDeletePtr(true)
       showToast('Record deleted', 'success')
     },
     onError: (err: any) => {
