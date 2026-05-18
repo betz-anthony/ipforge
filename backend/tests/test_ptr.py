@@ -272,3 +272,189 @@ def test_allocation_register_ptr_get_zones_failure_rolls_back_a(client, db):
     # DB row rolled back
     addr = db.query(IPAddressModel).filter_by(hostname="web06").first()
     assert addr is None
+
+
+# ── Task 4: DNS API PTR + delete-preview ──────────────────────────────────────
+
+from app.models.cache import CachedDNSZone, CachedDNSRecord as CachedRow
+
+
+def _add_zone(db, zone, source="bind01"):
+    from datetime import datetime, timezone
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
+    db.add(CachedDNSZone(zone=zone, source=source, synced_at=now))
+    db.commit()
+
+
+def test_dns_create_record_register_ptr_creates_both(client, db):
+    _add_zone(db, "example.com")
+    _add_zone(db, "1.0.10.in-addr.arpa")
+    mock_prov = MagicMock()
+    mock_prov.source = "bind01"
+    mock_prov.add_record = MagicMock()
+
+    with patch("app.api.dns.get_dns_providers", return_value=[mock_prov]):
+        r = client.post("/api/dns/zones/example.com/records", json={
+            "name": "web01", "record_type": "A", "value": "10.0.1.5",
+            "zone": "example.com", "ttl": 3600, "source": "bind01",
+            "register_ptr": True,
+        })
+    assert r.status_code == 201
+    assert mock_prov.add_record.call_count == 2
+    ptr_call = mock_prov.add_record.call_args_list[1][0][0]
+    assert ptr_call.record_type == "PTR"
+    assert ptr_call.zone == "1.0.10.in-addr.arpa"
+    assert ptr_call.value == "web01."
+
+
+def test_dns_create_record_register_ptr_pihole_422(client, db):
+    _add_zone(db, "example.com", source="pihole01")
+    _add_zone(db, "1.0.10.in-addr.arpa", source="pihole01")
+    from app.providers.dns.pihole import PiholeDNSProvider as RealPihole
+
+    class FakePihole(RealPihole):
+        source = "pihole01"
+        def __init__(self): pass
+        def add_record(self, r): raise NotImplementedError()
+        def get_zones(self): return []
+        def get_records(self, z): return []
+        def delete_record(self, r): pass
+        def update_record(self, o, n): pass
+
+    fake = FakePihole()
+    with patch("app.api.dns.get_dns_providers", return_value=[fake]):
+        r = client.post("/api/dns/zones/example.com/records", json={
+            "name": "web01", "record_type": "A", "value": "10.0.1.5",
+            "zone": "example.com", "ttl": 3600, "source": "pihole01",
+            "register_ptr": True,
+        })
+    assert r.status_code == 422
+
+
+def test_dns_create_record_register_ptr_no_reverse_zone_422(client, db):
+    _add_zone(db, "example.com")
+    # No reverse zone
+    mock_prov = MagicMock()
+    mock_prov.source = "bind01"
+    mock_prov.add_record = MagicMock()
+    mock_prov.delete_record = MagicMock()
+
+    with patch("app.api.dns.get_dns_providers", return_value=[mock_prov]):
+        r = client.post("/api/dns/zones/example.com/records", json={
+            "name": "web01", "record_type": "A", "value": "10.0.1.5",
+            "zone": "example.com", "ttl": 3600, "source": "bind01",
+            "register_ptr": True,
+        })
+    assert r.status_code == 422
+    mock_prov.delete_record.assert_called_once()
+
+
+def test_dns_create_record_register_ptr_ptr_fail_rolls_back_a(client, db):
+    _add_zone(db, "example.com")
+    _add_zone(db, "1.0.10.in-addr.arpa")
+    add_count = 0
+
+    def side_add(record):
+        nonlocal add_count
+        add_count += 1
+        if add_count == 2:
+            raise Exception("PTR server error")
+
+    mock_prov = MagicMock()
+    mock_prov.source = "bind01"
+    mock_prov.add_record = MagicMock(side_effect=side_add)
+    mock_prov.delete_record = MagicMock()
+
+    with patch("app.api.dns.get_dns_providers", return_value=[mock_prov]):
+        r = client.post("/api/dns/zones/example.com/records", json={
+            "name": "web01", "record_type": "A", "value": "10.0.1.5",
+            "zone": "example.com", "ttl": 3600, "source": "bind01",
+            "register_ptr": True,
+        })
+    assert r.status_code == 502
+    mock_prov.delete_record.assert_called_once()
+
+
+def test_dns_delete_record_delete_ptr_deletes_both(client, db):
+    _add_zone(db, "1.0.10.in-addr.arpa")
+    mock_prov = MagicMock()
+    mock_prov.source = "bind01"
+    mock_prov.delete_record = MagicMock()
+
+    with patch("app.api.dns.get_dns_providers", return_value=[mock_prov]):
+        r = client.request("DELETE", "/api/dns/zones/example.com/records", json={
+            "name": "web01", "record_type": "A", "value": "10.0.1.5",
+            "zone": "example.com", "ttl": 3600, "source": "bind01",
+            "delete_ptr": True,
+        })
+    assert r.status_code == 204
+    assert mock_prov.delete_record.call_count == 2
+    ptr_call = mock_prov.delete_record.call_args_list[1][0][0]
+    assert ptr_call.record_type == "PTR"
+    assert ptr_call.zone == "1.0.10.in-addr.arpa"
+
+
+def test_dns_delete_record_delete_ptr_no_reverse_zone_422(client, db):
+    mock_prov = MagicMock()
+    mock_prov.source = "bind01"
+
+    with patch("app.api.dns.get_dns_providers", return_value=[mock_prov]):
+        r = client.request("DELETE", "/api/dns/zones/example.com/records", json={
+            "name": "web01", "record_type": "A", "value": "10.0.1.5",
+            "zone": "example.com", "ttl": 3600, "source": "bind01",
+            "delete_ptr": True,
+        })
+    assert r.status_code == 422
+
+
+def test_dns_delete_record_ptr_fail_rolls_back_a(client, db):
+    _add_zone(db, "1.0.10.in-addr.arpa")
+    del_count = 0
+
+    def side_del(record):
+        nonlocal del_count
+        del_count += 1
+        if del_count == 2:
+            raise Exception("PTR delete error")
+
+    mock_prov = MagicMock()
+    mock_prov.source = "bind01"
+    mock_prov.delete_record = MagicMock(side_effect=side_del)
+    mock_prov.add_record = MagicMock()
+
+    with patch("app.api.dns.get_dns_providers", return_value=[mock_prov]):
+        r = client.request("DELETE", "/api/dns/zones/example.com/records", json={
+            "name": "web01", "record_type": "A", "value": "10.0.1.5",
+            "zone": "example.com", "ttl": 3600, "source": "bind01",
+            "delete_ptr": True,
+        })
+    assert r.status_code == 502
+    mock_prov.add_record.assert_called_once()
+
+
+def test_delete_preview_includes_ptr_when_ptr_zone_set(client, db):
+    s = _subnet(db)
+    a = _ip(db, s, address="10.0.1.2", hostname="web01",
+            dns_provider="bind01", dns_zone="example.com",
+            ptr_zone="1.0.10.in-addr.arpa")
+    r = client.get(f"/api/addresses/{a.id}/delete-preview")
+    assert r.status_code == 200
+    items = r.json()["items"]
+    ptr_items = [i for i in items if i.get("record_type") == "PTR"]
+    assert len(ptr_items) == 1
+    pi = ptr_items[0]
+    assert pi["zone"] == "1.0.10.in-addr.arpa"
+    assert pi["provider"] == "bind01"
+    assert pi["name"] == "2"   # host portion of 10.0.1.2 in 1.0.10.in-addr.arpa
+    assert pi["value"] == "web01."
+
+
+def test_delete_preview_no_ptr_item_when_ptr_zone_null(client, db):
+    s = _subnet(db)
+    a = _ip(db, s, address="10.0.1.2", hostname="web01",
+            dns_provider="bind01", dns_zone="example.com")
+    r = client.get(f"/api/addresses/{a.id}/delete-preview")
+    assert r.status_code == 200
+    items = r.json()["items"]
+    ptr_items = [i for i in items if i.get("record_type") == "PTR"]
+    assert len(ptr_items) == 0

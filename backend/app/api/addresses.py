@@ -171,6 +171,20 @@ def _build_preview_items(address: IPAddress, db: Session) -> list[DeletePreviewI
             ip_address=address.address, mac_address=address.mac_address or "",
         )
 
+    if address.ptr_zone and address.dns_provider:
+        from app.core.ptr import build_ptr_record
+        ptr_rec = build_ptr_record(
+            address.address,
+            address.hostname or address.address,
+            address.ptr_zone,
+        )
+        key = f"ptr-{address.dns_provider}-{address.ptr_zone}-{ptr_rec.name}"
+        seen[key] = DeletePreviewItem(
+            key=key, type="dns",
+            provider=address.dns_provider, zone=address.ptr_zone,
+            record_type="PTR", name=ptr_rec.name, value=ptr_rec.value,
+        )
+
     # Cache: DNS A records matching IP or hostname
     dns_filters = [CachedDNSRecord.value == address.address]
     if address.hostname:
