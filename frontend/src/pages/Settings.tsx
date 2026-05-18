@@ -7,6 +7,8 @@ import {
   type AppSettingsUpdate, type ProviderConfig, type ProviderConfigCreate, type UserRecord,
   type LdapSettings,
 } from '../api/client'
+import ConfirmModal from '../components/ConfirmModal'
+import { useToast } from '../contexts/ToastContext'
 
 // ── Provider field definitions ─────────────────────────────────────────────
 
@@ -226,6 +228,9 @@ function ProviderSection({
   const [adding, setAdding]   = useState(false)
   const [editId, setEditId]   = useState<number | null>(null)
   const [mutErr, setMutErr]   = useState('')
+  const { showToast } = useToast()
+  const [confirmDeleteProvider, setConfirmDeleteProvider] = useState<{ id: number; name: string } | null>(null)
+  const [confirmCacheFlush, setConfirmCacheFlush]         = useState<{ source: string } | null>(null)
 
   const invalidate = () => qc.invalidateQueries({ queryKey: ['provider-configs'] })
 
@@ -244,7 +249,8 @@ function ProviderSection({
 
   const deleteMut = useMutation({
     mutationFn: (id: number) => providerConfigsApi.delete(id),
-    onSuccess: () => { invalidate() },
+    onSuccess: () => { invalidate(); showToast('Provider deleted', 'success'); setConfirmDeleteProvider(null) },
+    onError: (err: any) => { showToast(err?.response?.data?.detail ?? 'Delete failed', 'error'); setConfirmDeleteProvider(null) },
   })
 
   const cachePurgeMut = useMutation({
@@ -321,7 +327,7 @@ function ProviderSection({
               </button>
               <button
                 className="btn-ghost btn-sm"
-                onClick={() => window.confirm(`Clear all cached ${category.toUpperCase()} data for "${p.name}"?`) && cachePurgeMut.mutate({ source: p.name })}
+                onClick={() => setConfirmCacheFlush({ source: p.name })}
                 title="Clear Cache"
                 style={{ fontSize: '0.65rem' }}
               >
@@ -329,7 +335,7 @@ function ProviderSection({
               </button>
               <button
                 className="btn-danger btn-sm"
-                onClick={() => window.confirm(`Delete provider "${p.name}"?`) && deleteMut.mutate(p.id)}
+                onClick={() => setConfirmDeleteProvider({ id: p.id, name: p.name })}
                 title="Delete"
               >
                 <Trash2 size={12} />
@@ -351,6 +357,25 @@ function ProviderSection({
           }
         />
       )}
+
+      {confirmDeleteProvider && (
+        <ConfirmModal
+          title="Delete Provider"
+          message={`Delete provider "${confirmDeleteProvider.name}"?`}
+          onConfirm={() => deleteMut.mutate(confirmDeleteProvider.id)}
+          onCancel={() => setConfirmDeleteProvider(null)}
+        />
+      )}
+      {confirmCacheFlush && (
+        <ConfirmModal
+          title="Flush Cache"
+          message={`Clear all cached ${category.toUpperCase()} data for "${confirmCacheFlush.source}"?`}
+          confirmLabel="Flush"
+          danger={false}
+          onConfirm={() => { cachePurgeMut.mutate({ source: confirmCacheFlush.source }); setConfirmCacheFlush(null) }}
+          onCancel={() => setConfirmCacheFlush(null)}
+        />
+      )}
     </div>
   )
 }
@@ -366,6 +391,8 @@ function UsersSection({ currentUsername }: { currentUsername: string }) {
   const [adding, setAdding]   = useState(false)
   const [editId, setEditId]   = useState<number | null>(null)
   const [mutErr, setMutErr]   = useState('')
+  const { showToast } = useToast()
+  const [confirmDeleteUser, setConfirmDeleteUser] = useState<{ id: number; username: string } | null>(null)
 
   const [newUsername, setNewUsername] = useState('')
   const [newPassword, setNewPassword] = useState('')
@@ -396,7 +423,8 @@ function UsersSection({ currentUsername }: { currentUsername: string }) {
 
   const deleteMut = useMutation({
     mutationFn: (id: number) => usersApi.delete(id),
-    onSuccess: () => { invalidate() },
+    onSuccess: () => { invalidate(); showToast('User deleted', 'success'); setConfirmDeleteUser(null) },
+    onError: (err: any) => { showToast(err?.response?.data?.detail ?? 'Delete failed', 'error'); setConfirmDeleteUser(null) },
   })
 
   function startEdit(u: UserRecord) {
@@ -487,7 +515,7 @@ function UsersSection({ currentUsername }: { currentUsername: string }) {
               {u.username !== currentUsername && (
                 <button
                   className="btn-danger btn-sm"
-                  onClick={() => window.confirm(`Delete user "${u.username}"?`) && deleteMut.mutate(u.id)}
+                  onClick={() => setConfirmDeleteUser({ id: u.id, username: u.username })}
                   title="Delete"
                 >
                   <Trash2 size={12} />
@@ -528,6 +556,15 @@ function UsersSection({ currentUsername }: { currentUsername: string }) {
             {mutErr && <span className="feedback-error">{mutErr}</span>}
           </div>
         </div>
+      )}
+
+      {confirmDeleteUser && (
+        <ConfirmModal
+          title="Delete User"
+          message={`Delete user "${confirmDeleteUser.username}"?`}
+          onConfirm={() => deleteMut.mutate(confirmDeleteUser.id)}
+          onCancel={() => setConfirmDeleteUser(null)}
+        />
       )}
     </div>
   )

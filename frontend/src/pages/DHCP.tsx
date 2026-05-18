@@ -5,6 +5,8 @@ import { dhcpApi, providersApi, addressesApi, subnetsApi, type DHCPReservation, 
 import { rangeSize, ipInCidr, ipToNum, isValidIPv4, isValidIPv6, isValidEUI48, isValidEUI64 } from '../utils/ip'
 import SyncBar from '../components/SyncBar'
 import DetailPanel from '../components/DetailPanel'
+import ConfirmModal from '../components/ConfirmModal'
+import { useToast } from '../contexts/ToastContext'
 
 const SOURCE_LABEL: Record<string, string> = {
   msdhcp: 'MS DHCP', pihole: 'Pi-hole', keadhcp: 'Kea',
@@ -23,6 +25,8 @@ export default function DHCP() {
   const [form, setForm]                   = useState(emptyForm)
   const [viewMode, setViewMode]           = useState<ViewMode>('combined')
   const [selectedLease, setSelectedLease] = useState<DHCPReservation | null>(null)
+  const [confirmIp, setConfirmIp] = useState<string | null>(null)
+  const { showToast } = useToast()
   const [editingNotes, setEditingNotes]       = useState(false)
   const [notesValue, setNotesValue]           = useState('')
   const [selectedAddSubnetId, setSelectedAddSubnetId] = useState<number | null>(null)
@@ -60,8 +64,13 @@ export default function DHCP() {
   const deleteMutation = useMutation({
     mutationFn: (ip: string) => dhcpApi.deleteReservation(selectedScope!.scope_id, ip, selectedScope!.source),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['dhcp-leases', selectedScope?.scope_id, selectedScope?.source] })
-      setSelectedLease(null)
+      qc.invalidateQueries({ queryKey: ['dhcp-leases', selectedScope?.scope_id] })
+      showToast('Reservation deleted', 'success')
+      setConfirmIp(null)
+    },
+    onError: (err: any) => {
+      showToast(err?.response?.data?.detail ?? 'Delete failed', 'error')
+      setConfirmIp(null)
     },
   })
 
@@ -421,10 +430,7 @@ export default function DHCP() {
                           <td onClick={e => e.stopPropagation()}>
                             <button
                               className="btn-danger btn-sm"
-                              onClick={() =>
-                                window.confirm(`Delete reservation for ${l.ip_address}?`) &&
-                                deleteMutation.mutate(l.ip_address)
-                              }
+                              onClick={() => setConfirmIp(l.ip_address)}
                               disabled={deleteMutation.isPending}
                             >
                               Delete
@@ -442,6 +448,15 @@ export default function DHCP() {
           )}
         </div>
       </div>
+
+      {confirmIp && (
+        <ConfirmModal
+          title="Delete DHCP Reservation"
+          message={`Delete reservation for ${confirmIp}?`}
+          onConfirm={() => deleteMutation.mutate(confirmIp)}
+          onCancel={() => setConfirmIp(null)}
+        />
+      )}
 
       {selectedLease && selectedScope && (
         <DetailPanel

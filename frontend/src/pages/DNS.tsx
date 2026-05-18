@@ -5,6 +5,8 @@ import { dnsApi, providersApi, addressesApi, subnetsApi, type DNSRecord, type DN
 import { ipInCidr } from '../utils/ip'
 import SyncBar from '../components/SyncBar'
 import DetailPanel from '../components/DetailPanel'
+import ConfirmModal from '../components/ConfirmModal'
+import { useToast } from '../contexts/ToastContext'
 
 const RECORD_TYPES = ['A', 'AAAA', 'CNAME', 'PTR', 'MX', 'TXT', 'NS']
 
@@ -65,6 +67,8 @@ export default function DNS() {
   const [viewMode, setViewMode]             = useState<ViewMode>('combined')
   const [selectedRecord, setSelectedRecord] = useState<DNSRecord | null>(null)
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set())
+  const [confirmRecord, setConfirmRecord] = useState<DNSRecord | null>(null)
+  const { showToast } = useToast()
   const [editingNotes, setEditingNotes]           = useState(false)
   const [notesValue, setNotesValue]               = useState('')
   const [selectedAddSubnetId, setSelectedAddSubnetId] = useState<number | null>(null)
@@ -101,7 +105,10 @@ export default function DNS() {
     mutationFn: (record: DNSRecord) => dnsApi.deleteRecord(selectedZone!, record),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['dns-records', selectedZone] })
-      setSelectedRecord(null)
+      showToast('Record deleted', 'success')
+    },
+    onError: (err: any) => {
+      showToast(err?.response?.data?.detail ?? 'Delete failed', 'error')
     },
   })
 
@@ -292,10 +299,7 @@ export default function DNS() {
               <td onClick={e => e.stopPropagation()}>
                 <button
                   className="btn-danger btn-sm"
-                  onClick={() =>
-                    window.confirm(`Delete ${r.record_type} record "${r.name}"?`) &&
-                    deleteMutation.mutate(r)
-                  }
+                  onClick={() => setConfirmRecord(r)}
                   disabled={deleteMutation.isPending}
                 >
                   <Trash2 size={12} />
@@ -518,6 +522,15 @@ export default function DNS() {
           )}
         </div>
       </div>
+
+      {confirmRecord && (
+        <ConfirmModal
+          title="Delete DNS Record"
+          message={`Delete ${confirmRecord.record_type} record "${confirmRecord.name}"?`}
+          onConfirm={() => { deleteMutation.mutate(confirmRecord); setConfirmRecord(null) }}
+          onCancel={() => setConfirmRecord(null)}
+        />
+      )}
 
       {selectedRecord && (
         <DetailPanel
