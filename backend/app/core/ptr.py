@@ -6,7 +6,7 @@ def find_reverse_zone(ip: str, zones: list[str]) -> str | None:
     """Return the most-specific reverse zone from zones that covers ip, or None."""
     addr = ipaddress.ip_address(ip)
     if isinstance(addr, ipaddress.IPv4Address):
-        octets = ip.split('.')
+        octets = str(addr).split('.')
         candidates = [
             f"{'.'.join(reversed(octets[:n]))}.in-addr.arpa"
             for n in range(len(octets), 0, -1)
@@ -14,7 +14,7 @@ def find_reverse_zone(ip: str, zones: list[str]) -> str | None:
     else:
         expanded = addr.exploded.replace(':', '')
         candidates = [
-            f"{'.'.join(reversed(list(expanded[:n])))}.ip6.arpa"
+            f"{'.'.join(reversed(expanded[:n]))}.ip6.arpa"
             for n in range(len(expanded), 0, -1)
         ]
     zone_set = set(zones)
@@ -32,13 +32,16 @@ def build_ptr_record(
     ttl: int = 3600,
 ) -> DNSRecord:
     """Construct a PTR DNSRecord for ip within reverse_zone."""
+    if not reverse_zone:
+        raise ValueError("reverse_zone must not be empty or None")
+
     addr = ipaddress.ip_address(ip)
     if isinstance(addr, ipaddress.IPv4Address):
-        octets = ip.split('.')
+        octets = str(addr).split('.')
         full_ptr = f"{'.'.join(reversed(octets))}.in-addr.arpa"
     else:
         expanded = addr.exploded.replace(':', '')
-        full_ptr = f"{'.'.join(reversed(list(expanded)))}.ip6.arpa"
+        full_ptr = f"{'.'.join(reversed(expanded))}.ip6.arpa"
 
     suffix = f".{reverse_zone}"
     name = full_ptr[: -len(suffix)] if full_ptr.endswith(suffix) else full_ptr
@@ -46,7 +49,7 @@ def build_ptr_record(
     return DNSRecord(
         name=name,
         record_type="PTR",
-        value=f"{hostname}.",
+        value=f"{hostname.rstrip('.')}.",
         zone=reverse_zone,
         ttl=ttl,
         source=provider,
