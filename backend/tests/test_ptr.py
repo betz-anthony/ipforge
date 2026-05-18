@@ -115,3 +115,132 @@ def test_build_ptr_sets_provider():
 def test_build_ptr_sets_ttl():
     r = build_ptr_record("10.1.2.5", "web01", "2.1.10.in-addr.arpa", ttl=7200)
     assert r.ttl == 7200
+
+
+# ── Task 3: Allocation PTR ────────────────────────────────────────────────────
+
+from unittest.mock import MagicMock, patch
+from app.models.subnet import Subnet as SubnetModel
+from app.models.address import IPAddress as IPAddressModel
+
+
+def _alloc_subnet(db, cidr="10.0.1.0/24"):
+    s = SubnetModel(name="alloc-test", cidr=cidr, ip_version=4)
+    db.add(s); db.commit(); db.refresh(s)
+    return s
+
+
+def test_allocation_register_ptr_requires_register_dns(client, db):
+    s = _alloc_subnet(db)
+    r = client.post(f"/api/subnets/{s.id}/allocate", json={
+        "hostname": "web01",
+        "register_dns": False,
+        "register_ptr": True,
+    })
+    assert r.status_code == 422
+    assert "register_dns" in r.json()["detail"]
+
+
+def test_allocation_register_ptr_with_pihole_returns_422(client, db):
+    s = _alloc_subnet(db)
+    from app.providers.dns.pihole import PiholeDNSProvider as RealPihole
+
+    class FakePihole(RealPihole):
+        source = "pihole01"
+        def __init__(self): pass
+        def add_record(self, record): raise NotImplementedError()
+        def get_zones(self): return []
+        def get_records(self, zone): return []
+        def delete_record(self, record): pass
+        def update_record(self, old, new): pass
+
+    fake = FakePihole()
+    with patch("app.api.allocation.get_dns_providers", return_value=[fake]), \
+         patch("app.api.allocation.get_dhcp_providers", return_value=[]):
+        r = client.post(f"/api/subnets/{s.id}/allocate", json={
+            "hostname": "web02",
+            "register_dns": True,
+            "register_ptr": True,
+            "dns_zone": "example.com",
+        })
+    assert r.status_code == 422
+    assert "does not support PTR" in r.json()["detail"]
+
+
+def test_allocation_register_ptr_no_reverse_zone_rolls_back_a(client, db):
+    s = _alloc_subnet(db)
+    mock_prov = MagicMock()
+    mock_prov.source = "bind01"
+    mock_prov.add_record = MagicMock()
+    mock_prov.delete_record = MagicMock()
+    mock_prov.get_zones = MagicMock(return_value=["example.com"])
+
+    with patch("app.api.allocation.get_dns_providers", return_value=[mock_prov]), \
+         patch("app.api.allocation.get_dhcp_providers", return_value=[]):
+        r = client.post(f"/api/subnets/{s.id}/allocate", json={
+            "hostname": "web03",
+            "register_dns": True,
+            "register_ptr": True,
+            "dns_zone": "example.com",
+        })
+    assert r.status_code == 422
+    assert "reverse zone" in r.json()["detail"].lower()
+    mock_prov.delete_record.assert_called_once()
+
+
+def test_allocation_register_ptr_success_sets_ptr_zone(client, db):
+    s = _alloc_subnet(db)
+    mock_prov = MagicMock()
+    mock_prov.source = "bind01"
+    mock_prov.add_record = MagicMock()
+    mock_prov.delete_record = MagicMock()
+    mock_prov.get_zones = MagicMock(return_value=["example.com", "1.0.10.in-addr.arpa"])
+
+    with patch("app.api.allocation.get_dns_providers", return_value=[mock_prov]), \
+         patch("app.api.allocation.get_dhcp_providers", return_value=[]):
+        r = client.post(f"/api/subnets/{s.id}/allocate", json={
+            "hostname": "web04",
+            "register_dns": True,
+            "register_ptr": True,
+            "dns_zone": "example.com",
+        })
+    assert r.status_code == 201
+    assert mock_prov.add_record.call_count == 2
+    ptr_call = mock_prov.add_record.call_args_list[1]
+    ptr_rec = ptr_call[0][0]
+    assert ptr_rec.record_type == "PTR"
+    assert ptr_rec.zone == "1.0.10.in-addr.arpa"
+    assert r.json()["ptr_registered"] is True
+    addr = db.query(IPAddressModel).filter_by(address=r.json()["address"]).first()
+    assert addr.ptr_zone == "1.0.10.in-addr.arpa"
+
+
+def test_allocation_register_ptr_failure_rolls_back_a(client, db):
+    s = _alloc_subnet(db)
+    add_call_count = 0
+
+    def side_effect_add(record):
+        nonlocal add_call_count
+        add_call_count += 1
+        if add_call_count == 2:
+            raise Exception("PTR server error")
+
+    mock_prov = MagicMock()
+    mock_prov.source = "bind01"
+    mock_prov.add_record = MagicMock(side_effect=side_effect_add)
+    mock_prov.delete_record = MagicMock()
+    mock_prov.get_zones = MagicMock(return_value=["example.com", "1.0.10.in-addr.arpa"])
+
+    with patch("app.api.allocation.get_dns_providers", return_value=[mock_prov]), \
+         patch("app.api.allocation.get_dhcp_providers", return_value=[]):
+        r = client.post(f"/api/subnets/{s.id}/allocate", json={
+            "hostname": "web05",
+            "register_dns": True,
+            "register_ptr": True,
+            "dns_zone": "example.com",
+        })
+    assert r.status_code == 502
+    assert "PTR registration failed" in r.json()["detail"]
+    mock_prov.delete_record.assert_called_once()
+    addr = db.query(IPAddressModel).filter_by(hostname="web05").first()
+    assert addr is None

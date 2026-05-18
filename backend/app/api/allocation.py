@@ -39,6 +39,7 @@ class AllocateRequest(BaseModel):
     dns_zone: str | None = None
     dns_provider: str | None = None
     dhcp_provider: str | None = None
+    register_ptr: bool = False
 
     @field_validator("hostname")
     @classmethod
@@ -129,6 +130,14 @@ def allocate_ip(
         if dhcp_prov is None:
             raise HTTPException(400, "No DHCP provider available")
 
+    if body.register_ptr:
+        if not body.register_dns:
+            raise HTTPException(422, "register_dns must be true when register_ptr is true")
+        if dns_prov is not None:
+            from app.providers.dns.pihole import PiholeDNSProvider
+            if isinstance(dns_prov, PiholeDNSProvider):
+                raise HTTPException(422, "Provider does not support PTR records")
+
     existing = (
         db.query(IPAddress)
         .filter(
@@ -168,7 +177,8 @@ def allocate_ip(
             db.add(addr)
         db.flush()  # populates addr.id before audit and provider calls
 
-    dns_registered = dhcp_registered = False
+    dns_registered = dhcp_registered = ptr_registered = False
+    ptr_record = None
 
     if body.register_dns and dns_prov:
         record = DNSRecord(
@@ -185,11 +195,62 @@ def allocate_ip(
                 db.rollback()
             raise HTTPException(502, f"DNS registration failed: {exc}")
 
+    if body.register_ptr and dns_prov and dns_registered:
+        from app.core.ptr import find_reverse_zone, build_ptr_record
+        try:
+            zones = dns_prov.get_zones()
+        except Exception as exc:
+            if is_new:
+                try:
+                    dns_prov.delete_record(DNSRecord(
+                        name=hostname, record_type="A",
+                        value=addr.address, zone=body.dns_zone or "",
+                    ))
+                except Exception as ce:
+                    logger.warning("DNS rollback failed for %s: %s", hostname, ce)
+                db.rollback()
+            raise HTTPException(502, f"Failed to fetch DNS zones for PTR: {exc}")
+
+        reverse_zone = find_reverse_zone(addr.address, zones)
+        if reverse_zone is None:
+            if is_new:
+                try:
+                    dns_prov.delete_record(DNSRecord(
+                        name=hostname, record_type="A",
+                        value=addr.address, zone=body.dns_zone or "",
+                    ))
+                except Exception as ce:
+                    logger.warning("DNS rollback failed for %s: %s", hostname, ce)
+                db.rollback()
+            raise HTTPException(422, "No reverse zone found for this IP address")
+
+        ptr_record = build_ptr_record(addr.address, hostname, reverse_zone, provider=dns_prov.source)
+        try:
+            dns_prov.add_record(ptr_record)
+            ptr_registered = True
+            addr.ptr_zone = reverse_zone
+        except Exception as exc:
+            if is_new:
+                try:
+                    dns_prov.delete_record(DNSRecord(
+                        name=hostname, record_type="A",
+                        value=addr.address, zone=body.dns_zone or "",
+                    ))
+                except Exception as ce:
+                    logger.warning("DNS rollback failed for %s: %s", hostname, ce)
+                db.rollback()
+            raise HTTPException(502, f"PTR registration failed: {exc}")
+
     if body.register_dhcp and dhcp_prov:
         try:
             scope_id = _find_dhcp_scope(dhcp_prov, addr.address)
         except Exception as exc:
             if is_new:
+                if ptr_registered and dns_prov and ptr_record:
+                    try:
+                        dns_prov.delete_record(ptr_record)
+                    except Exception as ce:
+                        logger.warning("PTR rollback failed for %s: %s", hostname, ce)
                 if dns_registered and dns_prov:
                     try:
                         dns_prov.delete_record(DNSRecord(
@@ -202,6 +263,11 @@ def allocate_ip(
             raise HTTPException(502, f"DHCP provider error fetching scopes: {exc}")
         if scope_id is None:
             if is_new:
+                if ptr_registered and dns_prov and ptr_record:
+                    try:
+                        dns_prov.delete_record(ptr_record)
+                    except Exception as ce:
+                        logger.warning("PTR rollback failed for %s: %s", hostname, ce)
                 if dns_registered and dns_prov:
                     try:
                         dns_prov.delete_record(DNSRecord(
@@ -225,6 +291,11 @@ def allocate_ip(
             addr.dhcp_scope_id = scope_id
         except Exception as exc:
             if is_new:
+                if ptr_registered and dns_prov and ptr_record:
+                    try:
+                        dns_prov.delete_record(ptr_record)
+                    except Exception as ce:
+                        logger.warning("PTR rollback failed for %s: %s", hostname, ce)
                 if dns_registered and dns_prov:
                     try:
                         dns_prov.delete_record(DNSRecord(
@@ -254,6 +325,7 @@ def allocate_ip(
             "mac_address":     addr.mac_address,
             "dns_registered":  dns_registered,
             "dhcp_registered": dhcp_registered,
+            "ptr_registered":  ptr_registered,
             "is_new":          is_new,
         },
     )
