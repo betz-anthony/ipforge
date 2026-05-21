@@ -157,7 +157,9 @@ function ProviderForm({
                     onChange={e => setCfgKey(f.key, e.target.value)}
                     placeholder={isSet ? 'Leave blank to keep' : (f.placeholder ?? 'Enter value')}
                   />
-                  <button type="button" className="btn-ghost btn-sm" onClick={() => setShowSecrets(s => ({ ...s, [f.key]: !show }))}>
+                  <button type="button" className="btn-ghost btn-sm"
+                    aria-label={show ? 'Hide value' : 'Show value'}
+                    onClick={() => setShowSecrets(s => ({ ...s, [f.key]: !show }))}>
                     {show ? <EyeOff size={13} /> : <Eye size={13} />}
                   </button>
                 </div>
@@ -653,6 +655,7 @@ function LdapSection() {
                 placeholder="Leave blank to keep"
               />
               <button type="button" className="btn-ghost btn-sm"
+                aria-label={showPass ? 'Hide password' : 'Show password'}
                 onClick={() => setShowPass(s => !s)}>
                 {showPass ? <EyeOff size={13} /> : <Eye size={13} />}
               </button>

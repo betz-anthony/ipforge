@@ -43,8 +43,9 @@ export default function Login() {
 
         <form onSubmit={submit}>
           <div className="form-field" style={{ marginBottom: '0.75rem' }}>
-            <label>Username</label>
+            <label htmlFor="login-username">Username</label>
             <input
+              id="login-username"
               autoFocus
               value={username}
               onChange={e => setUsername(e.target.value)}
@@ -53,8 +54,9 @@ export default function Login() {
             />
           </div>
           <div className="form-field" style={{ marginBottom: '1rem' }}>
-            <label>Password</label>
+            <label htmlFor="login-password">Password</label>
             <input
+              id="login-password"
               type="password"
               value={password}
               onChange={e => setPassword(e.target.value)}

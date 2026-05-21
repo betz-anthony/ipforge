@@ -5,6 +5,7 @@ import { addressesApi, subnetsApi, dnsApi, dhcpApi, scanHistoryApi, importExport
 import { formatRelative } from '../utils/time'
 import DetailDrawer from '../components/DetailDrawer'
 import { useToast } from '../contexts/ToastContext'
+import { rowActivation } from '../utils/a11y'
 
 const STATUS_BADGE: Record<string, string> = {
   available:  'badge-green',
@@ -369,7 +370,7 @@ export default function Addresses() {
                 </ul>
               )}
             </div>
-            <button className="btn-ghost btn-sm" onClick={() => setImportResult(null)}>
+            <button className="btn-ghost btn-sm" aria-label="Dismiss import result" onClick={() => setImportResult(null)}>
               <X size={13} />
             </button>
           </div>
@@ -455,7 +456,7 @@ export default function Addresses() {
                 </td></tr>
               )}
               {filtered.map((a: IPAddress) => (
-                <tr key={a.id} className="clickable" onClick={() => openDrawer(a)}>
+                <tr key={a.id} className="clickable" {...rowActivation(() => openDrawer(a))}>
                   <td><span className="font-mono">{a.address}</span></td>
                   <td>{a.hostname ?? <span className="text-muted">—</span>}</td>
                   <td>

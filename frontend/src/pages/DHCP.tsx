@@ -7,6 +7,7 @@ import SyncBar from '../components/SyncBar'
 import DetailPanel from '../components/DetailPanel'
 import ConfirmModal from '../components/ConfirmModal'
 import { useToast } from '../contexts/ToastContext'
+import { rowActivation } from '../utils/a11y'
 
 const SOURCE_LABEL: Record<string, string> = {
   msdhcp: 'MS DHCP', pihole: 'Pi-hole', keadhcp: 'Kea',
@@ -418,7 +419,7 @@ export default function DHCP() {
                         <tr
                           key={l.ip_address}
                           className="clickable"
-                          onClick={() => setSelectedLease(l)}
+                          {...rowActivation(() => setSelectedLease(l))}
                         >
                           <td><span className="font-mono">{l.ip_address}</span></td>
                           <td><span className="font-mono">{isV6(selectedScope) ? l.client_duid : l.mac_address}</span></td>
