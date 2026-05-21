@@ -1,15 +1,35 @@
+import logging
+
 from cryptography.fernet import Fernet, InvalidToken
+
+logger = logging.getLogger(__name__)
 
 # Fernet tokens always start with this prefix (base64url of version byte 0x80).
 _FERNET_PREFIX = "gAAAAA"
 
+_invalid_key_logged = False
+
 
 def _fernet() -> Fernet | None:
+    global _invalid_key_logged
     from app.config import settings
     key = settings.secret_key
     if not key:
         return None
-    return Fernet(key.encode())
+    try:
+        return Fernet(key.encode())
+    except Exception as exc:
+        # A malformed SECRET_KEY must never crash the app — disable encryption
+        # and fall through to plaintext rather than failing startup.
+        if not _invalid_key_logged:
+            logger.error(
+                "SECRET_KEY is not a valid Fernet key — credential encryption "
+                "disabled. Generate one with: python -c "
+                "\"from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())\" (%s)",
+                exc,
+            )
+            _invalid_key_logged = True
+        return None
 
 
 def encrypt_secret(plaintext: str) -> str:

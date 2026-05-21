@@ -92,9 +92,12 @@ async def lifespan(app: FastAPI):
         apply_db_settings(db)
         _ensure_default_admin(db)
         from app.core.crypto import encrypt_existing_secrets
-        encrypted = encrypt_existing_secrets(db)
-        if encrypted:
-            logger.info("Encrypted %d previously-plaintext secret value(s) at rest", encrypted)
+        try:
+            encrypted = encrypt_existing_secrets(db)
+            if encrypted:
+                logger.info("Encrypted %d previously-plaintext secret value(s) at rest", encrypted)
+        except Exception:
+            logger.exception("encrypt_existing_secrets failed — continuing startup")
     finally:
         db.close()
     if app_settings.sync_mode == "background":
