@@ -40,7 +40,7 @@ LDAP_SECRET_KEYS = {"ldap_bind_password"}
 
 
 def apply_db_settings(db: Session) -> None:
-    from app.core.secrets import decrypt_value
+    from app.core.crypto import decrypt_secret
     rows = db.query(AppSetting).all()
     for row in rows:
         if not hasattr(settings, row.key) or row.value == "":
@@ -52,7 +52,7 @@ def apply_db_settings(db: Session) -> None:
         elif key in LDAP_BOOL_KEYS:
             val = val == "true"
         elif key in LDAP_SECRET_KEYS:
-            val = decrypt_value(val)
+            val = decrypt_secret(val)
         setattr(settings, key, val)
 
 
@@ -114,11 +114,11 @@ def get_ldap_settings():
 
 @router.put("/ldap", response_model=LdapSettingsResponse)
 def update_ldap_settings(body: LdapSettingsUpdate, db: Session = Depends(get_db)):
-    from app.core.secrets import encrypt_value
+    from app.core.crypto import encrypt_secret
     updates = body.model_dump(exclude_none=True)
     for key, value in updates.items():
         if key in LDAP_SECRET_KEYS and value:
-            db_value = encrypt_value(value)
+            db_value = encrypt_secret(value)
         elif key in LDAP_BOOL_KEYS:
             db_value = "true" if value else "false"
         else:
