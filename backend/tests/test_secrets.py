@@ -4,7 +4,7 @@ import pytest
 from cryptography.fernet import Fernet
 from unittest.mock import patch
 
-from app.core.crypto import encrypt_secret, decrypt_secret
+from app.core.crypto import encrypt_secret, decrypt_secret, encrypt_existing_secrets
 from app.models.provider_config import ProviderConfig
 
 
@@ -140,3 +140,56 @@ def test_plaintext_in_db_still_decrypts_for_provider(db):
     """Pre-encryption rows (plaintext in DB) pass through decrypt_secret unchanged."""
     from app.core.crypto import decrypt_secret
     assert decrypt_secret("oldplaintextpassword") == "oldplaintextpassword"
+
+
+# ── encrypt_existing_secrets (plaintext migration) ───────────────────────────
+
+def test_encrypt_existing_secrets_encrypts_plaintext(db):
+    key = _test_key()
+    f = Fernet(key.encode())
+    db.add(ProviderConfig(
+        category="dns", provider_type="msdns", name="legacy-msdns",
+        config=json.dumps({"winrm_host": "dc1", "winrm_password": "plainpw"}),
+    ))
+    db.commit()
+
+    with patch("app.core.crypto._fernet", return_value=f):
+        n = encrypt_existing_secrets(db)
+
+    assert n == 1
+    stored = json.loads(db.query(ProviderConfig).filter_by(name="legacy-msdns").first().config)
+    assert stored["winrm_password"].startswith("gAAAAA")
+    assert f.decrypt(stored["winrm_password"].encode()).decode() == "plainpw"
+    assert stored["winrm_host"] == "dc1"  # non-secret field untouched
+
+
+def test_encrypt_existing_secrets_idempotent(db):
+    key = _test_key()
+    f = Fernet(key.encode())
+    db.add(ProviderConfig(
+        category="dns", provider_type="msdns", name="enc-msdns",
+        config=json.dumps({"winrm_password": "plainpw"}),
+    ))
+    db.commit()
+
+    with patch("app.core.crypto._fernet", return_value=f):
+        first  = encrypt_existing_secrets(db)
+        second = encrypt_existing_secrets(db)
+
+    assert first == 1
+    assert second == 0  # already encrypted — no-op on re-run
+
+
+def test_encrypt_existing_secrets_noop_without_key(db):
+    db.add(ProviderConfig(
+        category="dns", provider_type="msdns", name="nokey-msdns",
+        config=json.dumps({"winrm_password": "plainpw"}),
+    ))
+    db.commit()
+
+    with patch("app.core.crypto._fernet", return_value=None):
+        n = encrypt_existing_secrets(db)
+
+    assert n == 0
+    stored = json.loads(db.query(ProviderConfig).filter_by(name="nokey-msdns").first().config)
+    assert stored["winrm_password"] == "plainpw"  # untouched without a key

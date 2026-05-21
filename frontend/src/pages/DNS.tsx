@@ -92,7 +92,7 @@ export default function DNS() {
   const [form, setForm]                     = useState(emptyForm)
   const [viewMode, setViewMode]             = useState<ViewMode>('combined')
   const [selectedRecord, setSelectedRecord] = useState<DNSRecord | null>(null)
-  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set())
+  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set())
   const [confirmRecord, setConfirmRecord] = useState<DNSRecord | null>(null)
   const [registerPtr, setRegisterPtr]   = useState(false)
   const [deletePtr, setDeletePtr]       = useState(true)
@@ -365,7 +365,7 @@ export default function DNS() {
   )
 
   const toggleGroup = (key: string) =>
-    setCollapsedGroups(prev => {
+    setExpandedGroups(prev => {
       const next = new Set(prev)
       next.has(key) ? next.delete(key) : next.add(key)
       return next
@@ -376,15 +376,15 @@ export default function DNS() {
       const items = zoneList.filter(z => classifyZone(z.zone) === key)
       if (items.length === 0) return null
       const groupKey = `${keyPrefix}:${key}`
-      const collapsed = collapsedGroups.has(groupKey)
+      const expanded = expandedGroups.has(groupKey)
       return (
         <div key={groupKey}>
           <div className="zone-type-header" onClick={() => toggleGroup(groupKey)}>
-            <span className="zone-type-arrow">{collapsed ? '▶' : '▼'}</span>
+            <span className="zone-type-arrow">{expanded ? '▼' : '▶'}</span>
             <span>{label}</span>
             <span className="panel-server-count">{items.length}</span>
           </div>
-          {!collapsed && items.map(z => renderZoneItem(z, `${keyPrefix}:${z.zone}`))}
+          {expanded && items.map(z => renderZoneItem(z, `${keyPrefix}:${z.zone}`))}
         </div>
       )
     })
