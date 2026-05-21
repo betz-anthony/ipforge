@@ -9,6 +9,7 @@ from app.providers.dns.base import DNSProvider, DNSRecord
 
 class PiholeDNSProvider(DNSProvider):
     ZONE = "pihole-local"
+    supports_ptr = False
 
     def __init__(self, cfg: dict, name: str):
         self.source = name

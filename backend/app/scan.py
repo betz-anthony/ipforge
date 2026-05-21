@@ -16,16 +16,13 @@ from app.models.address import IPAddress, AddressStatus
 from app.models.cache import CachedDHCPLease, CachedDNSRecord, SyncStatus
 from app.models.scan import Collision, CollisionType, ScanResult, ScanHistoryDay, AlertEvent
 from app.models.subnet import Subnet
+from app.core.time import utcnow
 from app.utils import ip_in_cidr
 
 logger = logging.getLogger(__name__)
 
 _subnet_locks: dict[int, threading.Lock] = {}
 _locks_mu = threading.Lock()
-
-
-def _utcnow() -> datetime:
-    return datetime.now(timezone.utc).replace(tzinfo=None)
 
 
 def _get_subnet_lock(subnet_id: int) -> threading.Lock:
@@ -41,7 +38,7 @@ def _set_scan_status(db, subnet_id: int, status: str, error: str | None = None) 
     if row is None:
         row = SyncStatus(key=key)
         db.add(row)
-    row.synced_at = _utcnow()
+    row.synced_at = utcnow()
     row.status = status
     row.error = error
     db.commit()
@@ -199,7 +196,7 @@ def _detect_collisions(db, subnet_id: int) -> None:
     if subnet is None:
         return
 
-    now = _utcnow()
+    now = utcnow()
 
     latest_scan = (
         db.query(ScanResult)
@@ -315,7 +312,7 @@ def scan_subnet(
             raise ValueError(f"Subnet {subnet_id} not found")
 
         hosts = _get_host_list(subnet, start_ip, end_ip)
-        now   = _utcnow()
+        now   = utcnow()
 
         existing_ips = {row.address for row in db.query(IPAddress.address).all()}
 
@@ -395,7 +392,7 @@ def scan_scheduler_loop() -> None:
         time.sleep(60)
         db = SessionLocal()
         try:
-            now = _utcnow()
+            now = utcnow()
             cutoff = now - timedelta(days=_SCAN_RESULT_RETENTION_DAYS)
             deleted = db.query(ScanResult).filter(ScanResult.scanned_at < cutoff).delete(synchronize_session=False)
             if deleted:

@@ -1,6 +1,5 @@
 import logging
 import threading
-from datetime import datetime, timezone
 from typing import Literal
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
@@ -8,6 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.core.audit import write_audit
 from app.core.deps import get_current_user
+from app.core.time import utcnow
 from app.database import get_db
 from app.models.address import IPAddress, AddressStatus
 from app.models.cache import CachedDHCPLease, CachedDNSRecord
@@ -24,14 +24,10 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
-def _utcnow() -> datetime:
-    return datetime.now(timezone.utc).replace(tzinfo=None)
-
-
 def _age(synced_at) -> int | None:
     if synced_at is None:
         return None
-    return max(0, int((_utcnow() - synced_at).total_seconds()))
+    return max(0, int((utcnow() - synced_at).total_seconds()))
 
 
 # ── Request / response schemas ───────────────────────────────────────────────
@@ -313,7 +309,7 @@ def resolve_collision(
             action_taken = {"sources_to_remove": sources_to_remove}
 
     c.resolved    = True
-    c.resolved_at = _utcnow()
+    c.resolved_at = utcnow()
     db.flush()
     write_audit(
         db, current_user.username, "resolve", "collision", str(c.id),
@@ -356,7 +352,7 @@ def acknowledge_all_alerts(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    now = _utcnow()
+    now = utcnow()
     q = db.query(AlertEvent).filter(AlertEvent.acknowledged == False)  # noqa: E712
     if subnet_id is not None:
         q = q.filter(AlertEvent.subnet_id == subnet_id)
@@ -371,7 +367,7 @@ def acknowledge_alert(alert_id: int, db: Session = Depends(get_db), current_user
     if not alert:
         raise HTTPException(404, "Alert not found")
     alert.acknowledged = True
-    alert.acknowledged_at = _utcnow()
+    alert.acknowledged_at = utcnow()
     db.commit()
     db.refresh(alert)
     return AlertEventRead(

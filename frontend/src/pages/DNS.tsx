@@ -55,6 +55,31 @@ function SortArrow({ col, sortCol, sortDir }: { col: SortCol; sortCol: SortCol |
   )
 }
 
+function PtrCheckbox({ label, checked, onChange, disabled = false, disabledNote }: {
+  label: string
+  checked: boolean
+  onChange: (value: boolean) => void
+  disabled?: boolean
+  disabledNote?: string
+}) {
+  return (
+    <label className={'checkbox-label' + (disabled ? ' disabled' : '')}>
+      <input
+        type="checkbox"
+        checked={checked}
+        onChange={e => onChange(e.target.checked)}
+        disabled={disabled}
+      />
+      <span>
+        {label}
+        {disabled && disabledNote && (
+          <span className="text-muted checkbox-note">{disabledNote}</span>
+        )}
+      </span>
+    </label>
+  )
+}
+
 export default function DNS() {
   const [selectedZone, setSelectedZone]         = useState<string | null>(null)
   const [selectedZoneSource, setSelectedZoneSource] = useState<string | null>(null)
@@ -492,23 +517,14 @@ export default function DNS() {
                     )}
                   </div>
                   {form.record_type === 'A' && (
-                    <div className="form-field" style={{ gridColumn: '1 / -1' }}>
-                      <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: selectedZoneIsPihole ? 'not-allowed' : 'pointer' }}>
-                        <input
-                          type="checkbox"
-                          checked={registerPtr}
-                          onChange={e => setRegisterPtr(e.target.checked)}
-                          disabled={selectedZoneIsPihole}
-                        />
-                        <span style={{ opacity: selectedZoneIsPihole ? 0.5 : 1 }}>
-                          Also create PTR record
-                          {selectedZoneIsPihole && (
-                            <span className="text-muted" style={{ marginLeft: '0.4rem', fontSize: '0.75rem' }}>
-                              (provider does not support PTR)
-                            </span>
-                          )}
-                        </span>
-                      </label>
+                    <div className="form-field form-field-wide">
+                      <PtrCheckbox
+                        label="Also create PTR record"
+                        checked={registerPtr}
+                        onChange={setRegisterPtr}
+                        disabled={selectedZoneIsPihole}
+                        disabledNote="(provider does not support PTR)"
+                      />
                     </div>
                   )}
                   <div className="form-actions">
@@ -565,14 +581,11 @@ export default function DNS() {
           onConfirm={() => { deleteMutation.mutate(confirmRecord); setConfirmRecord(null) }}
           onCancel={() => { setConfirmRecord(null); setDeletePtr(true) }}
           extra={confirmRecord.record_type === 'A' ? (
-            <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginTop: '0.75rem', cursor: 'pointer', fontSize: '0.875rem' }}>
-              <input
-                type="checkbox"
-                checked={deletePtr}
-                onChange={e => setDeletePtr(e.target.checked)}
-              />
-              Also delete matching PTR record
-            </label>
+            <PtrCheckbox
+              label="Also delete matching PTR record"
+              checked={deletePtr}
+              onChange={setDeletePtr}
+            />
           ) : undefined}
         />
       )}

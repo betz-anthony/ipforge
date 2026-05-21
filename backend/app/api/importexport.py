@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from app.core.deps import require_operator
 from app.core.audit import write_audit
+from app.core.mac import normalize_mac
 from app.database import get_db
 from app.models.address import IPAddress, AddressStatus
 from app.models.subnet import Subnet
@@ -22,6 +23,19 @@ _SUBNET_COLS  = ["name", "cidr", "ip_version", "vlan_id", "description", "notes"
 _ADDRESS_COLS = ["address", "subnet_cidr", "hostname", "status",
                  "mac_address", "description", "notes"]
 
+_CSV_FORMULA_PREFIXES = ("=", "+", "-", "@", "\t", "\r")
+
+
+def _csv_safe(value: str) -> str:
+    """Neutralize spreadsheet formula injection by prefixing an apostrophe.
+
+    A cell beginning with =, +, -, @, tab or CR is executed as a formula by
+    Excel/Sheets. The leading apostrophe forces the cell to be read as text.
+    """
+    if value and value[0] in _CSV_FORMULA_PREFIXES:
+        return "'" + value
+    return value
+
 
 # ── Export ────────────────────────────────────────────────────────────────────
 
@@ -35,12 +49,12 @@ def export_subnets(db: Session = Depends(get_db)):
     w.writeheader()
     for s in subnets:
         w.writerow({
-            "name":                  s.name,
+            "name":                  _csv_safe(s.name),
             "cidr":                  s.cidr,
             "ip_version":            s.ip_version,
             "vlan_id":               s.vlan_id if s.vlan_id is not None else "",
-            "description":           s.description or "",
-            "notes":                 s.notes or "",
+            "description":           _csv_safe(s.description or ""),
+            "notes":                 _csv_safe(s.notes or ""),
             "parent_cidr":           cidr_map.get(s.parent_id, "") if s.parent_id else "",
             "scan_interval_minutes": s.scan_interval_minutes if s.scan_interval_minutes is not None else "",
         })
@@ -64,11 +78,11 @@ def export_addresses(db: Session = Depends(get_db)):
         w.writerow({
             "address":     a.address,
             "subnet_cidr": subnet_map.get(a.subnet_id, ""),
-            "hostname":    a.hostname or "",
+            "hostname":    _csv_safe(a.hostname or ""),
             "status":      a.status.value,
             "mac_address": a.mac_address or "",
-            "description": a.description or "",
-            "notes":       a.notes or "",
+            "description": _csv_safe(a.description or ""),
+            "notes":       _csv_safe(a.notes or ""),
         })
     buf.seek(0)
     return StreamingResponse(
@@ -253,13 +267,21 @@ async def import_addresses(
             continue
         status = AddressStatus(raw_status) if raw_status else AddressStatus.available
 
+        raw_mac = (row.get("mac_address") or "").strip()
+        try:
+            mac = normalize_mac(raw_mac) if raw_mac else None
+        except ValueError:
+            errors.append(f"Row {i}: invalid mac_address '{raw_mac}'")
+            skipped += 1
+            continue
+
         existing = db.query(IPAddress).filter_by(address=address).first()
         if existing:
             before = {"address": address, "status": existing.status.value}
             existing.subnet_id   = subnet.id
             existing.hostname    = (row.get("hostname") or "").strip() or None
             existing.status      = status
-            existing.mac_address = (row.get("mac_address") or "").strip() or None
+            existing.mac_address = mac
             existing.description = (row.get("description") or "").strip() or None
             existing.notes       = (row.get("notes") or "").strip() or None
             db.flush()
@@ -272,7 +294,7 @@ async def import_addresses(
                 address=address, subnet_id=subnet.id,
                 hostname=(row.get("hostname") or "").strip() or None,
                 status=status,
-                mac_address=(row.get("mac_address") or "").strip() or None,
+                mac_address=mac,
                 description=(row.get("description") or "").strip() or None,
                 notes=(row.get("notes") or "").strip() or None,
             )

@@ -29,7 +29,7 @@ export default function ConfirmModal({
       <div className="modal" onClick={e => e.stopPropagation()}>
         <h2 className="modal-title">{title}</h2>
         <p className="modal-message">{message}</p>
-        {extra}
+        {extra && <div className="modal-extra">{extra}</div>}
         <div className="modal-actions">
           <button className="btn btn-ghost" onClick={onCancel}>Cancel</button>
           <button
