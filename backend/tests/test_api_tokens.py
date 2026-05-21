@@ -47,3 +47,30 @@ def test_token_hash_unique_constraint(db):
     with pytest.raises(IntegrityError):
         db.commit()
     db.rollback()
+
+
+def test_generate_api_token_has_prefix():
+    from app.core.security import generate_api_token
+    token = generate_api_token()
+    assert token.startswith("ipfg_")
+    assert len(token) > 20
+
+
+def test_generate_api_token_is_unique():
+    from app.core.security import generate_api_token
+    assert generate_api_token() != generate_api_token()
+
+
+def test_hash_api_token_deterministic():
+    from app.core.security import hash_api_token
+    h1 = hash_api_token("ipfg_sample")
+    h2 = hash_api_token("ipfg_sample")
+    assert h1 == h2
+    assert len(h1) == 64           # sha256 hex
+    assert h1 != "ipfg_sample"
+
+
+def test_is_api_token():
+    from app.core.security import is_api_token
+    assert is_api_token("ipfg_anything") is True
+    assert is_api_token("eyJhbGciOi...") is False

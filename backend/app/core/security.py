@@ -1,4 +1,6 @@
 from datetime import datetime, timedelta, timezone
+import hashlib
+import secrets
 from jose import jwt, JWTError
 from passlib.context import CryptContext
 from app.config import settings
@@ -22,3 +24,21 @@ def create_access_token(sub: str, role: str) -> str:
 
 def decode_access_token(token: str) -> dict:
     return jwt.decode(token, settings.jwt_secret_key, algorithms=[settings.jwt_algorithm])
+
+
+_API_TOKEN_PREFIX = "ipfg_"
+
+
+def generate_api_token() -> str:
+    """Return a new plaintext API token. Shown to the user exactly once."""
+    return _API_TOKEN_PREFIX + secrets.token_urlsafe(30)
+
+
+def hash_api_token(token: str) -> str:
+    """Return the SHA-256 hex digest used to store and look up an API token."""
+    return hashlib.sha256(token.encode()).hexdigest()
+
+
+def is_api_token(credential: str) -> bool:
+    """True if a bearer credential is an API token rather than a JWT."""
+    return credential.startswith(_API_TOKEN_PREFIX)
