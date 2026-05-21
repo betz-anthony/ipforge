@@ -1,5 +1,9 @@
 from pydantic_settings import BaseSettings
 
+# Built-in placeholder JWT key. The server refuses to start while this value
+# is still in use — a predictable signing key allows token forgery.
+DEFAULT_JWT_SECRET_KEY = "change-me-in-production-use-a-long-random-string"
+
 
 class Settings(BaseSettings):
     database_url: str = "postgresql://ipam:ipam@localhost:5432/ipam"
@@ -10,7 +14,7 @@ class Settings(BaseSettings):
     secret_key: str = ""
 
     # Auth
-    jwt_secret_key: str = "change-me-in-production-use-a-long-random-string"
+    jwt_secret_key: str = DEFAULT_JWT_SECRET_KEY
     jwt_algorithm: str = "HS256"
     jwt_expire_minutes: int = 480      # 8 hours
     auth_backend: str = "local"        # "local" | "ldap" (planned)

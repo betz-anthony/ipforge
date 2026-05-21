@@ -6,7 +6,7 @@ from fastapi import FastAPI, Depends
 logging.basicConfig(level=logging.INFO, format="%(levelname)s [%(name)s] %(message)s", force=True)
 from fastapi.middleware.cors import CORSMiddleware
 from app.database import SessionLocal
-from app.config import settings as app_settings
+from app.config import settings as app_settings, DEFAULT_JWT_SECRET_KEY
 from app.api import subnets, addresses, dns, dhcp
 from app.api import settings as settings_router
 from app.api import sync as sync_router
@@ -25,6 +25,15 @@ from app.api import reclaim as reclaim_router
 import app.models  # noqa: F401
 
 logger = logging.getLogger(__name__)
+
+
+def _check_jwt_secret():
+    key = app_settings.jwt_secret_key
+    if not key or key == DEFAULT_JWT_SECRET_KEY:
+        raise RuntimeError(
+            "JWT_SECRET_KEY is unset or still the built-in default. Set a strong, "
+            "random JWT_SECRET_KEY environment variable before starting the server."
+        )
 
 
 def _run_migrations():
@@ -55,6 +64,7 @@ def _ensure_default_admin(db):
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    _check_jwt_secret()
     _run_migrations()
     db = SessionLocal()
     try:
