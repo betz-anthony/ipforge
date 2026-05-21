@@ -199,3 +199,19 @@ def test_cannot_delete_other_users_token(client, db):
     r = client.delete(f"/api/auth/tokens/{row.id}")
     assert r.status_code == 404
     assert db.query(ApiToken).filter_by(id=row.id).first() is not None
+
+
+def test_create_token_writes_audit(client, db):
+    from app.models.audit_log import AuditLog
+    client.post("/api/auth/tokens", json={"name": "ci-pipeline"})
+    entry = db.query(AuditLog).filter_by(action="create", resource_type="api_token").first()
+    assert entry is not None
+    assert entry.summary == "ci-pipeline"
+
+
+def test_delete_token_writes_audit(client, db):
+    from app.models.audit_log import AuditLog
+    created = client.post("/api/auth/tokens", json={"name": "tmp"}).json()
+    client.delete(f"/api/auth/tokens/{created['id']}")
+    entry = db.query(AuditLog).filter_by(action="delete", resource_type="api_token").first()
+    assert entry is not None

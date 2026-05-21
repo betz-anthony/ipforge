@@ -27,6 +27,7 @@ def decode_access_token(token: str) -> dict:
 
 
 _API_TOKEN_PREFIX = "ipfg_"
+API_TOKEN_DISPLAY_PREFIX_LEN = 12   # chars of the token kept for display ("ipfg_" + 7)
 
 
 def generate_api_token() -> str:

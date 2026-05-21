@@ -2,14 +2,14 @@ from datetime import datetime
 
 from fastapi import APIRouter, HTTPException, Depends, status
 from fastapi.security import OAuth2PasswordRequestForm
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 from app.database import get_db
 from app.models.user import User
 from app.core.audit import write_audit
 from app.core.deps import get_current_user
 from app.core.ldap import authenticate_ldap
-from app.core.security import verify_password, create_access_token, hash_password, generate_api_token, hash_api_token
+from app.core.security import verify_password, create_access_token, hash_password, generate_api_token, hash_api_token, API_TOKEN_DISPLAY_PREFIX_LEN
 from app.models.api_token import ApiToken
 
 router = APIRouter()
@@ -92,7 +92,7 @@ def change_password(
 
 
 class TokenCreate(BaseModel):
-    name: str
+    name: str = Field(..., max_length=64)
     read_only: bool = False
     expires_at: datetime | None = None
 
@@ -140,7 +140,7 @@ def create_token(
         user_id=current_user.id,
         name=name,
         token_hash=hash_api_token(value),
-        token_prefix=value[:12],
+        token_prefix=value[:API_TOKEN_DISPLAY_PREFIX_LEN],
         read_only=body.read_only,
         expires_at=body.expires_at,
     )
