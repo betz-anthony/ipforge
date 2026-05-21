@@ -41,6 +41,35 @@ function classifyZone(zone: string): ZoneType {
   return 'forward'
 }
 
+// Render a reverse-DNS zone name as its network CIDR (e.g.
+// "2.1.10.in-addr.arpa" -> "10.1.2.0/24"). Returns null for forward zones.
+function reverseZoneToCidr(zone: string): string | null {
+  if (zone.endsWith('.in-addr.arpa')) {
+    const labels = zone.slice(0, -'.in-addr.arpa'.length).split('.')
+    if (labels.length === 0 || labels.length > 4) return null
+    const octets = [...labels].reverse().map(Number)
+    if (octets.some(o => !Number.isInteger(o) || o < 0 || o > 255)) return null
+    const prefix = octets.length * 8
+    while (octets.length < 4) octets.push(0)
+    return `${octets.join('.')}/${prefix}`
+  }
+  if (zone.endsWith('.ip6.arpa')) {
+    const labels = zone.slice(0, -'.ip6.arpa'.length).split('.')
+    if (labels.length === 0 || labels.length > 32 || labels.some(l => !/^[0-9a-fA-F]$/.test(l))) return null
+    const nibbles = [...labels].reverse()
+    const prefix = nibbles.length * 4
+    while (nibbles.length < 32) nibbles.push('0')
+    const hextets: string[] = []
+    for (let i = 0; i < 32; i += 4) {
+      hextets.push(nibbles.slice(i, i + 4).join('').replace(/^0+/, '') || '0')
+    }
+    const sig = Math.max(1, Math.ceil(prefix / 16))
+    const head = hextets.slice(0, sig).join(':')
+    return sig < 8 ? `${head}::/${prefix}` : `${head}/${prefix}`
+  }
+  return null
+}
+
 type SortCol = 'name' | 'record_type' | 'value' | 'ttl'
 type SortDir = 'asc' | 'desc'
 type ViewMode = 'combined' | 'by-server'
@@ -93,6 +122,7 @@ export default function DNS() {
   const [viewMode, setViewMode]             = useState<ViewMode>('combined')
   const [selectedRecord, setSelectedRecord] = useState<DNSRecord | null>(null)
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set())
+  const [zoneSearch, setZoneSearch]       = useState('')
   const [confirmRecord, setConfirmRecord] = useState<DNSRecord | null>(null)
   const [registerPtr, setRegisterPtr]   = useState(false)
   const [deletePtr, setDeletePtr]       = useState(true)
@@ -207,25 +237,35 @@ export default function DNS() {
     [zones, dnsProviders]
   )
 
+  // Zones matching the zone-list search box (zone name or reverse-zone CIDR)
+  const searchedZones = useMemo(() => {
+    const q = zoneSearch.trim().toLowerCase()
+    if (!q) return filteredZones
+    return filteredZones.filter(z =>
+      z.zone.toLowerCase().includes(q) ||
+      (reverseZoneToCidr(z.zone)?.toLowerCase().includes(q) ?? false)
+    )
+  }, [filteredZones, zoneSearch])
+
   // Zones deduplicated by name for combined view
   const combinedZones = useMemo(() => {
     const seen = new Set<string>()
-    return filteredZones.filter(z => {
+    return searchedZones.filter(z => {
       if (seen.has(z.zone)) return false
       seen.add(z.zone)
       return true
     })
-  }, [filteredZones])
+  }, [searchedZones])
 
   // Zones grouped by source for by-server view
   const groupedZones = useMemo(() => {
     const groups = new Map<string, DNSZone[]>()
-    for (const z of filteredZones) {
+    for (const z of searchedZones) {
       if (!groups.has(z.source)) groups.set(z.source, [])
       groups.get(z.source)!.push(z)
     }
     return groups
-  }, [filteredZones])
+  }, [searchedZones])
 
   // Unique sources present in zones (ground truth for multi-provider detection)
   const uniqueZoneSources = useMemo(
@@ -354,15 +394,20 @@ export default function DNS() {
     </div>
   )
 
-  const renderZoneItem = (z: DNSZone, key: string) => (
-    <div
-      key={key}
-      className={'panel-list-item' + (selectedZone === z.zone ? ' active' : '')}
-      onClick={() => resetZone(z.zone, z.source)}
-    >
-      {z.zone}
-    </div>
-  )
+  const renderZoneItem = (z: DNSZone, key: string) => {
+    const cidr = reverseZoneToCidr(z.zone)
+    return (
+      <div
+        key={key}
+        className={'panel-list-item' + (selectedZone === z.zone ? ' active' : '')}
+        onClick={() => resetZone(z.zone, z.source)}
+        title={z.zone}
+      >
+        {cidr ?? z.zone}
+        {cidr && <div className="panel-list-item-sub">{z.zone}</div>}
+      </div>
+    )
+  }
 
   const toggleGroup = (key: string) =>
     setExpandedGroups(prev => {
@@ -376,7 +421,7 @@ export default function DNS() {
       const items = zoneList.filter(z => classifyZone(z.zone) === key)
       if (items.length === 0) return null
       const groupKey = `${keyPrefix}:${key}`
-      const expanded = expandedGroups.has(groupKey)
+      const expanded = zoneSearch.trim() !== '' || expandedGroups.has(groupKey)
       return (
         <div key={groupKey}>
           <div className="zone-type-header" onClick={() => toggleGroup(groupKey)}>
@@ -417,6 +462,15 @@ export default function DNS() {
               </div>
             )}
           </div>
+          <div className="panel-list-search">
+            <input
+              type="text"
+              placeholder="Filter zones…"
+              value={zoneSearch}
+              onChange={e => setZoneSearch(e.target.value)}
+              aria-label="Filter zones"
+            />
+          </div>
           {loadingZones && <p className="loading" style={{ padding: '0.75rem' }}>Loading…</p>}
           {viewMode === 'combined' ? (
             renderZoneTypeGroups(combinedZones, 'combined')
@@ -431,8 +485,10 @@ export default function DNS() {
               </div>
             ))
           )}
-          {filteredZones.length === 0 && !loadingZones && (
-            <p className="loading" style={{ padding: '0.75rem' }}>No zones found.</p>
+          {searchedZones.length === 0 && !loadingZones && (
+            <p className="loading" style={{ padding: '0.75rem' }}>
+              {zoneSearch.trim() ? 'No zones match the filter.' : 'No zones found.'}
+            </p>
           )}
         </div>
 
@@ -440,7 +496,9 @@ export default function DNS() {
           {selectedZone ? (
             <>
               <div className="page-header">
-                <h1>{selectedZone}</h1>
+                <h1 title={selectedZone ?? ''}>
+                  {(selectedZone && reverseZoneToCidr(selectedZone)) || selectedZone}
+                </h1>
                 <div className="page-header-actions">
                   <div className="filter-bar" style={{ margin: 0 }}>
                     <SlidersHorizontal size={14} style={{ color: 'var(--text-muted)', flexShrink: 0 }} />
