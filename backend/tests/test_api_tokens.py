@@ -34,3 +34,16 @@ def test_api_token_row_roundtrip(db):
     assert fetched.token_prefix == "ipfg_abc123"
     assert fetched.last_used_at is None
     assert fetched.created_at is not None
+
+
+def test_token_hash_unique_constraint(db):
+    import pytest
+    from sqlalchemy.exc import IntegrityError
+    user = _make_user(db)
+    dup_hash = "d" * 64
+    db.add(ApiToken(user_id=user.id, name="a", token_hash=dup_hash, token_prefix="ipfg_a"))
+    db.commit()
+    db.add(ApiToken(user_id=user.id, name="b", token_hash=dup_hash, token_prefix="ipfg_b"))
+    with pytest.raises(IntegrityError):
+        db.commit()
+    db.rollback()
