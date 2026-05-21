@@ -74,3 +74,87 @@ def test_is_api_token():
     from app.core.security import is_api_token
     assert is_api_token("ipfg_anything") is True
     assert is_api_token("eyJhbGciOi...") is False
+
+
+import pytest
+from fastapi.testclient import TestClient
+
+from app.core.security import generate_api_token, hash_api_token
+
+
+def _make_token(db, user, value, read_only=False, expires_at=None):
+    row = ApiToken(
+        user_id=user.id,
+        name="t",
+        token_hash=hash_api_token(value),
+        token_prefix=value[:12],
+        read_only=read_only,
+        expires_at=expires_at,
+    )
+    db.add(row)
+    db.commit()
+    return row
+
+
+@pytest.fixture
+def noauth_client(db):
+    """TestClient with only the DB overridden — real authentication runs."""
+    from app.main import app
+    from app.database import get_db
+
+    def override_get_db():
+        yield db
+
+    app.dependency_overrides[get_db] = override_get_db
+    yield TestClient(app)
+    app.dependency_overrides.clear()
+
+
+def test_valid_api_token_authenticates(noauth_client, db):
+    user = _make_user(db)
+    value = generate_api_token()
+    _make_token(db, user, value)
+    r = noauth_client.get("/api/subnets", headers={"Authorization": f"Bearer {value}"})
+    assert r.status_code == 200
+
+
+def test_unknown_api_token_rejected(noauth_client, db):
+    r = noauth_client.get("/api/subnets",
+                          headers={"Authorization": "Bearer ipfg_does_not_exist"})
+    assert r.status_code == 401
+
+
+def test_expired_api_token_rejected(noauth_client, db):
+    user = _make_user(db)
+    value = generate_api_token()
+    _make_token(db, user, value, expires_at=utcnow() - timedelta(seconds=1))
+    r = noauth_client.get("/api/subnets", headers={"Authorization": f"Bearer {value}"})
+    assert r.status_code == 401
+
+
+def test_api_token_for_disabled_user_rejected(noauth_client, db):
+    user = _make_user(db, username="off", enabled=False)
+    value = generate_api_token()
+    _make_token(db, user, value)
+    r = noauth_client.get("/api/subnets", headers={"Authorization": f"Bearer {value}"})
+    assert r.status_code == 401
+
+
+def test_read_only_token_allows_get(noauth_client, db):
+    user = _make_user(db)
+    value = generate_api_token()
+    _make_token(db, user, value, read_only=True)
+    r = noauth_client.get("/api/subnets", headers={"Authorization": f"Bearer {value}"})
+    assert r.status_code == 200
+
+
+def test_read_only_token_blocks_write(noauth_client, db):
+    user = _make_user(db)
+    value = generate_api_token()
+    _make_token(db, user, value, read_only=True)
+    r = noauth_client.post(
+        "/api/subnets",
+        json={"name": "ro-test", "cidr": "10.9.0.0/24"},
+        headers={"Authorization": f"Bearer {value}"},
+    )
+    assert r.status_code == 403
