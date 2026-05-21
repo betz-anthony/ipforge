@@ -16,6 +16,13 @@ def _row(u: User) -> dict:
             "auth_source": u.auth_source}
 
 
+def _enabled_admin_count(db: Session, exclude_id: int | None = None) -> int:
+    q = db.query(User).filter(User.role == "admin", User.enabled.is_(True))
+    if exclude_id is not None:
+        q = q.filter(User.id != exclude_id)
+    return q.count()
+
+
 class UserCreate(BaseModel):
     username: str
     password: str
@@ -61,6 +68,8 @@ def update_user(
     if body.role is not None:
         if body.role not in ROLES:
             raise HTTPException(400, f"Role must be one of: {', '.join(sorted(ROLES))}")
+        if u.role == "admin" and body.role != "admin" and _enabled_admin_count(db, exclude_id=u.id) == 0:
+            raise HTTPException(400, "Cannot remove the last admin")
         u.role = body.role
     if body.enabled is not None:
         if u.id == current_user.id and not body.enabled:
