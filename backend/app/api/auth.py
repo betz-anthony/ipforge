@@ -77,6 +77,8 @@ def change_password(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
+    if not current_user.hashed_password:
+        raise HTTPException(400, "Password change is not available for LDAP accounts")
     if not verify_password(body.current_password, current_user.hashed_password):
         raise HTTPException(400, "Current password incorrect")
     if len(body.new_password) < 8:

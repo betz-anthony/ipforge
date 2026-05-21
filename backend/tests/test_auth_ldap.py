@@ -1,4 +1,6 @@
 from unittest.mock import patch
+from app.main import app
+from app.core.deps import get_current_user
 from app.models.user import User
 
 # Pre-computed bcrypt hash for "pass1234".  We use a raw bcrypt hash rather
@@ -74,3 +76,13 @@ def test_ldap_failed_auth_rejected(client, db):
                         data={"username": "unknown", "password": "bad"},
                         headers={"Content-Type": "application/x-www-form-urlencoded"})
     assert r.status_code == 401
+
+
+def test_change_password_rejected_for_ldap_user(client, db):
+    ldap_user = User(id=99, username="ldapuser", hashed_password="",
+                     role="readonly", auth_source="ldap", enabled=True)
+    app.dependency_overrides[get_current_user] = lambda: ldap_user
+    r = client.post("/api/auth/change-password",
+                    json={"current_password": "x", "new_password": "newpass1234"})
+    assert r.status_code == 400
+    assert "LDAP" in r.json()["detail"]

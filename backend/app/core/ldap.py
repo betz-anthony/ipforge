@@ -55,6 +55,12 @@ def authenticate_ldap(username: str, password: str) -> str | None:
     if not settings.ldap_enabled:
         return None
 
+    # A bind with a DN but empty password performs an unauthenticated
+    # (anonymous) bind that many LDAP servers accept — reject empty
+    # credentials so an empty password can never authenticate an account.
+    if not username or not password:
+        return None
+
     server = _make_server()
     try:
         svc = ldap3.Connection(

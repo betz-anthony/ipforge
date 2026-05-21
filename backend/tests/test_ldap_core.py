@@ -39,6 +39,14 @@ def test_ldap_disabled_returns_none():
     assert result is None
 
 
+def test_ldap_empty_password_returns_none():
+    _ldap_settings()
+    with patch("app.core.ldap.ldap3.Connection") as MockConn:
+        result = authenticate_ldap("alice", "")
+    assert result is None
+    MockConn.assert_not_called()  # rejected before any bind attempt
+
+
 def test_ldap_wrong_password_returns_none():
     _ldap_settings()
     with patch("app.core.ldap.ldap3.Connection") as MockConn:
