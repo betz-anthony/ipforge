@@ -13,3 +13,16 @@ def normalize_mac(raw: str) -> str:
     if not _HEX12.match(hex_only):
         raise ValueError(f"invalid MAC address: {raw!r}")
     return ":".join(hex_only[i:i + 2] for i in range(0, 12, 2))
+
+
+def normalize_mac_optional(value: str | None) -> str | None:
+    """Pydantic field-validator helper: None or blank -> None, else canonical MAC.
+
+    Raises ValueError with a user-facing message when the value is not a MAC.
+    """
+    if value is None or not value.strip():
+        return None
+    try:
+        return normalize_mac(value)
+    except ValueError:
+        raise ValueError("mac_address must be 12 hex digits (any delimiter)")
