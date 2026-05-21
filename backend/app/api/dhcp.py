@@ -1,5 +1,4 @@
 import logging
-from datetime import datetime, timezone
 from fastapi import APIRouter, HTTPException, Depends, Query
 from sqlalchemy.orm import Session
 from app.database import get_db
@@ -9,13 +8,10 @@ from app.providers.dhcp.base import DHCPReservation, DHCPScope
 from app.models.cache import CachedDHCPScope, CachedDHCPLease
 from app.core.deps import require_operator
 from app.core.audit import write_audit
+from app.core.time import utcnow
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
-
-
-def _utcnow():
-    return datetime.now(timezone.utc).replace(tzinfo=None)
 
 
 @router.get("/scopes", response_model=list[DHCPScope])
@@ -83,7 +79,7 @@ def add_reservation(
         logger.error("DHCP %s add_reservation: %s", target.source, e, exc_info=True)
         raise HTTPException(502, str(e))
 
-    now = _utcnow()
+    now = utcnow()
     db.add(CachedDHCPLease(
         scope_id=scope_id, ip_address=reservation.ip_address,
         mac_address=reservation.mac_address, client_duid=reservation.client_duid,

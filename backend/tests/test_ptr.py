@@ -78,32 +78,32 @@ def test_find_zone_ipv6():
 
 
 def test_build_ptr_name_is_host_portion_of_zone():
-    r = build_ptr_record("10.1.2.5", "web01", "2.1.10.in-addr.arpa")
+    r = build_ptr_record("10.1.2.5", "web01", "2.1.10.in-addr.arpa", provider="bind01")
     assert r.name == "5"
 
 
 def test_build_ptr_name_with_less_specific_zone():
-    r = build_ptr_record("10.1.2.5", "web01", "1.10.in-addr.arpa")
+    r = build_ptr_record("10.1.2.5", "web01", "1.10.in-addr.arpa", provider="bind01")
     assert r.name == "5.2"
 
 
 def test_build_ptr_value_has_trailing_dot():
-    r = build_ptr_record("10.1.2.5", "web01", "2.1.10.in-addr.arpa")
+    r = build_ptr_record("10.1.2.5", "web01", "2.1.10.in-addr.arpa", provider="bind01")
     assert r.value == "web01."
 
 
 def test_build_ptr_fqdn_value_gets_trailing_dot():
-    r = build_ptr_record("10.1.2.5", "web01.example.com", "2.1.10.in-addr.arpa")
+    r = build_ptr_record("10.1.2.5", "web01.example.com", "2.1.10.in-addr.arpa", provider="bind01")
     assert r.value == "web01.example.com."
 
 
 def test_build_ptr_record_type_is_PTR():
-    r = build_ptr_record("10.1.2.5", "web01", "2.1.10.in-addr.arpa")
+    r = build_ptr_record("10.1.2.5", "web01", "2.1.10.in-addr.arpa", provider="bind01")
     assert r.record_type == "PTR"
 
 
 def test_build_ptr_zone_is_reverse_zone():
-    r = build_ptr_record("10.1.2.5", "web01", "2.1.10.in-addr.arpa")
+    r = build_ptr_record("10.1.2.5", "web01", "2.1.10.in-addr.arpa", provider="bind01")
     assert r.zone == "2.1.10.in-addr.arpa"
 
 
@@ -113,7 +113,7 @@ def test_build_ptr_sets_provider():
 
 
 def test_build_ptr_sets_ttl():
-    r = build_ptr_record("10.1.2.5", "web01", "2.1.10.in-addr.arpa", ttl=7200)
+    r = build_ptr_record("10.1.2.5", "web01", "2.1.10.in-addr.arpa", provider="bind01", ttl=7200)
     assert r.ttl == 7200
 
 
@@ -395,6 +395,7 @@ def test_dns_delete_record_delete_ptr_deletes_both(client, db):
 
 
 def test_dns_delete_record_delete_ptr_no_reverse_zone_422(client, db):
+    _add_zone(db, "example.com")  # forward zone present, no reverse zone
     mock_prov = MagicMock()
     mock_prov.source = "bind01"
 
@@ -430,6 +431,41 @@ def test_dns_delete_record_ptr_fail_rolls_back_a(client, db):
         })
     assert r.status_code == 502
     mock_prov.add_record.assert_called_once()
+
+
+def test_dns_create_record_commit_failure_undoes_provider(client, db, monkeypatch):
+    _add_zone(db, "example.com")
+    mock_prov = MagicMock()
+    mock_prov.source = "bind01"
+    mock_prov.add_record = MagicMock()
+    mock_prov.delete_record = MagicMock()
+    monkeypatch.setattr(db, "commit", MagicMock(side_effect=Exception("commit boom")))
+
+    with patch("app.api.dns.get_dns_providers", return_value=[mock_prov]):
+        r = client.post("/api/dns/zones/example.com/records", json={
+            "name": "web01", "record_type": "A", "value": "10.0.1.5",
+            "zone": "example.com", "ttl": 3600, "source": "bind01",
+        })
+    assert r.status_code == 502
+    mock_prov.add_record.assert_called_once()
+    mock_prov.delete_record.assert_called_once()  # A record undone on commit failure
+
+
+def test_dns_delete_record_commit_failure_undoes_provider(client, db, monkeypatch):
+    mock_prov = MagicMock()
+    mock_prov.source = "bind01"
+    mock_prov.delete_record = MagicMock()
+    mock_prov.add_record = MagicMock()
+    monkeypatch.setattr(db, "commit", MagicMock(side_effect=Exception("commit boom")))
+
+    with patch("app.api.dns.get_dns_providers", return_value=[mock_prov]):
+        r = client.request("DELETE", "/api/dns/zones/example.com/records", json={
+            "name": "web01", "record_type": "A", "value": "10.0.1.5",
+            "zone": "example.com", "ttl": 3600, "source": "bind01",
+        })
+    assert r.status_code == 502
+    mock_prov.delete_record.assert_called_once()
+    mock_prov.add_record.assert_called_once()  # A record re-added on commit failure
 
 
 def test_delete_preview_includes_ptr_when_ptr_zone_set(client, db):

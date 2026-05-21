@@ -10,6 +10,8 @@ from app.models.cache import (
     CachedDHCPScope, CachedDHCPLease,
     SyncStatus,
 )
+from app.core.mac import normalize_mac
+from app.core.time import utcnow
 from app.utils import ip_in_cidr as _ip_in_cidr
 
 logger = logging.getLogger(__name__)
@@ -43,12 +45,18 @@ def _auto_populate_from_cache(db) -> None:
 
     for l in db.query(CachedDHCPLease).all():
         ip = l.ip_address.strip()
+        mac = None
+        if l.mac_address:
+            try:
+                mac = normalize_mac(l.mac_address)
+            except ValueError:
+                logger.warning("sync: skipping malformed MAC %r for %s", l.mac_address, ip)
         candidates[ip] = {
             "hostname": l.name or candidates.get(ip, {}).get("hostname"),
-            "mac_address": l.mac_address,
+            "mac_address": mac,
         }
 
-    now = _utcnow()
+    now = utcnow()
     created = 0
 
     for ip, meta in candidates.items():
@@ -112,16 +120,12 @@ def _backfill_dhcp_providers(db) -> None:
     db.commit()
 
 
-def _utcnow() -> datetime:
-    return datetime.now(timezone.utc).replace(tzinfo=None)
-
-
 def _set_status(db, key: str, status: str, error: str | None = None) -> None:
     row = db.get(SyncStatus, key)
     if row is None:
         row = SyncStatus(key=key)
         db.add(row)
-    row.synced_at = _utcnow()
+    row.synced_at = utcnow()
     row.status = status
     row.error = error
     db.commit()
@@ -150,7 +154,7 @@ def sync_dns() -> None:
                         logger.error("DNS %s get_records(%s): %s", p.source, zone, e)
             return len(zones), results
 
-        now = _utcnow()
+        now = utcnow()
         with ThreadPoolExecutor(max_workers=len(providers) or 1) as ex:
             fmap = {ex.submit(_fetch_provider, p): p for p in providers}
             for f in as_completed(fmap):
@@ -195,7 +199,7 @@ def sync_dhcp() -> None:
         from app.providers.registry import get_dhcp_providers
         providers = get_dhcp_providers()
 
-        now = _utcnow()
+        now = utcnow()
         scope_list: list[tuple] = []  # (provider, scope_id)
 
         with ThreadPoolExecutor(max_workers=len(providers) or 1) as ex:

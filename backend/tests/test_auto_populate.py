@@ -76,7 +76,7 @@ def test_dhcp_lease_creates_ipam_entry(db):
     addr = db.query(IPAddress).filter_by(address="10.0.0.10").first()
     assert addr is not None
     assert addr.hostname == "desktop01"
-    assert addr.mac_address == "AA-BB-CC-DD-EE-FF"
+    assert addr.mac_address == "aa:bb:cc:dd:ee:ff"  # normalized from dash form
     assert addr.status == AddressStatus.assigned
 
 
@@ -122,7 +122,7 @@ def test_existing_record_gets_hostname_from_dhcp(db):
 
     db.refresh(existing)
     assert existing.hostname == "newname"
-    assert existing.mac_address == "AA-BB-CC-DD-EE-FF"
+    assert existing.mac_address == "aa:bb:cc:dd:ee:ff"  # normalized from dash form
 
 
 def test_existing_hostname_not_overwritten(db):
@@ -150,7 +150,7 @@ def test_dhcp_overwrites_dns_hostname_for_new_ip(db):
 
     addr = db.query(IPAddress).filter_by(address="10.0.0.20").first()
     assert addr.hostname == "dhcp-name"
-    assert addr.mac_address == "11-22-33-44-55-66"
+    assert addr.mac_address == "11:22:33:44:55:66"  # normalized from dash form
 
 
 def test_aaaa_record_not_created(db):

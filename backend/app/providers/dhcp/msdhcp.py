@@ -3,6 +3,7 @@ import threading
 import winrm
 from winrm.exceptions import WinRMTransportError
 from app.providers.dhcp.base import DHCPProvider, DHCPScope, DHCPReservation
+from app.providers._ps import ps_quote
 
 try:
     from spnego.exceptions import BadMICError as _BadMICError
@@ -58,7 +59,7 @@ class MSDHCPProvider(DHCPProvider):
 
     def _get_v4_scopes(self) -> list[DHCPScope]:
         out = self._run(
-            f"Get-DhcpServerv4Scope -ComputerName '{self._dhcp_server}' "
+            f"Get-DhcpServerv4Scope -ComputerName {ps_quote(self._dhcp_server)} "
             "| ConvertTo-Json -Depth 3"
         )
         return [
@@ -78,7 +79,7 @@ class MSDHCPProvider(DHCPProvider):
     def _get_v6_scopes(self) -> list[DHCPScope]:
         try:
             out = self._run(
-                f"Get-DhcpServerv6Scope -ComputerName '{self._dhcp_server}' "
+                f"Get-DhcpServerv6Scope -ComputerName {ps_quote(self._dhcp_server)} "
                 "| ConvertTo-Json -Depth 3"
             )
         except RuntimeError:
@@ -104,8 +105,8 @@ class MSDHCPProvider(DHCPProvider):
 
     def _get_v4_leases(self, scope_id: str) -> list[DHCPReservation]:
         out = self._run(
-            f"Get-DhcpServerv4Lease -ScopeId '{scope_id}' "
-            f"-ComputerName '{self._dhcp_server}' "
+            f"Get-DhcpServerv4Lease -ScopeId {ps_quote(scope_id)} "
+            f"-ComputerName {ps_quote(self._dhcp_server)} "
             "| ConvertTo-Json -Depth 3"
         )
         return [
@@ -120,8 +121,8 @@ class MSDHCPProvider(DHCPProvider):
 
     def _get_v6_leases(self, scope_id: str) -> list[DHCPReservation]:
         out = self._run(
-            f"Get-DhcpServerv6Lease -Prefix '{scope_id}' "
-            f"-ComputerName '{self._dhcp_server}' "
+            f"Get-DhcpServerv6Lease -Prefix {ps_quote(scope_id)} "
+            f"-ComputerName {ps_quote(self._dhcp_server)} "
             "| ConvertTo-Json -Depth 3"
         )
         return [
@@ -138,47 +139,47 @@ class MSDHCPProvider(DHCPProvider):
     def add_reservation(self, reservation: DHCPReservation) -> None:
         if _is_v6(reservation.scope_id):
             self._run(
-                f"Add-DhcpServerv6Reservation -Prefix '{reservation.scope_id}' "
-                f"-IPAddress '{reservation.ip_address}' "
-                f"-ClientDuid '{reservation.client_duid}' "
-                f"-Iaid {reservation.iaid} "
-                f"-Name '{reservation.name}' "
-                f"-Description '{reservation.description}' "
-                f"-ComputerName '{self._dhcp_server}'"
+                f"Add-DhcpServerv6Reservation -Prefix {ps_quote(reservation.scope_id)} "
+                f"-IPAddress {ps_quote(reservation.ip_address)} "
+                f"-ClientDuid {ps_quote(reservation.client_duid)} "
+                f"-Iaid {int(reservation.iaid)} "
+                f"-Name {ps_quote(reservation.name)} "
+                f"-Description {ps_quote(reservation.description)} "
+                f"-ComputerName {ps_quote(self._dhcp_server)}"
             )
         else:
             self._run(
-                f"Add-DhcpServerv4Reservation -ScopeId '{reservation.scope_id}' "
-                f"-IPAddress '{reservation.ip_address}' "
-                f"-ClientId '{reservation.mac_address}' "
-                f"-Name '{reservation.name}' "
-                f"-Description '{reservation.description}' "
-                f"-ComputerName '{self._dhcp_server}'"
+                f"Add-DhcpServerv4Reservation -ScopeId {ps_quote(reservation.scope_id)} "
+                f"-IPAddress {ps_quote(reservation.ip_address)} "
+                f"-ClientId {ps_quote(reservation.mac_address)} "
+                f"-Name {ps_quote(reservation.name)} "
+                f"-Description {ps_quote(reservation.description)} "
+                f"-ComputerName {ps_quote(self._dhcp_server)}"
             )
 
     def delete_reservation(self, scope_id: str, ip_address: str) -> None:
         if _is_v6(scope_id):
             self._run(
-                f"Remove-DhcpServerv6Reservation -Prefix '{scope_id}' "
-                f"-IPAddress '{ip_address}' "
-                f"-ComputerName '{self._dhcp_server}'"
+                f"Remove-DhcpServerv6Reservation -Prefix {ps_quote(scope_id)} "
+                f"-IPAddress {ps_quote(ip_address)} "
+                f"-ComputerName {ps_quote(self._dhcp_server)}"
             )
         else:
             self._run(
-                f"Remove-DhcpServerv4Reservation -IPAddress '{ip_address}' -Force "
-                f"-ComputerName '{self._dhcp_server}'"
+                f"Remove-DhcpServerv4Reservation -IPAddress {ps_quote(ip_address)} -Force "
+                f"-ComputerName {ps_quote(self._dhcp_server)}"
             )
 
     def update_reservation_name(self, scope_id: str, ip_address: str, name: str) -> None:
         if _is_v6(scope_id):
             self._run(
-                f"Set-DhcpServerv6Reservation -IPAddress '{ip_address}' "
-                f"-Name '{name}' "
-                f"-ComputerName '{self._dhcp_server}'"
+                f"Set-DhcpServerv6Reservation -IPAddress {ps_quote(ip_address)} "
+                f"-Name {ps_quote(name)} "
+                f"-ComputerName {ps_quote(self._dhcp_server)}"
             )
         else:
             self._run(
-                f"Set-DhcpServerv4Reservation -IPAddress '{ip_address}' "
-                f"-Name '{name}' "
-                f"-ComputerName '{self._dhcp_server}'"
+                f"Set-DhcpServerv4Reservation -IPAddress {ps_quote(ip_address)} "
+                f"-Name {ps_quote(name)} "
+                f"-ComputerName {ps_quote(self._dhcp_server)}"
             )

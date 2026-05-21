@@ -13,6 +13,8 @@ class DNSRecord(BaseModel):
 
 class DNSProvider(ABC):
     source: str = ""
+    supports_ptr: bool = True
+
     @abstractmethod
     def get_zones(self) -> list[str]: ...
 

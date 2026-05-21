@@ -3,6 +3,7 @@ import threading
 import winrm
 from winrm.exceptions import WinRMTransportError
 from app.providers.dns.base import DNSProvider, DNSRecord
+from app.providers._ps import ps_quote
 
 try:
     from spnego.exceptions import BadMICError as _BadMICError
@@ -45,7 +46,7 @@ class MSDNSProvider(DNSProvider):
 
     def get_zones(self) -> list[str]:
         out = self._run(
-            f"Get-DnsServerZone -ComputerName '{self._dns_server}' "
+            f"Get-DnsServerZone -ComputerName {ps_quote(self._dns_server)} "
             "| Select-Object -ExpandProperty ZoneName | ConvertTo-Json"
         )
         data = json.loads(out)
@@ -53,7 +54,7 @@ class MSDNSProvider(DNSProvider):
 
     def get_records(self, zone: str) -> list[DNSRecord]:
         ps = f"""
-Get-DnsServerResourceRecord -ZoneName '{zone}' -ComputerName '{self._dns_server}' | ForEach-Object {{
+Get-DnsServerResourceRecord -ZoneName {ps_quote(zone)} -ComputerName {ps_quote(self._dns_server)} | ForEach-Object {{
     $rd = $_.RecordData
     if ($rd.IPv4Address)      {{ $data = $rd.IPv4Address.IPAddressToString }}
     elseif ($rd.IPv6Address)  {{ $data = $rd.IPv6Address.IPAddressToString }}
@@ -95,36 +96,36 @@ Get-DnsServerResourceRecord -ZoneName '{zone}' -ComputerName '{self._dns_server}
         ttl = f"([System.TimeSpan]::FromSeconds({record.ttl}))"
         if record.record_type == "A":
             self._run(
-                f"Add-DnsServerResourceRecordA -Name '{record.name}' "
-                f"-ZoneName '{record.zone}' -IPv4Address '{record.value}' "
-                f"-TimeToLive {ttl} -ComputerName '{self._dns_server}'"
+                f"Add-DnsServerResourceRecordA -Name {ps_quote(record.name)} "
+                f"-ZoneName {ps_quote(record.zone)} -IPv4Address {ps_quote(record.value)} "
+                f"-TimeToLive {ttl} -ComputerName {ps_quote(self._dns_server)}"
             )
         elif record.record_type == "AAAA":
             self._run(
-                f"Add-DnsServerResourceRecordAAAA -Name '{record.name}' "
-                f"-ZoneName '{record.zone}' -IPv6Address '{record.value}' "
-                f"-TimeToLive {ttl} -ComputerName '{self._dns_server}'"
+                f"Add-DnsServerResourceRecordAAAA -Name {ps_quote(record.name)} "
+                f"-ZoneName {ps_quote(record.zone)} -IPv6Address {ps_quote(record.value)} "
+                f"-TimeToLive {ttl} -ComputerName {ps_quote(self._dns_server)}"
             )
         elif record.record_type == "PTR":
             self._run(
-                f"Add-DnsServerResourceRecordPtr -Name '{record.name}' "
-                f"-ZoneName '{record.zone}' -PtrDomainName '{record.value}' "
-                f"-ComputerName '{self._dns_server}'"
+                f"Add-DnsServerResourceRecordPtr -Name {ps_quote(record.name)} "
+                f"-ZoneName {ps_quote(record.zone)} -PtrDomainName {ps_quote(record.value)} "
+                f"-ComputerName {ps_quote(self._dns_server)}"
             )
         elif record.record_type == "CNAME":
             self._run(
-                f"Add-DnsServerResourceRecordCName -Name '{record.name}' "
-                f"-ZoneName '{record.zone}' -HostNameAlias '{record.value}' "
-                f"-ComputerName '{self._dns_server}'"
+                f"Add-DnsServerResourceRecordCName -Name {ps_quote(record.name)} "
+                f"-ZoneName {ps_quote(record.zone)} -HostNameAlias {ps_quote(record.value)} "
+                f"-ComputerName {ps_quote(self._dns_server)}"
             )
         else:
             raise NotImplementedError(f"Record type {record.record_type} not supported")
 
     def delete_record(self, record: DNSRecord) -> None:
         self._run(
-            f"Remove-DnsServerResourceRecord -ZoneName '{record.zone}' "
-            f"-Name '{record.name}' -RRType '{record.record_type}' -Force "
-            f"-ComputerName '{self._dns_server}'"
+            f"Remove-DnsServerResourceRecord -ZoneName {ps_quote(record.zone)} "
+            f"-Name {ps_quote(record.name)} -RRType {ps_quote(record.record_type)} -Force "
+            f"-ComputerName {ps_quote(self._dns_server)}"
         )
 
     def update_record(self, old: DNSRecord, new: DNSRecord) -> None:

@@ -14,13 +14,13 @@ export function isValidIPv6(ip: string): boolean {
 
 // IEEE 802-2014: EUI-48 — colon/hyphen-separated octets or Cisco dot-quad
 export function isValidEUI48(mac: string): boolean {
-  return /^([0-9a-fA-F]{2}[:\-]){5}[0-9a-fA-F]{2}$/.test(mac) ||
+  return /^([0-9a-fA-F]{2}[:-]){5}[0-9a-fA-F]{2}$/.test(mac) ||
          /^[0-9a-fA-F]{4}\.[0-9a-fA-F]{4}\.[0-9a-fA-F]{4}$/.test(mac)
 }
 
 // IEEE 802c-2017: EUI-64 — colon/hyphen-separated octets
 export function isValidEUI64(id: string): boolean {
-  return /^([0-9a-fA-F]{2}[:\-]){7}[0-9a-fA-F]{2}$/.test(id)
+  return /^([0-9a-fA-F]{2}[:-]){7}[0-9a-fA-F]{2}$/.test(id)
 }
 
 export function ipToNum(ip: string): number {

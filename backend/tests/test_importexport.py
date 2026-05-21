@@ -1,8 +1,23 @@
 import io
 import csv
 import pytest
+from app.api.importexport import _csv_safe
 from app.models.subnet import Subnet
 from app.models.address import IPAddress, AddressStatus
+
+
+def test_csv_safe_prefixes_formula_cells():
+    assert _csv_safe("=1+1") == "'=1+1"
+    assert _csv_safe("+cmd") == "'+cmd"
+    assert _csv_safe("-cmd") == "'-cmd"
+    assert _csv_safe("@SUM(A1)") == "'@SUM(A1)"
+    assert _csv_safe("\tfoo") == "'\tfoo"
+
+
+def test_csv_safe_leaves_normal_text():
+    assert _csv_safe("web01") == "web01"
+    assert _csv_safe("10.0.0.0/24") == "10.0.0.0/24"
+    assert _csv_safe("") == ""
 
 
 def _csv(rows: list[dict], fieldnames: list[str]) -> bytes:

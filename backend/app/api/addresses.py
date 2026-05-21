@@ -12,6 +12,7 @@ from app.models.user import User
 from app.schemas.address import AddressCreate, AddressRead, AddressUpdate
 from app.core.deps import require_operator
 from app.core.audit import write_audit
+from app.core.ptr import build_ptr_record
 from app.providers.registry import get_dns_providers, get_dhcp_providers
 from app.providers.dns.base import DNSRecord
 from app.providers.dhcp.base import DHCPReservation
@@ -172,12 +173,11 @@ def _build_preview_items(address: IPAddress, db: Session) -> list[DeletePreviewI
         )
 
     if address.ptr_zone and address.dns_provider:
-        from app.core.ptr import build_ptr_record
         ptr_rec = build_ptr_record(
             address.address,
             address.hostname or address.address,
             address.ptr_zone,
-            provider=address.dns_provider or "",
+            provider=address.dns_provider,
         )
         key = f"ptr-{address.dns_provider}-{address.ptr_zone}-{ptr_rec.name}"
         seen[key] = DeletePreviewItem(

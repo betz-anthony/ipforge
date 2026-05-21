@@ -175,7 +175,7 @@ def test_get_host_list_caps_at_1024(db):
 
 
 def _add_scan_result(db, subnet_id, ip, reachable=True, latency_ms=1.0):
-    from app.scan import _utcnow
+    from app.core.time import utcnow as _utcnow
     row = ScanResult(
         subnet_id=subnet_id, ip_address=ip,
         reachable=reachable, latency_ms=latency_ms,
@@ -213,7 +213,7 @@ def test_collision_not_created_for_assigned_ip(db):
 
 def test_collision_multi_dhcp_scope(db):
     subnet = _make_subnet(db, cidr="10.0.0.0/24")
-    from app.scan import _utcnow
+    from app.core.time import utcnow as _utcnow
     now = _utcnow()
     db.add(CachedDHCPLease(scope_id="10.0.0.0", ip_address="10.0.0.5",
                            source="msdhcp", synced_at=now))
@@ -236,7 +236,7 @@ def test_collision_hostname_mismatch(db):
     addr = IPAddress(address="10.0.0.10", subnet_id=subnet.id,
                      status=AddressStatus.assigned, hostname="server01")
     db.add(addr)
-    from app.scan import _utcnow
+    from app.core.time import utcnow as _utcnow
     db.add(CachedDHCPLease(scope_id="10.0.0.0", ip_address="10.0.0.10",
                            name="workstation01", source="msdhcp", synced_at=_utcnow()))
     _add_scan_result(db, subnet.id, "10.0.0.10")
@@ -256,7 +256,7 @@ def test_collision_no_mismatch_when_names_match(db):
     addr = IPAddress(address="10.0.0.10", subnet_id=subnet.id,
                      status=AddressStatus.assigned, hostname="server01")
     db.add(addr)
-    from app.scan import _utcnow
+    from app.core.time import utcnow as _utcnow
     db.add(CachedDHCPLease(scope_id="10.0.0.0", ip_address="10.0.0.10",
                            name="SERVER01", source="msdhcp", synced_at=_utcnow()))
     _add_scan_result(db, subnet.id, "10.0.0.10")
@@ -270,7 +270,7 @@ def test_collision_reopen_on_redetection(db):
     subnet = _make_subnet(db, cidr="10.0.0.0/30")
     addr = IPAddress(address="10.0.0.1", subnet_id=subnet.id, status=AddressStatus.available)
     db.add(addr)
-    from app.scan import _utcnow
+    from app.core.time import utcnow as _utcnow
     now = _utcnow()
     existing = Collision(
         ip_address="10.0.0.1",
@@ -295,7 +295,7 @@ def test_collision_hostname_mismatch_via_dns(db):
     addr = IPAddress(address="10.0.0.10", subnet_id=subnet.id,
                      status=AddressStatus.assigned, hostname="server01")
     db.add(addr)
-    from app.scan import _utcnow
+    from app.core.time import utcnow as _utcnow
     db.add(CachedDNSRecord(name="webserver01", record_type="A",
                            value="10.0.0.10", zone="example.com",
                            ttl=300, source="msdns", synced_at=_utcnow()))
@@ -381,7 +381,7 @@ def test_get_scan_status_never(client, db):
 
 def test_get_scan_status_with_results(client, db):
     subnet = _make_subnet(db, cidr="10.0.0.0/24")
-    from app.scan import _utcnow
+    from app.core.time import utcnow as _utcnow
     now = _utcnow()
     db.add(ScanResult(subnet_id=subnet.id, ip_address="10.0.0.1",
                       reachable=True, latency_ms=1.5, scanned_at=now))
@@ -404,7 +404,7 @@ def test_list_collisions_empty(client):
 
 
 def test_list_collisions_returns_unresolved(client, db):
-    from app.scan import _utcnow
+    from app.core.time import utcnow as _utcnow
     now = _utcnow()
     db.add(Collision(ip_address="10.0.0.1", collision_type="active_but_available",
                      details='{"ipam_status":"available"}', detected_at=now, resolved=False))
@@ -421,7 +421,7 @@ def test_list_collisions_returns_unresolved(client, db):
 
 
 def test_resolve_collision(client, db):
-    from app.scan import _utcnow
+    from app.core.time import utcnow as _utcnow
     c = Collision(ip_address="10.0.0.1", collision_type="active_but_available",
                   details="{}", detected_at=_utcnow(), resolved=False)
     db.add(c)
