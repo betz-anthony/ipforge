@@ -43,6 +43,17 @@ def test_no_key_encrypt_is_noop():
         assert encrypt_secret("secret") == "secret"
 
 
+def test_invalid_key_is_noop_not_crash(monkeypatch):
+    """A malformed SECRET_KEY disables encryption instead of crashing."""
+    import app.config
+    from app.core import crypto
+    monkeypatch.setattr(app.config.settings, "secret_key", "not-a-valid-fernet-key")
+    crypto._invalid_key_logged = False
+    assert crypto._fernet() is None
+    assert encrypt_secret("hunter2") == "hunter2"   # plaintext passthrough
+    assert decrypt_secret("hunter2") == "hunter2"
+
+
 def test_no_key_decrypt_is_noop():
     """If SECRET_KEY not configured and value looks encrypted, return as-is."""
     key = _test_key()
