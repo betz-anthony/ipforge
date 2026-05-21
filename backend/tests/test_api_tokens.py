@@ -162,3 +162,40 @@ def test_valid_api_token_writes_last_used_at(noauth_client, db):
     noauth_client.get("/api/subnets", headers={"Authorization": f"Bearer {value}"})
     db.refresh(row)
     assert row.last_used_at is not None
+
+
+def test_create_token_returns_value_once(client, db):
+    r = client.post("/api/auth/tokens", json={"name": "ci-pipeline"})
+    assert r.status_code == 201
+    body = r.json()
+    assert body["token"].startswith("ipfg_")
+    assert body["name"] == "ci-pipeline"
+    assert body["read_only"] is False
+    row = db.query(ApiToken).filter_by(id=body["id"]).first()
+    assert row.token_hash == hash_api_token(body["token"])
+
+
+def test_list_tokens_excludes_value(client, db):
+    client.post("/api/auth/tokens", json={"name": "one"})
+    r = client.get("/api/auth/tokens")
+    assert r.status_code == 200
+    items = r.json()
+    assert len(items) == 1
+    assert "token" not in items[0]
+    assert items[0]["name"] == "one"
+
+
+def test_delete_own_token(client, db):
+    created = client.post("/api/auth/tokens", json={"name": "tmp"}).json()
+    r = client.delete(f"/api/auth/tokens/{created['id']}")
+    assert r.status_code == 204
+    assert db.query(ApiToken).filter_by(id=created["id"]).first() is None
+
+
+def test_cannot_delete_other_users_token(client, db):
+    other = _make_user(db, username="other")
+    value = generate_api_token()
+    row = _make_token(db, other, value)
+    r = client.delete(f"/api/auth/tokens/{row.id}")
+    assert r.status_code == 404
+    assert db.query(ApiToken).filter_by(id=row.id).first() is not None

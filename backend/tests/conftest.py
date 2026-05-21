@@ -31,7 +31,7 @@ test_engine = create_engine(
 )
 TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=test_engine)
 
-_MOCK_USER = User(id=1, username="test_admin", role="admin", enabled=True, hashed_password="x")
+_MOCK_USER = User(id=9999, username="test_admin", role="admin", enabled=True, hashed_password="x")
 
 
 @pytest.fixture(autouse=True)
