@@ -309,6 +309,12 @@ input[type="checkbox"] { margin: 0; padding: 0; width: auto; flex-shrink: 0; cur
   font-weight: 600; background: var(--surface-2);
   border-bottom: 1px solid var(--border);
 }
+.panel-list-search {
+  padding: 0.5rem 0.625rem;
+  border-bottom: 1px solid var(--border);
+}
+.panel-list-search input { font-size: 0.75rem; padding: 0.3125rem 0.5rem; }
+
 .panel-list-item {
   padding: 0.625rem 0.875rem;
   cursor: pointer; font-size: 0.8125rem;
