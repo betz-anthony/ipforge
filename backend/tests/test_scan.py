@@ -211,6 +211,26 @@ def test_collision_not_created_for_assigned_ip(db):
     assert db.query(Collision).count() == 0
 
 
+def test_collision_auto_resolves_when_condition_clears(db):
+    subnet = _make_subnet(db, cidr="10.0.0.0/30")
+    addr = IPAddress(address="10.0.0.1", subnet_id=subnet.id, status=AddressStatus.available)
+    db.add(addr)
+    _add_scan_result(db, subnet.id, "10.0.0.1", reachable=True, latency_ms=1.0)
+    _detect_collisions(db, subnet.id)
+
+    c = db.query(Collision).filter_by(collision_type=CollisionType.active_but_available).first()
+    assert c is not None and c.resolved is False
+
+    # Condition clears: the address is now assigned, so it is no longer a collision.
+    addr.status = AddressStatus.assigned
+    db.commit()
+    _detect_collisions(db, subnet.id)
+
+    db.refresh(c)
+    assert c.resolved is True
+    assert c.resolved_at is not None
+
+
 def test_collision_multi_dhcp_scope(db):
     subnet = _make_subnet(db, cidr="10.0.0.0/24")
     from app.core.time import utcnow as _utcnow

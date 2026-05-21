@@ -18,6 +18,10 @@ logger = logging.getLogger(__name__)
 
 _dns_lock  = threading.Lock()
 _dhcp_lock = threading.Lock()
+# Serializes the IPAM-write phase: sync_dns and sync_dhcp run in parallel and
+# both upsert IPAddress rows, so concurrent inserts of the same newly-seen IP
+# would collide on the unique address constraint.
+_ipam_write_lock = threading.Lock()
 
 
 def _auto_populate_from_cache(db) -> None:
@@ -178,8 +182,9 @@ def sync_dns() -> None:
                         ))
                 db.commit()
 
-        _auto_populate_from_cache(db)
-        _backfill_dns_providers(db)
+        with _ipam_write_lock:
+            _auto_populate_from_cache(db)
+            _backfill_dns_providers(db)
         _set_status(db, "dns", "ok")
     except Exception as e:
         logger.error("DNS sync failed: %s", e, exc_info=True)
@@ -244,8 +249,9 @@ def sync_dhcp() -> None:
                     ))
                 db.commit()
 
-        _auto_populate_from_cache(db)
-        _backfill_dhcp_providers(db)
+        with _ipam_write_lock:
+            _auto_populate_from_cache(db)
+            _backfill_dhcp_providers(db)
         _set_status(db, "dhcp", "ok")
     except Exception as e:
         logger.error("DHCP sync failed: %s", e, exc_info=True)
