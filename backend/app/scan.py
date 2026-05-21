@@ -197,6 +197,7 @@ def _detect_collisions(db, subnet_id: int) -> None:
         return
 
     now = utcnow()
+    detected: set[tuple] = set()
 
     latest_scan = (
         db.query(ScanResult)
@@ -209,6 +210,7 @@ def _detect_collisions(db, subnet_id: int) -> None:
     scan_time = latest_scan.scanned_at
 
     def _upsert(ip: str, ctype: str, details: dict) -> None:
+        detected.add((ip, ctype))
         details_str = json.dumps(details)
         existing = db.query(Collision).filter_by(ip_address=ip, collision_type=ctype).first()
         if existing:
@@ -287,6 +289,14 @@ def _detect_collisions(db, subnet_id: int) -> None:
                 "dhcp": lease.name if (lease and lease.name) else None,
                 "dns":  dns_rec.name if (dns_rec and dns_rec.name) else None,
             })
+
+    # Auto-resolve collisions whose condition no longer holds: an unresolved
+    # collision for an IP in this subnet that was not re-detected this scan
+    # is considered cleared.
+    for c in db.query(Collision).filter(Collision.resolved.is_(False)).all():
+        if (c.ip_address, c.collision_type) not in detected and ip_in_cidr(c.ip_address, subnet.cidr):
+            c.resolved = True
+            c.resolved_at = now
 
     db.commit()
 

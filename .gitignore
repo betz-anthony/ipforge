@@ -18,6 +18,9 @@ build/
 venv/
 env/
 
+# Local environment / secrets
+.env
+
 # Editable install
 *.egg-link
 
