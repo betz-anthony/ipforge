@@ -11,7 +11,7 @@ logger = logging.getLogger(__name__)
 
 from app.core.deps import require_operator
 from app.core.audit import write_audit
-from app.core.mac import normalize_mac
+from app.core.mac import normalize_mac_optional
 from app.core.ptr import find_reverse_zone, build_ptr_record
 from app.database import get_db
 from app.models.address import IPAddress, AddressStatus
@@ -56,12 +56,7 @@ class AllocateRequest(BaseModel):
     @field_validator("mac_address")
     @classmethod
     def validate_mac(cls, v: str | None) -> str | None:
-        if v is None or not v.strip():
-            return None
-        try:
-            return normalize_mac(v)
-        except ValueError:
-            raise ValueError("mac_address must be 12 hex digits (any delimiter)")
+        return normalize_mac_optional(v)
 
 
 def _find_candidate(db: Session, subnet_id: int, cidr: str) -> str | None:

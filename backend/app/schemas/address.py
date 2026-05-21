@@ -2,6 +2,7 @@ import ipaddress
 from pydantic import BaseModel, field_validator
 from datetime import datetime
 from app.models.address import AddressStatus
+from app.core.mac import normalize_mac_optional
 
 
 class AddressCreate(BaseModel):
@@ -22,6 +23,11 @@ class AddressCreate(BaseModel):
     description: str | None = None
     notes: str | None = None
 
+    @field_validator("mac_address")
+    @classmethod
+    def _normalize_mac(cls, v: str | None) -> str | None:
+        return normalize_mac_optional(v)
+
 
 class AddressUpdate(BaseModel):
     hostname: str | None = None
@@ -29,6 +35,11 @@ class AddressUpdate(BaseModel):
     mac_address: str | None = None
     description: str | None = None
     notes: str | None = None
+
+    @field_validator("mac_address")
+    @classmethod
+    def _normalize_mac(cls, v: str | None) -> str | None:
+        return normalize_mac_optional(v)
 
 
 class AddressRead(AddressCreate):
