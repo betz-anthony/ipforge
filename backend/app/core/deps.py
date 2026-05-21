@@ -17,17 +17,21 @@ _SAFE_METHODS = {"GET", "HEAD", "OPTIONS"}
 _LAST_USED_THROTTLE = timedelta(minutes=5)
 
 
-def _user_from_api_token(request: Request, token: str, db: Session,
-                         credentials_exc: HTTPException) -> User:
+def _user_from_api_token(request: Request, token: str, db: Session) -> User:
+    unauthorized = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Invalid or expired token",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
     row = db.query(ApiToken).filter_by(token_hash=hash_api_token(token)).first()
     if row is None:
-        raise credentials_exc
+        raise unauthorized
     now = utcnow()
     if row.expires_at is not None and row.expires_at < now:
-        raise credentials_exc
+        raise unauthorized
     user = db.query(User).filter(User.id == row.user_id, User.enabled == True).first()  # noqa: E712
     if user is None:
-        raise credentials_exc
+        raise unauthorized
     if row.read_only and request.method not in _SAFE_METHODS:
         raise HTTPException(status.HTTP_403_FORBIDDEN, "This API token is read-only")
     if row.last_used_at is None or now - row.last_used_at >= _LAST_USED_THROTTLE:
@@ -41,15 +45,14 @@ def get_current_user(
     token: str = Depends(oauth2_scheme),
     db: Session = Depends(get_db),
 ) -> User:
+    if is_api_token(token):
+        return _user_from_api_token(request, token, db)
+
     credentials_exc = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Invalid or expired token",
         headers={"WWW-Authenticate": "Bearer"},
     )
-
-    if is_api_token(token):
-        return _user_from_api_token(request, token, db, credentials_exc)
-
     try:
         payload = decode_access_token(token)
         username: str = payload.get("sub", "")
