@@ -1,5 +1,9 @@
 from datetime import timedelta
 
+import pytest
+from fastapi.testclient import TestClient
+
+from app.core.security import generate_api_token, hash_api_token
 from app.core.time import utcnow
 from app.models.api_token import ApiToken
 from app.models.user import User
@@ -37,7 +41,6 @@ def test_api_token_row_roundtrip(db):
 
 
 def test_token_hash_unique_constraint(db):
-    import pytest
     from sqlalchemy.exc import IntegrityError
     user = _make_user(db)
     dup_hash = "d" * 64
@@ -50,19 +53,16 @@ def test_token_hash_unique_constraint(db):
 
 
 def test_generate_api_token_has_prefix():
-    from app.core.security import generate_api_token
     token = generate_api_token()
     assert token.startswith("ipfg_")
     assert len(token) > 20
 
 
 def test_generate_api_token_is_unique():
-    from app.core.security import generate_api_token
     assert generate_api_token() != generate_api_token()
 
 
 def test_hash_api_token_deterministic():
-    from app.core.security import hash_api_token
     h1 = hash_api_token("ipfg_sample")
     h2 = hash_api_token("ipfg_sample")
     assert h1 == h2
@@ -74,12 +74,6 @@ def test_is_api_token():
     from app.core.security import is_api_token
     assert is_api_token("ipfg_anything") is True
     assert is_api_token("eyJhbGciOi...") is False
-
-
-import pytest
-from fastapi.testclient import TestClient
-
-from app.core.security import generate_api_token, hash_api_token
 
 
 def _make_token(db, user, value, read_only=False, expires_at=None):
@@ -158,3 +152,13 @@ def test_read_only_token_blocks_write(noauth_client, db):
         headers={"Authorization": f"Bearer {value}"},
     )
     assert r.status_code == 403
+
+
+def test_valid_api_token_writes_last_used_at(noauth_client, db):
+    user = _make_user(db, username="lu_user")
+    value = generate_api_token()
+    row = _make_token(db, user, value)
+    assert row.last_used_at is None
+    noauth_client.get("/api/subnets", headers={"Authorization": f"Bearer {value}"})
+    db.refresh(row)
+    assert row.last_used_at is not None
