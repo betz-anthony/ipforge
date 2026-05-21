@@ -10,6 +10,7 @@ from app.models.scan import ScanResult, Collision, CollisionType, ScanHistoryDay
 from app.models.provider_config import ProviderConfig
 from app.models.user import User
 from app.models.audit_log import AuditLog
+from app.models.api_token import ApiToken
 
 __all__ = [
     "Subnet", "IPAddress", "AppSetting",
@@ -20,4 +21,5 @@ __all__ = [
     "ProviderConfig",
     "User",
     "AuditLog",
+    "ApiToken",
 ]
