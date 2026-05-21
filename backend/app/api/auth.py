@@ -1,12 +1,16 @@
+from datetime import datetime
+
 from fastapi import APIRouter, HTTPException, Depends, status
 from fastapi.security import OAuth2PasswordRequestForm
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from app.database import get_db
 from app.models.user import User
-from app.core.security import verify_password, create_access_token, hash_password
+from app.core.audit import write_audit
 from app.core.deps import get_current_user
 from app.core.ldap import authenticate_ldap
+from app.core.security import verify_password, create_access_token, hash_password, generate_api_token, hash_api_token
+from app.models.api_token import ApiToken
 
 router = APIRouter()
 
@@ -84,4 +88,79 @@ def change_password(
     if len(body.new_password) < 8:
         raise HTTPException(400, "New password must be at least 8 characters")
     current_user.hashed_password = hash_password(body.new_password)
+    db.commit()
+
+
+class TokenCreate(BaseModel):
+    name: str
+    read_only: bool = False
+    expires_at: datetime | None = None
+
+
+class TokenRead(BaseModel):
+    id: int
+    name: str
+    token_prefix: str
+    read_only: bool
+    expires_at: datetime | None
+    last_used_at: datetime | None
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class TokenCreated(TokenRead):
+    token: str   # full plaintext value — returned only at creation
+
+
+@router.get("/tokens", response_model=list[TokenRead])
+def list_tokens(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    return (
+        db.query(ApiToken)
+        .filter_by(user_id=current_user.id)
+        .order_by(ApiToken.id)
+        .all()
+    )
+
+
+@router.post("/tokens", response_model=TokenCreated, status_code=201)
+def create_token(
+    body: TokenCreate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    name = body.name.strip()
+    if not name:
+        raise HTTPException(400, "Token name is required")
+    value = generate_api_token()
+    row = ApiToken(
+        user_id=current_user.id,
+        name=name,
+        token_hash=hash_api_token(value),
+        token_prefix=value[:12],
+        read_only=body.read_only,
+        expires_at=body.expires_at,
+    )
+    db.add(row)
+    db.flush()
+    write_audit(db, current_user.username, "create", "api_token", str(row.id), name)
+    db.commit()
+    db.refresh(row)
+    return TokenCreated(token=value, **TokenRead.model_validate(row).model_dump())
+
+
+@router.delete("/tokens/{token_id}", status_code=204)
+def delete_token(
+    token_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    row = db.query(ApiToken).filter_by(id=token_id, user_id=current_user.id).first()
+    if row is None:
+        raise HTTPException(404, "Token not found")
+    write_audit(db, current_user.username, "delete", "api_token", str(row.id), row.name)
+    db.delete(row)
     db.commit()
