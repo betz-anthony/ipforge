@@ -44,3 +44,6 @@ k8s/secret.yaml        # contains base64 secrets — use Sealed Secrets or ESO i
 .DS_Store
 Thumbs.db
 .worktrees/
+
+# Superpowers plugin working state
+.superpowers/
