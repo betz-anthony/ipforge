@@ -9,6 +9,8 @@
     "lint": "eslint src --ext ts,tsx"
   },
   "dependencies": {
+    "@fontsource/fira-code": "^5.2.7",
+    "@fontsource/fira-sans": "^5.2.7",
     "@tanstack/react-query": "^5.45.1",
     "axios": "^1.7.2",
     "lucide-react": "^1.8.0",

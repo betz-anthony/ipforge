@@ -9,6 +9,7 @@ import CollisionResolveDialog from './CollisionResolveDialog'
 import SubnetTree from './SubnetTree'
 import ConfirmModal from '../components/ConfirmModal'
 import { useToast } from '../contexts/ToastContext'
+import { rowActivation } from '../utils/a11y'
 
 const emptyForm = { name: '', cidr: '', vlan_id: '', description: '', scan_interval_minutes: '', dns_provider_name: '', dhcp_provider_name: '' }
 
@@ -501,7 +502,7 @@ export default function Subnets() {
                 </ul>
               )}
             </div>
-            <button className="btn-ghost btn-sm" onClick={() => setImportResult(null)}>
+            <button className="btn-ghost btn-sm" aria-label="Dismiss import result" onClick={() => setImportResult(null)}>
               <X size={13} />
             </button>
           </div>
@@ -606,7 +607,7 @@ export default function Subnets() {
               {data.map((s: Subnet) => {
                 const collisionCount = collisionCountForSubnet(s)
                 return (
-                <tr key={s.id} className="clickable" onClick={() => openDrawer(s)}>
+                <tr key={s.id} className="clickable" {...rowActivation(() => openDrawer(s))}>
                   <td>
                     <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                       {s.name}

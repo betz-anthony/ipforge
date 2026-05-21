@@ -7,6 +7,7 @@ import SyncBar from '../components/SyncBar'
 import DetailPanel from '../components/DetailPanel'
 import ConfirmModal from '../components/ConfirmModal'
 import { useToast } from '../contexts/ToastContext'
+import { rowActivation } from '../utils/a11y'
 
 const RECORD_TYPES = ['A', 'AAAA', 'CNAME', 'PTR', 'MX', 'TXT', 'NS']
 
@@ -318,7 +319,7 @@ export default function DNS() {
             </tr>
           )}
           {recs.map((r, i) => (
-            <tr key={i} className="clickable" onClick={() => setSelectedRecord(r)}>
+            <tr key={i} className="clickable" {...rowActivation(() => setSelectedRecord(r))}>
               <td><span className="font-mono">{r.name}</span></td>
               <td>
                 <span className={`badge ${TYPE_BADGE[r.record_type] ?? 'badge-gray'}`}>
@@ -339,6 +340,7 @@ export default function DNS() {
               <td onClick={e => e.stopPropagation()}>
                 <button
                   className="btn-danger btn-sm"
+                  aria-label={`Delete ${r.record_type} record ${r.name}`}
                   onClick={() => setConfirmRecord(r)}
                   disabled={deleteMutation.isPending}
                 >
