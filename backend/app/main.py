@@ -27,13 +27,33 @@ import app.models  # noqa: F401
 logger = logging.getLogger(__name__)
 
 
-def _check_jwt_secret():
+def _ensure_jwt_secret(db) -> None:
+    """Resolve the JWT signing key. An explicit JWT_SECRET_KEY env var always
+    wins; otherwise a strong key is generated once and persisted so issued
+    tokens stay valid across restarts. This avoids ever signing with the
+    predictable built-in default."""
     key = app_settings.jwt_secret_key
-    if not key or key == DEFAULT_JWT_SECRET_KEY:
-        raise RuntimeError(
-            "JWT_SECRET_KEY is unset or still the built-in default. Set a strong, "
-            "random JWT_SECRET_KEY environment variable before starting the server."
-        )
+    if key and key != DEFAULT_JWT_SECRET_KEY:
+        return  # operator-provided key
+
+    from app.models.setting import AppSetting
+    row = db.get(AppSetting, "jwt_secret_key")
+    if row and row.value:
+        app_settings.jwt_secret_key = row.value
+        return
+
+    import secrets
+    generated = secrets.token_urlsafe(48)
+    if row is None:
+        db.add(AppSetting(key="jwt_secret_key", value=generated))
+    else:
+        row.value = generated
+    db.commit()
+    app_settings.jwt_secret_key = generated
+    logger.warning(
+        "JWT_SECRET_KEY not set — generated and persisted one. Set it explicitly "
+        "if you run multiple API instances so they share a signing key."
+    )
 
 
 def _run_migrations():
@@ -64,10 +84,10 @@ def _ensure_default_admin(db):
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    _check_jwt_secret()
     _run_migrations()
     db = SessionLocal()
     try:
+        _ensure_jwt_secret(db)
         from app.api.settings import apply_db_settings
         apply_db_settings(db)
         _ensure_default_admin(db)
