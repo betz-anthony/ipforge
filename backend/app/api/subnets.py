@@ -7,7 +7,7 @@ from app.models.subnet import Subnet
 from app.models.address import IPAddress, AddressStatus
 from app.models.user import User
 from app.schemas.subnet import SubnetCreate, SubnetRead, SubnetUpdate, SubnetWithStats
-from app.core.deps import require_operator, get_current_user
+from app.core.deps import get_current_user
 from app.core.audit import write_audit
 from app.core.access import AccessContext, get_access_context
 
@@ -128,6 +128,7 @@ def list_subnets(
 def suggest_parent(
     cidr: str = Query(..., description="CIDR of the subnet being created/edited"),
     db: Session = Depends(get_db),
+    access: AccessContext = Depends(get_access_context),
 ):
     try:
         target = ipaddress.ip_network(cidr, strict=False)
@@ -141,6 +142,8 @@ def suggest_parent(
     ]
     candidates_with_net.sort(key=lambda pair: pair[1].prefixlen, reverse=True)
     candidates = [s for s, _ in candidates_with_net]
+    if not access.global_read:
+        candidates = [s for s in candidates if s.id in access.viewable]
     rows = _build_stats_rows(candidates, db)
     return [SubnetWithStats(**r) for r in rows]
 
