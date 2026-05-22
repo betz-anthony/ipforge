@@ -26,6 +26,11 @@ spec:
                   from app.sync import sync_all
                   sync_all()
               env:
+                - name: DB_PASSWORD
+                  valueFrom:
+                    secretKeyRef:
+                      name: ipforge-secret
+                      key: DB_PASSWORD
                 - name: DATABASE_URL
                   value: postgresql://ipam:$(DB_PASSWORD)@postgres:5432/ipam
               envFrom:

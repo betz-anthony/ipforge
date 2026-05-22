@@ -20,12 +20,13 @@ spec:
           image: ipam-api  # registry + tag pinned by kustomization.yaml / CI
           command: ["alembic", "upgrade", "head"]
           env:
-            - name: DATABASE_URL
+            - name: DB_PASSWORD
               valueFrom:
                 secretKeyRef:
                   name: ipforge-secret
-                  key: DATABASE_URL
-                  optional: true
+                  key: DB_PASSWORD
+            - name: DATABASE_URL
+              value: postgresql://ipam:$(DB_PASSWORD)@postgres:5432/ipam
           envFrom:
             - configMapRef:
                 name: ipforge-config
@@ -37,6 +38,11 @@ spec:
           ports:
             - containerPort: 8000
           env:
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: ipforge-secret
+                  key: DB_PASSWORD
             - name: DATABASE_URL
               value: postgresql://ipam:$(DB_PASSWORD)@postgres:5432/ipam
           envFrom:
