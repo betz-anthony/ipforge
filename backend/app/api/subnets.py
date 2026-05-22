@@ -7,8 +7,9 @@ from app.models.subnet import Subnet
 from app.models.address import IPAddress, AddressStatus
 from app.models.user import User
 from app.schemas.subnet import SubnetCreate, SubnetRead, SubnetUpdate, SubnetWithStats
-from app.core.deps import require_operator
+from app.core.deps import require_operator, get_current_user
 from app.core.audit import write_audit
+from app.core.access import AccessContext, get_access_context
 
 router = APIRouter()
 
@@ -110,11 +111,14 @@ def _is_ancestor(db: Session, potential_ancestor_id: int, node_id: int) -> bool:
 def list_subnets(
     ip_version: int | None = Query(None, description="Filter by IP version (4 or 6)"),
     db: Session = Depends(get_db),
+    access: AccessContext = Depends(get_access_context),
 ):
     q = db.query(Subnet)
     if ip_version is not None:
         q = q.filter(Subnet.ip_version == ip_version)
     subnets = q.all()
+    if not access.global_read:
+        subnets = [s for s in subnets if s.id in access.viewable]
     rows = _build_stats_rows(subnets, db)
     _compute_rollup(rows)
     return [SubnetWithStats(**r) for r in rows]
@@ -145,8 +149,11 @@ def suggest_parent(
 def create_subnet(
     data: SubnetCreate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_operator),
+    current_user: User = Depends(get_current_user),
+    access: AccessContext = Depends(get_access_context),
 ):
+    if not access.global_write:
+        raise HTTPException(403, "Scoped users cannot create subnets")
     try:
         network = ipaddress.ip_network(data.cidr, strict=False)
     except ValueError:
@@ -180,10 +187,15 @@ def create_subnet(
 
 
 @router.get("/{subnet_id}", response_model=SubnetRead)
-def get_subnet(subnet_id: int, db: Session = Depends(get_db)):
+def get_subnet(
+    subnet_id: int,
+    db: Session = Depends(get_db),
+    access: AccessContext = Depends(get_access_context),
+):
     subnet = db.get(Subnet, subnet_id)
     if not subnet:
         raise HTTPException(404, "Subnet not found")
+    access.require_read(subnet_id)
     return subnet
 
 
@@ -192,11 +204,13 @@ def update_subnet(
     subnet_id: int,
     data: SubnetUpdate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_operator),
+    current_user: User = Depends(get_current_user),
+    access: AccessContext = Depends(get_access_context),
 ):
     subnet = db.get(Subnet, subnet_id)
     if not subnet:
         raise HTTPException(404, "Subnet not found")
+    access.require_write(subnet_id)
     before = _subnet_state(subnet)
     for key, value in data.model_dump(exclude_unset=True).items():
         if key == "parent_id":
@@ -231,11 +245,13 @@ def update_subnet(
 def delete_subnet(
     subnet_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_operator),
+    current_user: User = Depends(get_current_user),
+    access: AccessContext = Depends(get_access_context),
 ):
     subnet = db.get(Subnet, subnet_id)
     if not subnet:
         raise HTTPException(404, "Subnet not found")
+    access.require_write(subnet_id)
     if db.query(Subnet).filter(Subnet.parent_id == subnet_id).first():
         raise HTTPException(409, "Cannot delete subnet with children")
     count = db.query(IPAddress).filter(IPAddress.subnet_id == subnet_id).count()

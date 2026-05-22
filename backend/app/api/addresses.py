@@ -10,8 +10,9 @@ from app.models.cache import CachedDNSRecord, CachedDHCPLease
 from app.models.scan import ScanHistoryDay
 from app.models.user import User
 from app.schemas.address import AddressCreate, AddressRead, AddressUpdate
-from app.core.deps import require_operator
+from app.core.deps import require_operator, get_current_user
 from app.core.audit import write_audit
+from app.core.access import AccessContext, get_access_context
 from app.core.ptr import build_ptr_record
 from app.providers.registry import get_dns_providers, get_dhcp_providers
 from app.providers.dns.base import DNSRecord
@@ -47,23 +48,29 @@ def list_addresses(
     subnet_id: int | None = Query(None),
     status: AddressStatus | None = Query(None),
     db: Session = Depends(get_db),
+    access: AccessContext = Depends(get_access_context),
 ):
     q = db.query(IPAddress)
     if subnet_id is not None:
         q = q.filter(IPAddress.subnet_id == subnet_id)
     if status is not None:
         q = q.filter(IPAddress.status == status)
-    return q.all()
+    rows = q.all()
+    if not access.global_read:
+        rows = [r for r in rows if r.subnet_id in access.viewable]
+    return rows
 
 
 @router.post("", response_model=AddressRead, status_code=201)
 def create_address(
     data: AddressCreate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_operator),
+    current_user: User = Depends(get_current_user),
+    access: AccessContext = Depends(get_access_context),
 ):
     if db.query(IPAddress).filter(IPAddress.address == data.address).first():
         raise HTTPException(409, "Address already exists")
+    access.require_write(data.subnet_id)
     address = IPAddress(**data.model_dump())
     db.add(address)
     db.flush()
@@ -75,10 +82,15 @@ def create_address(
 
 
 @router.get("/{address_id}/scan-history", response_model=list[ScanHistoryDayRead])
-def get_scan_history(address_id: int, db: Session = Depends(get_db)):
+def get_scan_history(
+    address_id: int,
+    db: Session = Depends(get_db),
+    access: AccessContext = Depends(get_access_context),
+):
     address = db.get(IPAddress, address_id)
     if not address:
         raise HTTPException(404, "Address not found")
+    access.require_read(address.subnet_id)
     from datetime import datetime, timezone
     now = datetime.now(timezone.utc).replace(tzinfo=None)
     cutoff = now.date() - timedelta(days=29)
@@ -93,18 +105,28 @@ def get_scan_history(address_id: int, db: Session = Depends(get_db)):
 
 
 @router.get("/by-ip/{address}", response_model=AddressRead)
-def get_address_by_ip(address: str, db: Session = Depends(get_db)):
+def get_address_by_ip(
+    address: str,
+    db: Session = Depends(get_db),
+    access: AccessContext = Depends(get_access_context),
+):
     record = db.query(IPAddress).filter(IPAddress.address == address).first()
     if not record:
         raise HTTPException(404, "Address not found")
+    access.require_read(record.subnet_id)
     return record
 
 
 @router.get("/{address_id}", response_model=AddressRead)
-def get_address(address_id: int, db: Session = Depends(get_db)):
+def get_address(
+    address_id: int,
+    db: Session = Depends(get_db),
+    access: AccessContext = Depends(get_access_context),
+):
     address = db.get(IPAddress, address_id)
     if not address:
         raise HTTPException(404, "Address not found")
+    access.require_read(address.subnet_id)
     return address
 
 
@@ -113,11 +135,13 @@ def update_address(
     address_id: int,
     data: AddressUpdate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_operator),
+    current_user: User = Depends(get_current_user),
+    access: AccessContext = Depends(get_access_context),
 ):
     address = db.get(IPAddress, address_id)
     if not address:
         raise HTTPException(404, "Address not found")
+    access.require_write(address.subnet_id)
     before = _address_state(address)
     for key, value in data.model_dump(exclude_unset=True).items():
         setattr(address, key, value)
@@ -249,11 +273,13 @@ def _rollback_provider_deletes(
 def get_delete_preview(
     address_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_operator),
+    current_user: User = Depends(get_current_user),
+    access: AccessContext = Depends(get_access_context),
 ):
     address = db.get(IPAddress, address_id)
     if not address:
         raise HTTPException(404, "Address not found")
+    access.require_read(address.subnet_id)
     return DeletePreview(
         address=address.address,
         hostname=address.hostname,
@@ -266,11 +292,13 @@ def delete_address(
     address_id: int,
     body: DeleteRequest | None = Body(default=None),
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_operator),
+    current_user: User = Depends(get_current_user),
+    access: AccessContext = Depends(get_access_context),
 ):
     address = db.get(IPAddress, address_id)
     if not address:
         raise HTTPException(404, "Address not found")
+    access.require_write(address.subnet_id)
 
     cleanup_keys = set(body.cleanup_keys if body else [])
 
