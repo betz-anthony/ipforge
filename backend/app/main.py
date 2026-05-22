@@ -16,6 +16,7 @@ from app.api import scan as scan_router
 from app.api import search as search_router
 from app.api import provider_configs as provider_configs_router
 from app.api import auth as auth_router
+from app.api import metrics as metrics_router
 from app.api import users as users_router
 from app.api import audit as audit_router
 from app.api import cache as cache_router
@@ -125,6 +126,7 @@ from app.core.deps import get_current_user, require_admin, require_operator  # n
 
 # Public
 app.include_router(auth_router.router, prefix="/api/auth", tags=["auth"])
+app.include_router(metrics_router.router, tags=["ops"])
 
 # Read-only+ (any authenticated user)
 _ro = [Depends(get_current_user)]
