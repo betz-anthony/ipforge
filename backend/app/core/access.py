@@ -13,6 +13,7 @@ from app.models.user_group import user_group_members
 
 _GLOBAL_READ_ROLES = {"admin", "operator", "readonly"}
 _GLOBAL_WRITE_ROLES = {"admin", "operator"}
+_MANAGE_PERMISSION = "manage"
 
 
 @dataclass
@@ -24,7 +25,7 @@ class AccessContext:
     manageable: set[int] = field(default_factory=set)
 
     def can_read(self, subnet_id: int) -> bool:
-        return self.global_read or subnet_id in self.viewable
+        return self.global_read or subnet_id in self.viewable or subnet_id in self.manageable
 
     def can_write(self, subnet_id: int) -> bool:
         return self.global_write or subnet_id in self.manageable
@@ -65,10 +66,15 @@ def resolve_access(user: User, db: Session) -> AccessContext:
     if group_ids:
         conditions.append(SubnetGrant.group_id.in_(group_ids))
     grants = db.query(SubnetGrant).filter(or_(*conditions)).all()
+    # Strongest permission per granted subnet (manage outranks view).
+    roots: dict[int, str] = {}
     for grant in grants:
-        subtree = _descendants(db, grant.subnet_id)
+        if grant.permission == _MANAGE_PERMISSION or grant.subnet_id not in roots:
+            roots[grant.subnet_id] = grant.permission
+    for subnet_id, permission in roots.items():
+        subtree = _descendants(db, subnet_id)
         ctx.viewable |= subtree
-        if grant.permission == "manage":
+        if permission == _MANAGE_PERMISSION:
             ctx.manageable |= subtree
     return ctx
 
