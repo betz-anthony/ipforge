@@ -21,8 +21,8 @@ resources:
 #                            ipam-web=$CI_REGISTRY_IMAGE/web:$SHA
 images:
   - name: ipam-api
-    newName: registry.example.com/felix/ipam/api
+    newName: ghcr.io/betz-anthony/ipforge/api
     newTag: latest
   - name: ipam-web
-    newName: registry.example.com/felix/ipam/web
+    newName: ghcr.io/betz-anthony/ipforge/web
     newTag: latest
