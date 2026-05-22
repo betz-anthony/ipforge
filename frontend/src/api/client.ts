@@ -41,6 +41,27 @@ export const authApi = {
     api.post('/auth/change-password', { current_password, new_password }),
 }
 
+export interface ApiTokenRecord {
+  id: number
+  name: string
+  token_prefix: string
+  read_only: boolean
+  expires_at: string | null
+  last_used_at: string | null
+  created_at: string
+}
+
+export interface ApiTokenCreated extends ApiTokenRecord {
+  token: string
+}
+
+export const tokensApi = {
+  list: () => api.get<ApiTokenRecord[]>('/auth/tokens').then(r => r.data),
+  create: (body: { name: string; read_only: boolean; expires_at: string | null }) =>
+    api.post<ApiTokenCreated>('/auth/tokens', body).then(r => r.data),
+  remove: (id: number) => api.delete(`/auth/tokens/${id}`),
+}
+
 export interface UserRecord {
   id: number
   username: string
