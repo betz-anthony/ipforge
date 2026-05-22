@@ -2,11 +2,12 @@ from datetime import datetime
 
 from fastapi import APIRouter, HTTPException, Depends, status
 from fastapi.security import OAuth2PasswordRequestForm
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from sqlalchemy.orm import Session
 from app.database import get_db
 from app.models.user import User
 from app.core.audit import write_audit
+from app.core.time import utcnow
 from app.core.deps import get_current_user
 from app.core.ldap import authenticate_ldap
 from app.core.security import verify_password, create_access_token, hash_password, generate_api_token, hash_api_token, API_TOKEN_DISPLAY_PREFIX_LEN
@@ -95,6 +96,13 @@ class TokenCreate(BaseModel):
     name: str = Field(..., max_length=64)
     read_only: bool = False
     expires_at: datetime | None = None
+
+    @field_validator("expires_at")
+    @classmethod
+    def _expiry_in_future(cls, v: datetime | None) -> datetime | None:
+        if v is not None and v < utcnow():
+            raise ValueError("expires_at must be in the future")
+        return v
 
 
 class TokenRead(BaseModel):

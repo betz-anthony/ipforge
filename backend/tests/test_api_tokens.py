@@ -215,3 +215,18 @@ def test_delete_token_writes_audit(client, db):
     client.delete(f"/api/auth/tokens/{created['id']}")
     entry = db.query(AuditLog).filter_by(action="delete", resource_type="api_token").first()
     assert entry is not None
+
+
+def test_cannot_list_other_users_tokens(client, db):
+    other = _make_user(db, username="other2")
+    value = generate_api_token()
+    _make_token(db, other, value)
+    r = client.get("/api/auth/tokens")
+    assert r.status_code == 200
+    assert r.json() == []   # the mock user owns no tokens; other user's token is not visible
+
+
+def test_create_token_rejects_past_expiry(client, db):
+    past = (utcnow() - timedelta(days=1)).isoformat()
+    r = client.post("/api/auth/tokens", json={"name": "x", "expires_at": past})
+    assert r.status_code == 422
