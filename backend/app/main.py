@@ -24,6 +24,7 @@ from app.api import importexport as importexport_router
 from app.api import allocation as allocation_router
 from app.api import reclaim as reclaim_router
 from app.api import groups as groups_router
+from app.api import subnet_grants as subnet_grants_router
 import app.models  # noqa: F401
 
 logger = logging.getLogger(__name__)
@@ -161,6 +162,7 @@ app.include_router(provider_configs_router.router, prefix="/api/provider-configs
 app.include_router(cache_router.router,            prefix="/api/cache",            tags=["cache"],            dependencies=_adm)
 app.include_router(users_router.router,            prefix="/api/users",            tags=["users"],            dependencies=_adm)
 app.include_router(groups_router.router,           prefix="/api/groups",           tags=["groups"],           dependencies=_adm)
+app.include_router(subnet_grants_router.router,    prefix="/api/subnet-grants",    tags=["grants"],           dependencies=_adm)
 
 
 @app.get("/health", tags=["ops"])
