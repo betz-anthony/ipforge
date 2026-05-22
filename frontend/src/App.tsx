@@ -1,7 +1,7 @@
 import { Routes, Route, NavLink } from 'react-router-dom'
 import {
   LayoutDashboard, Network, List, Server, Globe, Search, Settings, LogOut, ClipboardList,
-  ArchiveRestore, KeyRound,
+  ArchiveRestore, KeyRound, Users,
 } from 'lucide-react'
 import { useQuery } from '@tanstack/react-query'
 import { useAuth } from './contexts/AuthContext'
@@ -16,6 +16,7 @@ import SettingsPage from './pages/Settings'
 import AuditPage from './pages/Audit'
 import ApiTokens from './pages/ApiTokens'
 import ReclaimPage from './pages/Reclaim'
+import Groups from './pages/Groups'
 import Login from './pages/Login'
 
 const NAV = [
@@ -41,6 +42,7 @@ export default function App() {
 
   const isAdmin    = user.role === 'admin'
   const isOperator = user.role !== 'readonly'
+  const isScoped   = user.role === 'scoped'
 
   return (
     <div className="app-shell">
@@ -51,33 +53,41 @@ export default function App() {
         </div>
 
         <nav className="sidebar-nav">
-          {NAV.map(({ to, label, icon: Icon, end }) => (
-            <NavLink key={to} to={to} end={end} className={({ isActive }) =>
-              'nav-link' + (isActive ? ' active' : '')
-            }>
-              <Icon size={15} strokeWidth={1.75} />
-              {label}
-            </NavLink>
-          ))}
+          {NAV.map(({ to, label, icon: Icon, end }) => {
+            const scopedHidden = isScoped && (to === '/' || to === '/dhcp' || to === '/dns')
+            if (scopedHidden) return null
+            return (
+              <NavLink key={to} to={to} end={end} className={({ isActive }) =>
+                'nav-link' + (isActive ? ' active' : '')
+              }>
+                <Icon size={15} strokeWidth={1.75} />
+                {label}
+              </NavLink>
+            )
+          })}
 
           <div className="nav-divider" />
 
-          <NavLink to="/search" className={({ isActive }) => 'nav-link' + (isActive ? ' active' : '')}>
-            <Search size={15} strokeWidth={1.75} />
-            Search
-          </NavLink>
+          {!isScoped && (
+            <NavLink to="/search" className={({ isActive }) => 'nav-link' + (isActive ? ' active' : '')}>
+              <Search size={15} strokeWidth={1.75} />
+              Search
+            </NavLink>
+          )}
 
-          <NavLink to="/audit" className={({ isActive }) => 'nav-link' + (isActive ? ' active' : '')}>
-            <ClipboardList size={15} strokeWidth={1.75} />
-            Audit
-          </NavLink>
+          {!isScoped && (
+            <NavLink to="/audit" className={({ isActive }) => 'nav-link' + (isActive ? ' active' : '')}>
+              <ClipboardList size={15} strokeWidth={1.75} />
+              Audit
+            </NavLink>
+          )}
 
           <NavLink to="/tokens" className={({ isActive }) => 'nav-link' + (isActive ? ' active' : '')}>
             <KeyRound size={15} strokeWidth={1.75} />
             API Tokens
           </NavLink>
 
-          {isOperator && (
+          {isOperator && !isScoped && (
             <NavLink to="/reclaim" className={({ isActive }) => 'nav-link' + (isActive ? ' active' : '')}>
               <ArchiveRestore size={15} strokeWidth={1.75} />
               Reclaim
@@ -96,6 +106,13 @@ export default function App() {
                   {staleCount.count > 99 ? '99+' : staleCount.count}
                 </span>
               )}
+            </NavLink>
+          )}
+
+          {isAdmin && (
+            <NavLink to="/groups" className={({ isActive }) => 'nav-link' + (isActive ? ' active' : '')}>
+              <Users size={15} strokeWidth={1.75} />
+              Groups
             </NavLink>
           )}
 
@@ -129,7 +146,7 @@ export default function App() {
 
       <main className="main">
         <Routes>
-          <Route path="/"          element={<Dashboard />} />
+          <Route path="/"          element={isScoped ? <Subnets /> : <Dashboard />} />
           <Route path="/subnets"   element={<Subnets />} />
           <Route path="/addresses" element={<Addresses />} />
           <Route path="/dhcp"      element={<DHCP />} />
@@ -138,6 +155,7 @@ export default function App() {
           <Route path="/audit"     element={<AuditPage />} />
           <Route path="/tokens"    element={<ApiTokens />} />
           {isOperator && <Route path="/reclaim" element={<ReclaimPage />} />}
+          {isAdmin && <Route path="/groups" element={<Groups />} />}
           {isAdmin && <Route path="/settings" element={<SettingsPage />} />}
         </Routes>
       </main>

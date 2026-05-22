@@ -24,7 +24,7 @@ api.interceptors.response.use(
 
 export interface AuthUser {
   username: string
-  role: 'readonly' | 'operator' | 'admin'
+  role: 'readonly' | 'operator' | 'admin' | 'scoped'
 }
 
 export const authApi = {
@@ -76,6 +76,44 @@ export const usersApi = {
   update: (id: number, data: Partial<{ role: string; enabled: boolean; password: string }>) =>
     api.put<UserRecord>(`/users/${id}`, data).then(r => r.data),
   delete: (id: number) => api.delete(`/users/${id}`),
+}
+
+export interface GroupRecord {
+  id: number
+  name: string
+  description: string | null
+}
+
+export interface GrantRecord {
+  id: number
+  user_id: number | null
+  group_id: number | null
+  subnet_id: number
+  permission: 'view' | 'manage'
+}
+
+export const groupsApi = {
+  list: () => api.get<GroupRecord[]>('/groups').then(r => r.data),
+  create: (body: { name: string; description: string | null }) =>
+    api.post<GroupRecord>('/groups', body).then(r => r.data),
+  update: (id: number, body: { name?: string; description?: string | null }) =>
+    api.put<GroupRecord>(`/groups/${id}`, body).then(r => r.data),
+  remove: (id: number) => api.delete(`/groups/${id}`),
+  members: (id: number) =>
+    api.get<{ id: number; username: string; role: string }[]>(`/groups/${id}/members`).then(r => r.data),
+  addMember: (id: number, user_id: number) =>
+    api.post(`/groups/${id}/members`, { user_id }),
+  removeMember: (id: number, user_id: number) =>
+    api.request({ method: 'delete', url: `/groups/${id}/members`, data: { user_id } }),
+}
+
+export const grantsApi = {
+  list: (params: { subnet_id?: number; user_id?: number; group_id?: number }) =>
+    api.get<GrantRecord[]>('/subnet-grants', { params }).then(r => r.data),
+  create: (body: {
+    user_id?: number; group_id?: number; subnet_id: number; permission: 'view' | 'manage'
+  }) => api.post<GrantRecord>('/subnet-grants', body).then(r => r.data),
+  remove: (id: number) => api.delete(`/subnet-grants/${id}`),
 }
 
 export interface Subnet {

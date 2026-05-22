@@ -384,7 +384,7 @@ function ProviderSection({
 
 // ── Users section ─────────────────────────────────────────────────────────
 
-const ROLE_OPTIONS = ['readonly', 'operator', 'admin']
+const ROLE_OPTIONS = ['scoped', 'readonly', 'operator', 'admin']
 
 function UsersSection({ currentUsername }: { currentUsername: string }) {
   const qc = useQueryClient()
