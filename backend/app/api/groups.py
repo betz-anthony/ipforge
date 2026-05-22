@@ -35,7 +35,7 @@ def list_groups(_: User = Depends(require_admin), db: Session = Depends(get_db))
 
 
 @router.post("", status_code=201)
-def create_group(body: GroupCreate, _: User = Depends(require_admin),
+def create_group(body: GroupCreate, current_user: User = Depends(require_admin),
                  db: Session = Depends(get_db)):
     name = body.name.strip()
     if not name:
@@ -45,14 +45,14 @@ def create_group(body: GroupCreate, _: User = Depends(require_admin),
     group = UserGroup(name=name, description=body.description)
     db.add(group)
     db.flush()
-    write_audit(db, "admin", "create", "user_group", str(group.id), name)
+    write_audit(db, current_user.username, "create", "user_group", str(group.id), name)
     db.commit()
     db.refresh(group)
     return _group_dict(group)
 
 
 @router.put("/{group_id}")
-def update_group(group_id: int, body: GroupUpdate, _: User = Depends(require_admin),
+def update_group(group_id: int, body: GroupUpdate, current_user: User = Depends(require_admin),
                  db: Session = Depends(get_db)):
     group = db.get(UserGroup, group_id)
     if group is None:
@@ -69,18 +69,19 @@ def update_group(group_id: int, body: GroupUpdate, _: User = Depends(require_adm
         group.name = name
     if body.description is not None:
         group.description = body.description
+    write_audit(db, current_user.username, "update", "user_group", str(group.id), group.name)
     db.commit()
     db.refresh(group)
     return _group_dict(group)
 
 
 @router.delete("/{group_id}", status_code=204)
-def delete_group(group_id: int, _: User = Depends(require_admin),
+def delete_group(group_id: int, current_user: User = Depends(require_admin),
                  db: Session = Depends(get_db)):
     group = db.get(UserGroup, group_id)
     if group is None:
         raise HTTPException(404, "Group not found")
-    write_audit(db, "admin", "delete", "user_group", str(group.id), group.name)
+    write_audit(db, current_user.username, "delete", "user_group", str(group.id), group.name)
     db.delete(group)
     db.commit()
 
@@ -101,7 +102,7 @@ def list_members(group_id: int, _: User = Depends(require_admin),
 
 
 @router.post("/{group_id}/members", status_code=204)
-def add_member(group_id: int, body: MemberRef, _: User = Depends(require_admin),
+def add_member(group_id: int, body: MemberRef, current_user: User = Depends(require_admin),
                db: Session = Depends(get_db)):
     if db.get(UserGroup, group_id) is None:
         raise HTTPException(404, "Group not found")
@@ -115,15 +116,17 @@ def add_member(group_id: int, body: MemberRef, _: User = Depends(require_admin),
     if exists is None:
         db.execute(user_group_members.insert().values(
             group_id=group_id, user_id=body.user_id))
+        write_audit(db, current_user.username, "update", "user_group", str(group_id), f"add member {body.user_id}")
         db.commit()
 
 
 @router.delete("/{group_id}/members", status_code=204)
-def remove_member(group_id: int, body: MemberRef, _: User = Depends(require_admin),
+def remove_member(group_id: int, body: MemberRef, current_user: User = Depends(require_admin),
                   db: Session = Depends(get_db)):
     db.execute(
         user_group_members.delete()
         .where(user_group_members.c.group_id == group_id)
         .where(user_group_members.c.user_id == body.user_id)
     )
+    write_audit(db, current_user.username, "update", "user_group", str(group_id), f"remove member {body.user_id}")
     db.commit()

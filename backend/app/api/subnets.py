@@ -227,6 +227,7 @@ def update_subnet(
             parent = db.get(Subnet, new_parent_id)
             if parent is None:
                 raise HTTPException(404, "Parent subnet not found")
+            access.require_read(new_parent_id)
             parent_network = ipaddress.ip_network(parent.cidr, strict=False)
             subnet_network = ipaddress.ip_network(subnet.cidr, strict=False)
             if parent_network.version != subnet_network.version:
