@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect, useRef } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Plus, X, Scan, AlertTriangle, GitBranch, Download, Upload } from 'lucide-react'
-import { subnetsApi, dhcpApi, addressesApi, scanApi, settingsApi, importExportApi, type Subnet, type DHCPScope, type Collision, type ImportResult } from '../api/client'
+import { subnetsApi, dhcpApi, addressesApi, scanApi, settingsApi, importExportApi, grantsApi, groupsApi, usersApi, type Subnet, type DHCPScope, type Collision, type ImportResult } from '../api/client'
 import { ipInCidr } from '../utils/ip'
 import DetailDrawer from '../components/DetailDrawer'
 import UtilBar from '../components/UtilBar'
@@ -10,6 +10,70 @@ import SubnetTree from './SubnetTree'
 import ConfirmModal from '../components/ConfirmModal'
 import { useToast } from '../contexts/ToastContext'
 import { rowActivation } from '../utils/a11y'
+
+function SubnetGrants({ subnetId }: { subnetId: number }) {
+  const qc = useQueryClient()
+  const [principal, setPrincipal] = useState('')   // "user:ID" | "group:ID"
+  const [permission, setPermission] = useState<'view' | 'manage'>('view')
+
+  const { data: grants } = useQuery({
+    queryKey: ['grants', subnetId],
+    queryFn: () => grantsApi.list({ subnet_id: subnetId }),
+  })
+  const { data: users }  = useQuery({ queryKey: ['users'], queryFn: usersApi.list })
+  const { data: groups } = useQuery({ queryKey: ['groups'], queryFn: groupsApi.list })
+
+  const createMut = useMutation({
+    mutationFn: () => {
+      const [kind, id] = principal.split(':')
+      return grantsApi.create({
+        subnet_id: subnetId,
+        permission,
+        ...(kind === 'user' ? { user_id: Number(id) } : { group_id: Number(id) }),
+      })
+    },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['grants', subnetId] }); setPrincipal('') },
+  })
+  const deleteMut = useMutation({
+    mutationFn: (id: number) => grantsApi.remove(id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['grants', subnetId] }),
+  })
+
+  const labelFor = (g: { user_id: number | null; group_id: number | null }) => {
+    if (g.user_id != null) {
+      return 'user: ' + ((users ?? []).find(u => u.id === g.user_id)?.username ?? g.user_id)
+    }
+    return 'group: ' + ((groups ?? []).find(x => x.id === g.group_id)?.name ?? g.group_id)
+  }
+
+  return (
+    <div>
+      {(grants ?? []).map(g => (
+        <div key={g.id} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+          <span style={{ flex: 1 }}>{labelFor(g)} <span className="text-muted">({g.permission})</span></span>
+          <button className="btn-ghost btn-sm" aria-label="Remove grant"
+                  onClick={() => deleteMut.mutate(g.id)}>
+            <X size={12} />
+          </button>
+        </div>
+      ))}
+      {(grants ?? []).length === 0 && <div className="text-muted">No grants.</div>}
+      <div className="form-actions">
+        <select value={principal} onChange={e => setPrincipal(e.target.value)}>
+          <option value="">Select principal…</option>
+          {(users ?? []).map(u => <option key={'u' + u.id} value={`user:${u.id}`}>user: {u.username}</option>)}
+          {(groups ?? []).map(x => <option key={'g' + x.id} value={`group:${x.id}`}>group: {x.name}</option>)}
+        </select>
+        <select value={permission} onChange={e => setPermission(e.target.value as 'view' | 'manage')}>
+          <option value="view">view</option>
+          <option value="manage">manage</option>
+        </select>
+        <button className="btn-primary btn-sm" disabled={!principal}
+                onClick={() => createMut.mutate()}>Add grant</button>
+      </div>
+    </div>
+  )
+}
 
 const emptyForm = { name: '', cidr: '', vlan_id: '', description: '', scan_interval_minutes: '', dns_provider_name: '', dhcp_provider_name: '' }
 
@@ -429,6 +493,12 @@ export default function Subnets() {
             ))}
           </div>
         )}
+      </div>
+
+      {/* Access grants section */}
+      <div style={{ marginTop: '1rem' }}>
+        <div className="detail-section-title">Access</div>
+        <SubnetGrants subnetId={selectedSubnet.id} />
       </div>
     </>
   ) : null
