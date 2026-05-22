@@ -1,4 +1,9 @@
+import pytest
+
+from fastapi import HTTPException
+
 from app.core.access import resolve_access
+from app.core.deps import require_global_read
 from app.models.user import User
 from app.models.subnet import Subnet
 from app.models.user_group import UserGroup, user_group_members
@@ -101,11 +106,6 @@ def test_grant_is_additive_for_readonly(db):
 
 
 def test_require_global_read_rejects_scoped():
-    import pytest
-    from fastapi import HTTPException
-    from app.core.deps import require_global_read
-    from app.models.user import User
-
     scoped = User(id=1, username="s", role="scoped", enabled=True, hashed_password="x")
     with pytest.raises(HTTPException) as exc:
         require_global_read(user=scoped)
@@ -113,3 +113,30 @@ def test_require_global_read_rejects_scoped():
 
     operator = User(id=2, username="o", role="operator", enabled=True, hashed_password="x")
     assert require_global_read(user=operator) is operator
+
+
+def test_user_in_two_groups_strongest_permission_wins(db):
+    user = _user(db)
+    sn = _subnet(db, "10.0.0.0/24")
+    g_view = UserGroup(name="viewers")
+    g_manage = UserGroup(name="managers")
+    db.add_all([g_view, g_manage])
+    db.commit()
+    db.execute(user_group_members.insert().values(user_id=user.id, group_id=g_view.id))
+    db.execute(user_group_members.insert().values(user_id=user.id, group_id=g_manage.id))
+    db.add(SubnetGrant(group_id=g_view.id, subnet_id=sn.id, permission="view"))
+    db.add(SubnetGrant(group_id=g_manage.id, subnet_id=sn.id, permission="manage"))
+    db.commit()
+    ctx = resolve_access(user, db)
+    assert ctx.can_write(sn.id) is True
+
+
+def test_grant_inherits_to_grandchild(db):
+    user = _user(db)
+    gp = _subnet(db, "10.0.0.0/8")
+    parent = _subnet(db, "10.0.0.0/16", parent_id=gp.id)
+    child = _subnet(db, "10.0.1.0/24", parent_id=parent.id)
+    db.add(SubnetGrant(user_id=user.id, subnet_id=gp.id, permission="manage"))
+    db.commit()
+    ctx = resolve_access(user, db)
+    assert ctx.can_write(child.id) is True
