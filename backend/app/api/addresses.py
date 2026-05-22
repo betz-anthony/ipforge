@@ -10,7 +10,7 @@ from app.models.cache import CachedDNSRecord, CachedDHCPLease
 from app.models.scan import ScanHistoryDay
 from app.models.user import User
 from app.schemas.address import AddressCreate, AddressRead, AddressUpdate
-from app.core.deps import require_operator, get_current_user
+from app.core.deps import get_current_user
 from app.core.audit import write_audit
 from app.core.access import AccessContext, get_access_context
 from app.core.ptr import build_ptr_record
@@ -68,9 +68,9 @@ def create_address(
     current_user: User = Depends(get_current_user),
     access: AccessContext = Depends(get_access_context),
 ):
+    access.require_write(data.subnet_id)
     if db.query(IPAddress).filter(IPAddress.address == data.address).first():
         raise HTTPException(409, "Address already exists")
-    access.require_write(data.subnet_id)
     address = IPAddress(**data.model_dump())
     db.add(address)
     db.flush()
@@ -273,7 +273,6 @@ def _rollback_provider_deletes(
 def get_delete_preview(
     address_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
     access: AccessContext = Depends(get_access_context),
 ):
     address = db.get(IPAddress, address_id)
