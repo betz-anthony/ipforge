@@ -68,8 +68,15 @@ def get_current_user(
 
 
 def require_operator(user: User = Depends(get_current_user)) -> User:
-    if user.role == "readonly":
+    if user.role in ("readonly", "scoped"):
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Operator or admin role required")
+    return user
+
+
+def require_global_read(user: User = Depends(get_current_user)) -> User:
+    """Allow admin/operator/readonly; reject scoped users (they have no global view)."""
+    if user.role == "scoped":
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "This area is not available to scoped users")
     return user
 
 

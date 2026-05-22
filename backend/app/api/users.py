@@ -8,7 +8,7 @@ from app.core.deps import require_admin, get_current_user
 
 router = APIRouter()
 
-ROLES = {"readonly", "operator", "admin"}
+ROLES = {"readonly", "operator", "admin", "scoped"}
 
 
 def _row(u: User) -> dict:
