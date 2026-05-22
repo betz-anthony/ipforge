@@ -2,7 +2,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: web
-  namespace: ipam
+  namespace: ipforge
 spec:
   replicas: 1
   selector:

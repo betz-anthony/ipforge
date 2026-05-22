@@ -2,7 +2,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: api
-  namespace: ipam
+  namespace: ipforge
 spec:
   replicas: 1
   selector:
@@ -23,14 +23,14 @@ spec:
             - name: DATABASE_URL
               valueFrom:
                 secretKeyRef:
-                  name: ipam-secret
+                  name: ipforge-secret
                   key: DATABASE_URL
                   optional: true
           envFrom:
             - configMapRef:
-                name: ipam-config
+                name: ipforge-config
             - secretRef:
-                name: ipam-secret
+                name: ipforge-secret
       containers:
         - name: api
           image: ipam-api  # registry + tag pinned by kustomization.yaml / CI
@@ -41,9 +41,9 @@ spec:
               value: postgresql://ipam:$(DB_PASSWORD)@postgres:5432/ipam
           envFrom:
             - configMapRef:
-                name: ipam-config
+                name: ipforge-config
             - secretRef:
-                name: ipam-secret
+                name: ipforge-secret
           readinessProbe:
             httpGet:
               path: /health
