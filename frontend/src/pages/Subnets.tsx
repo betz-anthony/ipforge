@@ -9,6 +9,7 @@ import CollisionResolveDialog from './CollisionResolveDialog'
 import SubnetTree from './SubnetTree'
 import ConfirmModal from '../components/ConfirmModal'
 import { useToast } from '../contexts/ToastContext'
+import { useAuth } from '../contexts/AuthContext'
 import { rowActivation } from '../utils/a11y'
 
 function SubnetGrants({ subnetId }: { subnetId: number }) {
@@ -190,6 +191,8 @@ export default function Subnets() {
   const [resolveTarget, setResolveTarget] = useState<Collision | null>(null)
   const [confirmSubnet, setConfirmSubnet] = useState<Subnet | null>(null)
   const { showToast } = useToast()
+  const { user } = useAuth()
+  const isAdmin = user?.role === 'admin'
 
   const [treeView, setTreeView]           = useState(false)
   const [treeSelectedId, setTreeSelectedId] = useState<number | null>(null)
@@ -496,10 +499,12 @@ export default function Subnets() {
       </div>
 
       {/* Access grants section */}
-      <div style={{ marginTop: '1rem' }}>
-        <div className="detail-section-title">Access</div>
-        <SubnetGrants subnetId={selectedSubnet.id} />
-      </div>
+      {isAdmin && (
+        <div style={{ marginTop: '1rem' }}>
+          <div className="detail-section-title">Access</div>
+          <SubnetGrants subnetId={selectedSubnet.id} />
+        </div>
+      )}
     </>
   ) : null
 

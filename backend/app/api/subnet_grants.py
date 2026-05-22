@@ -51,7 +51,7 @@ def list_grants(
 
 
 @router.post("", status_code=201)
-def create_grant(body: GrantCreate, _: User = Depends(require_admin),
+def create_grant(body: GrantCreate, current_user: User = Depends(require_admin),
                  db: Session = Depends(get_db)):
     if (body.user_id is None) == (body.group_id is None):
         raise HTTPException(400, "Exactly one of user_id or group_id must be set")
@@ -83,7 +83,7 @@ def create_grant(body: GrantCreate, _: User = Depends(require_admin),
     db.add(grant)
     db.flush()
     principal = f"user:{body.user_id}" if body.user_id else f"group:{body.group_id}"
-    write_audit(db, "admin", "create", "subnet_grant", str(grant.id),
+    write_audit(db, current_user.username, "create", "subnet_grant", str(grant.id),
                 f"{principal} {body.permission} subnet:{body.subnet_id}")
     db.commit()
     db.refresh(grant)
@@ -91,12 +91,12 @@ def create_grant(body: GrantCreate, _: User = Depends(require_admin),
 
 
 @router.delete("/{grant_id}", status_code=204)
-def delete_grant(grant_id: int, _: User = Depends(require_admin),
+def delete_grant(grant_id: int, current_user: User = Depends(require_admin),
                  db: Session = Depends(get_db)):
     grant = db.get(SubnetGrant, grant_id)
     if grant is None:
         raise HTTPException(404, "Grant not found")
-    write_audit(db, "admin", "delete", "subnet_grant", str(grant.id),
+    write_audit(db, current_user.username, "delete", "subnet_grant", str(grant.id),
                 f"subnet:{grant.subnet_id}")
     db.delete(grant)
     db.commit()
