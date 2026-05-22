@@ -9,7 +9,8 @@ from sqlalchemy import func
 
 logger = logging.getLogger(__name__)
 
-from app.core.deps import require_operator
+from app.core.deps import get_current_user
+from app.core.access import AccessContext, get_access_context
 from app.core.audit import write_audit
 from app.core.mac import normalize_mac_optional
 from app.core.ptr import find_reverse_zone, build_ptr_record
@@ -110,8 +111,10 @@ def allocate_ip(
     subnet_id: int,
     body: AllocateRequest,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_operator),
+    current_user: User = Depends(get_current_user),
+    access: AccessContext = Depends(get_access_context),
 ):
+    access.require_write(subnet_id)
     # Hostname idempotency relies on a single allocator — concurrent calls for the
     # same new hostname may both pass the existing-check and allocate different IPs.
     hostname = body.hostname or ""
