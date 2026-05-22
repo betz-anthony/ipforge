@@ -1,8 +1,8 @@
 apiVersion: batch/v1
 kind: CronJob
 metadata:
-  name: ipam-sync
-  namespace: ipam
+  name: ipforge-sync
+  namespace: ipforge
 spec:
   schedule: "*/5 * * * *"   # every 5 minutes
   concurrencyPolicy: Forbid  # skip if previous run still going
@@ -30,9 +30,9 @@ spec:
                   value: postgresql://ipam:$(DB_PASSWORD)@postgres:5432/ipam
               envFrom:
                 - configMapRef:
-                    name: ipam-config
+                    name: ipforge-config
                 - secretRef:
-                    name: ipam-secret
+                    name: ipforge-secret
               resources:
                 requests:
                   cpu: 100m
