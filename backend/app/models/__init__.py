@@ -11,6 +11,8 @@ from app.models.provider_config import ProviderConfig
 from app.models.user import User
 from app.models.audit_log import AuditLog
 from app.models.api_token import ApiToken
+from app.models.user_group import UserGroup, user_group_members
+from app.models.subnet_grant import SubnetGrant
 
 __all__ = [
     "Subnet", "IPAddress", "AppSetting",
@@ -22,4 +24,5 @@ __all__ = [
     "User",
     "AuditLog",
     "ApiToken",
+    "UserGroup", "user_group_members", "SubnetGrant",
 ]
