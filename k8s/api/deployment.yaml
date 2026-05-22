@@ -13,9 +13,11 @@ spec:
       labels:
         app: api
     spec:
+      imagePullSecrets:
+        - name: gitlab-registry
       initContainers:
         - name: migrate
-          image: ghcr.io/YOUR_ORG/ipam-api:latest  # replace with your image
+          image: ipam-api  # registry + tag pinned by kustomization.yaml / CI
           command: ["alembic", "upgrade", "head"]
           env:
             - name: DATABASE_URL
@@ -31,7 +33,7 @@ spec:
                 name: ipam-secret
       containers:
         - name: api
-          image: ghcr.io/YOUR_ORG/ipam-api:latest  # replace with your image
+          image: ipam-api  # registry + tag pinned by kustomization.yaml / CI
           ports:
             - containerPort: 8000
           env:

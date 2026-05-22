@@ -14,9 +14,11 @@ spec:
       template:
         spec:
           restartPolicy: Never
+          imagePullSecrets:
+            - name: gitlab-registry
           containers:
             - name: sync
-              image: ghcr.io/YOUR_ORG/ipam-api:latest  # same image as api
+              image: ipam-api  # registry + tag pinned by kustomization.yaml / CI
               command:
                 - python
                 - -c

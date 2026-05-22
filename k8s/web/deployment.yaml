@@ -13,9 +13,11 @@ spec:
       labels:
         app: web
     spec:
+      imagePullSecrets:
+        - name: gitlab-registry
       containers:
         - name: web
-          image: ghcr.io/YOUR_ORG/ipam-web:latest  # replace with your image
+          image: ipam-web  # registry + tag pinned by kustomization.yaml / CI
           ports:
             - containerPort: 80
           readinessProbe:
