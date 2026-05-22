@@ -12,7 +12,7 @@ spec:
   #   - hosts: [ipam.example.com]
   #     secretName: ipam-tls
   rules:
-    - host: ipam.example.com  # replace with your hostname
+    - host: ipforge.example.com  # replace with your hostname
       http:
         paths:
           - path: /api
