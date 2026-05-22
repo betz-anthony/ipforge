@@ -137,3 +137,29 @@ def test_operator_unaffected(db):
         assert len(client.get("/api/subnets").json()) == 1
     finally:
         app.dependency_overrides.clear()
+
+
+def test_scoped_allocate_requires_manage(db):
+    user = _scoped_user(db, name="scoped-alloc")
+    sn = _subnet(db, "10.0.0.0/24")
+    db.add(SubnetGrant(user_id=user.id, subnet_id=sn.id, permission="view"))
+    db.commit()
+    client = _client(db, user)
+    try:
+        r = client.post(f"/api/subnets/{sn.id}/allocate", json={"hostname": "h1"})
+        assert r.status_code == 403
+    finally:
+        app.dependency_overrides.clear()
+
+
+def test_scoped_allocate_with_manage_succeeds(db):
+    user = _scoped_user(db, name="scoped-alloc-ok")
+    sn = _subnet(db, "10.0.0.0/24")
+    db.add(SubnetGrant(user_id=user.id, subnet_id=sn.id, permission="manage"))
+    db.commit()
+    client = _client(db, user)
+    try:
+        r = client.post(f"/api/subnets/{sn.id}/allocate", json={"hostname": "h1"})
+        assert r.status_code in (200, 201)
+    finally:
+        app.dependency_overrides.clear()
