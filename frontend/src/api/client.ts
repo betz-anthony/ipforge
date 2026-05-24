@@ -621,3 +621,27 @@ export const alertRulesApi = {
   update: (id: number, body: AlertRuleIn)    => api.put<AlertRule>(`/alerts/rules/${id}`, body).then(r => r.data),
   delete: (id: number)                       => api.delete(`/alerts/rules/${id}`),
 }
+
+export interface AlertingEvent {
+  id: number
+  rule_id: number | null
+  resource_key: string
+  state: 'firing' | 'resolved'
+  first_fired_at: string
+  last_fired_at: string
+  resolved_at: string | null
+  payload: Record<string, any>
+  deliveries: {
+    channel_id: number
+    status: string
+    error?: string | null
+    attempted_at: string
+  }[]
+}
+
+export const alertEventsApi = {
+  list: (params: { state?: string; trigger_type?: string; limit?: number } = {}) =>
+    api.get<AlertingEvent[]>('/alerts/events', { params }).then(r => r.data),
+  ack: (id: number) =>
+    api.post<AlertingEvent>(`/alerts/events/${id}/ack`).then(r => r.data),
+}

@@ -1,7 +1,7 @@
 import { Routes, Route, NavLink } from 'react-router-dom'
 import {
   LayoutDashboard, Network, List, Server, Globe, Search, Settings, LogOut, ClipboardList,
-  ArchiveRestore, KeyRound, Users,
+  ArchiveRestore, KeyRound, Users, Bell,
 } from 'lucide-react'
 import { useQuery } from '@tanstack/react-query'
 import { useAuth } from './contexts/AuthContext'
@@ -14,6 +14,7 @@ import DNS from './pages/DNS'
 import SearchPage from './pages/Search'
 import SettingsPage from './pages/Settings'
 import AuditPage from './pages/Audit'
+import AlertsPage from './pages/Alerts'
 import ApiTokens from './pages/ApiTokens'
 import ReclaimPage from './pages/Reclaim'
 import Groups from './pages/Groups'
@@ -79,6 +80,13 @@ export default function App() {
             <NavLink to="/audit" className={({ isActive }) => 'nav-link' + (isActive ? ' active' : '')}>
               <ClipboardList size={15} strokeWidth={1.75} />
               Audit
+            </NavLink>
+          )}
+
+          {!isScoped && (
+            <NavLink to="/alerts" className={({ isActive }) => 'nav-link' + (isActive ? ' active' : '')}>
+              <Bell size={15} strokeWidth={1.75} />
+              Alerts
             </NavLink>
           )}
 
@@ -153,6 +161,7 @@ export default function App() {
           <Route path="/dns"       element={<DNS />} />
           <Route path="/search"    element={<SearchPage />} />
           <Route path="/audit"     element={<AuditPage />} />
+          {!isScoped && <Route path="/alerts" element={<AlertsPage />} />}
           <Route path="/tokens"    element={<ApiTokens />} />
           {isOperator && <Route path="/reclaim" element={<ReclaimPage />} />}
           {isAdmin && <Route path="/groups" element={<Groups />} />}
