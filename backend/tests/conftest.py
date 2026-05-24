@@ -69,3 +69,43 @@ def client(db):
     app.dependency_overrides[get_current_user] = override_get_current_user
     yield TestClient(app)
     app.dependency_overrides.clear()
+
+
+def _make_client_for_role(db, role: str):
+    from app.models.user import User
+    from app.core.deps import get_current_user
+    user = User(id=10000, username=f"test_{role}", role=role, enabled=True, hashed_password="x")
+
+    def override_get_db():
+        yield db
+
+    def override_get_current_user():
+        return user
+
+    app.dependency_overrides[get_db] = override_get_db
+    app.dependency_overrides[get_current_user] = override_get_current_user
+    return TestClient(app)
+
+
+@pytest.fixture
+def client_admin(db):
+    yield _make_client_for_role(db, "admin")
+    app.dependency_overrides.clear()
+
+
+@pytest.fixture
+def client_operator(db):
+    yield _make_client_for_role(db, "operator")
+    app.dependency_overrides.clear()
+
+
+@pytest.fixture
+def client_gr(db):
+    yield _make_client_for_role(db, "readonly")
+    app.dependency_overrides.clear()
+
+
+@pytest.fixture
+def client_scoped(db):
+    yield _make_client_for_role(db, "scoped")
+    app.dependency_overrides.clear()
