@@ -4,6 +4,7 @@ import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
 
+from app.alerting.emit import emit
 from app.database import SessionLocal
 from app.models.cache import (
     CachedDNSZone, CachedDNSRecord,
@@ -167,6 +168,8 @@ def sync_dns() -> None:
                     zones_count, zone_records = f.result()
                 except Exception as e:
                     logger.error("DNS %s sync: %s", p.source, e)
+                    emit("sync_error", f"sync:{p.source}",
+                         {"provider": p.source, "error": str(e)})
                     continue
                 if zones_count > 0 and not zone_records:
                     logger.warning("DNS %s: %d zones listed but 0 records fetched, preserving cache", p.source, zones_count)
@@ -188,6 +191,7 @@ def sync_dns() -> None:
         _set_status(db, "dns", "ok")
     except Exception as e:
         logger.error("DNS sync failed: %s", e, exc_info=True)
+        emit("sync_error", "sync:dns", {"provider": "dns", "error": str(e)})
         _set_status(db, "dns", "error", str(e))
     finally:
         db.close()
@@ -215,6 +219,8 @@ def sync_dhcp() -> None:
                     scopes = f.result()
                 except Exception as e:
                     logger.error("DHCP %s get_scopes: %s", p.source, e)
+                    emit("sync_error", f"sync:{p.source}",
+                         {"provider": p.source, "error": str(e)})
                     continue
                 db.query(CachedDHCPScope).filter_by(source=p.source).delete()
                 for s in scopes:
@@ -255,6 +261,7 @@ def sync_dhcp() -> None:
         _set_status(db, "dhcp", "ok")
     except Exception as e:
         logger.error("DHCP sync failed: %s", e, exc_info=True)
+        emit("sync_error", "sync:dhcp", {"provider": "dhcp", "error": str(e)})
         _set_status(db, "dhcp", "error", str(e))
     finally:
         db.close()

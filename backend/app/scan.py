@@ -18,6 +18,7 @@ from app.models.scan import Collision, CollisionType, ScanResult, ScanHistoryDay
 from app.models.subnet import Subnet
 from app.core.time import utcnow
 from app.utils import ip_in_cidr
+from app.alerting.emit import emit
 
 logger = logging.getLogger(__name__)
 
@@ -219,6 +220,8 @@ def _detect_collisions(db, subnet_id: int) -> None:
             if existing.resolved:
                 existing.resolved = False
                 existing.resolved_at = None
+                emit("collision", f"ip:{ip}:{ctype}",
+                     {"ip": ip, "type": str(ctype), "subnet_id": subnet_id})
         else:
             db.add(Collision(
                 ip_address=ip,
@@ -227,6 +230,8 @@ def _detect_collisions(db, subnet_id: int) -> None:
                 detected_at=now,
                 resolved=False,
             ))
+            emit("collision", f"ip:{ip}:{ctype}",
+                 {"ip": ip, "type": str(ctype), "subnet_id": subnet_id})
 
     # Pass 1: active_but_available
     reachable_ips = {
@@ -351,6 +356,8 @@ def scan_subnet(
                         status=AddressStatus.discovered,
                     ))
                     existing_ips.add(ip)
+                    emit("rogue", f"ip:{ip}",
+                         {"ip": ip, "subnet_id": subnet_id})
 
         db.commit()
         _update_last_seen(db, reachable_ips, now)
