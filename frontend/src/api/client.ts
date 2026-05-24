@@ -593,3 +593,31 @@ export const alertChannelsApi = {
   delete: (id: number)                       => api.delete(`/alerts/channels/${id}`),
   test:   (id: number)                       => api.post<{ status: string; error?: string }>(`/alerts/channels/${id}/test`).then(r => r.data),
 }
+
+export interface AlertRule {
+  id: number
+  name: string
+  trigger_type: 'collision' | 'utilization' | 'rogue' | 'sync_error' | 'stale_queue'
+  condition: Record<string, any>
+  channel_ids: number[]
+  recipients: string[]
+  renotify_minutes: number | null
+  enabled: boolean
+}
+
+export interface AlertRuleIn {
+  name: string
+  trigger_type: AlertRule['trigger_type']
+  condition: Record<string, any>
+  channel_ids: number[]
+  recipients: string[]
+  renotify_minutes: number | null
+  enabled: boolean
+}
+
+export const alertRulesApi = {
+  list:   ()                                 => api.get<AlertRule[]>('/alerts/rules').then(r => r.data),
+  create: (body: AlertRuleIn)                => api.post<AlertRule>('/alerts/rules', body).then(r => r.data),
+  update: (id: number, body: AlertRuleIn)    => api.put<AlertRule>(`/alerts/rules/${id}`, body).then(r => r.data),
+  delete: (id: number)                       => api.delete(`/alerts/rules/${id}`),
+}
