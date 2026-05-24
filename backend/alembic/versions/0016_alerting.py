@@ -26,8 +26,8 @@ def upgrade():
         sa.Column("enabled", sa.Boolean, nullable=False, server_default=sa.true()),
         sa.Column("config", sa.JSON, nullable=False, server_default=sa.text("'{}'")),
         sa.Column("secret_enc", sa.Text, nullable=True),
-        sa.Column("created_at", sa.DateTime, nullable=False),
-        sa.Column("updated_at", sa.DateTime, nullable=False),
+        sa.Column("created_at", sa.DateTime, nullable=False, server_default=sa.func.now()),
+        sa.Column("updated_at", sa.DateTime, nullable=False, server_default=sa.func.now()),
     )
     op.create_table(
         "alert_rules",
@@ -39,8 +39,8 @@ def upgrade():
         sa.Column("recipients", sa.JSON, nullable=False, server_default=sa.text("'[]'")),
         sa.Column("renotify_minutes", sa.Integer, nullable=True),
         sa.Column("enabled", sa.Boolean, nullable=False, server_default=sa.true()),
-        sa.Column("created_at", sa.DateTime, nullable=False),
-        sa.Column("updated_at", sa.DateTime, nullable=False),
+        sa.Column("created_at", sa.DateTime, nullable=False, server_default=sa.func.now()),
+        sa.Column("updated_at", sa.DateTime, nullable=False, server_default=sa.func.now()),
     )
     op.create_table(
         "alerting_events",
