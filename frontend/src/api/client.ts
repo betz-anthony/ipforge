@@ -568,3 +568,28 @@ export const importExportApi = {
     return api.post<ImportResult>('/importexport/addresses', form).then(r => r.data)
   },
 }
+
+export interface AlertChannel {
+  id: number
+  name: string
+  kind: 'smtp' | 'generic' | 'slack' | 'teams' | 'pagerduty'
+  config: Record<string, any>
+  has_secret: boolean
+  enabled: boolean
+}
+
+export interface AlertChannelIn {
+  name: string
+  kind: AlertChannel['kind']
+  config: Record<string, any>
+  secret?: string | null
+  enabled: boolean
+}
+
+export const alertChannelsApi = {
+  list:   ()                                 => api.get<AlertChannel[]>('/alerts/channels').then(r => r.data),
+  create: (body: AlertChannelIn)             => api.post<AlertChannel>('/alerts/channels', body).then(r => r.data),
+  update: (id: number, body: AlertChannelIn) => api.put<AlertChannel>(`/alerts/channels/${id}`, body).then(r => r.data),
+  delete: (id: number)                       => api.delete(`/alerts/channels/${id}`),
+  test:   (id: number)                       => api.post<{ status: string; error?: string }>(`/alerts/channels/${id}/test`).then(r => r.data),
+}

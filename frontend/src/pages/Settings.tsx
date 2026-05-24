@@ -9,6 +9,7 @@ import {
 } from '../api/client'
 import ConfirmModal from '../components/ConfirmModal'
 import { useToast } from '../contexts/ToastContext'
+import AlertChannels from './AlertChannels'
 
 // ── Provider field definitions ─────────────────────────────────────────────
 
@@ -806,6 +807,11 @@ export default function SettingsPage() {
 
       {/* ── Users ── */}
       {user && <UsersSection currentUsername={user.username} />}
+
+      {/* ── Alert Channels ── */}
+      <div className="settings-section" style={{ marginTop: '1.5rem' }}>
+        <AlertChannels />
+      </div>
     </div>
   )
 }
