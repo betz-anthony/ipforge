@@ -10,6 +10,7 @@ import {
 import ConfirmModal from '../components/ConfirmModal'
 import { useToast } from '../contexts/ToastContext'
 import AlertChannels from './AlertChannels'
+import AlertRules from './AlertRules'
 
 // ── Provider field definitions ─────────────────────────────────────────────
 
@@ -811,6 +812,11 @@ export default function SettingsPage() {
       {/* ── Alert Channels ── */}
       <div className="settings-section" style={{ marginTop: '1.5rem' }}>
         <AlertChannels />
+      </div>
+
+      {/* ── Alert Rules ── */}
+      <div className="settings-section" style={{ marginTop: '1.5rem' }}>
+        <AlertRules />
       </div>
     </div>
   )
