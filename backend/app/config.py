@@ -48,6 +48,9 @@ class Settings(BaseSettings):
     # Stale IP reclamation: number of days without activity before an IP is considered stale
     stale_reclaim_days: int = 30
 
+    # Alert dispatcher: seconds between dispatcher ticks
+    alert_dispatch_interval: int = 30
+
     class Config:
         env_file = ".env"
 

@@ -26,6 +26,7 @@ from app.api import reclaim as reclaim_router
 from app.api import groups as groups_router
 from app.api import subnet_grants as subnet_grants_router
 from app.alerting import api as alerting_api
+from app.alerting.dispatcher import start as start_alert_dispatcher
 import app.models  # noqa: F401
 
 logger = logging.getLogger(__name__)
@@ -112,6 +113,10 @@ async def lifespan(app: FastAPI):
     # but scanning has no CronJob — the scheduler is always needed.
     from app.scan import scan_scheduler_loop
     threading.Thread(target=scan_scheduler_loop, daemon=True, name="ipam-scan-scheduler").start()
+    # Skip the dispatcher in SQLite environments (unit tests) to avoid thread accumulation.
+    if not app_settings.database_url.startswith("sqlite"):
+        start_alert_dispatcher()
+        logger.info("Alert dispatcher thread started")
     yield
 
 
