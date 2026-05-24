@@ -1,0 +1,95 @@
+import { useState } from 'react'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { CheckCircle2 } from 'lucide-react'
+import { alertEventsApi, alertChannelsApi } from '../api/client'
+import { useToast } from '../contexts/ToastContext'
+
+const TRIGGERS = [
+  { value: '',             label: 'All triggers' },
+  { value: 'collision',    label: 'Collision' },
+  { value: 'utilization',  label: 'Utilization' },
+  { value: 'rogue',        label: 'Rogue device' },
+  { value: 'sync_error',   label: 'Sync error' },
+  { value: 'stale_queue',  label: 'Stale-IP queue' },
+]
+
+export default function Alerts() {
+  const qc = useQueryClient()
+  const { showToast } = useToast()
+  const [state, setState] = useState('')
+  const [trigger, setTrigger] = useState('')
+
+  const { data: events = [] } = useQuery({
+    queryKey: ['alert-events', state, trigger],
+    queryFn: () => alertEventsApi.list({
+      state: state || undefined,
+      trigger_type: trigger || undefined,
+    }),
+    refetchInterval: 15000,
+  })
+  const { data: channels = [] } = useQuery({
+    queryKey: ['alert-channels'],
+    queryFn: alertChannelsApi.list,
+  })
+
+  const ack = useMutation({
+    mutationFn: (id: number) => alertEventsApi.ack(id),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['alert-events'] })
+      showToast('Acknowledged', 'success')
+    },
+    onError: () => showToast('Acknowledge failed', 'error'),
+  })
+
+  const chName = (id: number) => channels.find(c => c.id === id)?.name ?? `#${id}`
+
+  return (
+    <div>
+      <h1 className="page-title">Alerts</h1>
+      <div className="filters" style={{ marginBottom: '1rem', display: 'flex', gap: '0.5rem' }}>
+        <select value={state} onChange={e => setState(e.target.value)}>
+          <option value="">All states</option>
+          <option value="firing">Firing</option>
+          <option value="resolved">Resolved</option>
+        </select>
+        <select value={trigger} onChange={e => setTrigger(e.target.value)}>
+          {TRIGGERS.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
+        </select>
+      </div>
+
+      <table className="data-table">
+        <thead>
+          <tr><th>State</th><th>Resource</th><th>First fired</th><th>Last fired</th><th>Deliveries</th><th></th></tr>
+        </thead>
+        <tbody>
+          {events.map(e => (
+            <tr key={e.id}>
+              <td><span className={e.state === 'firing' ? 'badge badge-red' : 'badge badge-green'}>{e.state}</span></td>
+              <td>{e.resource_key}</td>
+              <td>{e.first_fired_at}</td>
+              <td>{e.last_fired_at}</td>
+              <td>
+                {e.deliveries.map((d, i) => (
+                  <span key={i} title={d.error || ''} style={{ marginRight: '0.5rem' }}>
+                    {d.status === 'sent' ? '✅' : '❌'} {chName(d.channel_id)}
+                  </span>
+                ))}
+                {e.deliveries.length === 0 && <span style={{ color: 'var(--text-muted)' }}>—</span>}
+              </td>
+              <td>
+                {e.state === 'firing' && (
+                  <button className="btn-ghost btn-sm" onClick={() => ack.mutate(e.id)}>
+                    <CheckCircle2 size={13} /> Ack
+                  </button>
+                )}
+              </td>
+            </tr>
+          ))}
+          {events.length === 0 && (
+            <tr><td colSpan={6} style={{ textAlign: 'center', color: 'var(--text-muted)' }}>No alerts.</td></tr>
+          )}
+        </tbody>
+      </table>
+    </div>
+  )
+}
