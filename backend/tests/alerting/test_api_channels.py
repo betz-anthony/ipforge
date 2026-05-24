@@ -59,6 +59,26 @@ def test_non_admin_forbidden(client_operator):
     assert r.status_code == 403
 
 
+def test_update_channel_rejects_rename_to_existing_name(client_admin):
+    a = client_admin.post("/api/alerts/channels", json={"name": "a", "kind": "generic",
+                                                        "config": {"url": "u"}}).json()
+    b = client_admin.post("/api/alerts/channels", json={"name": "b", "kind": "generic",
+                                                        "config": {"url": "u"}}).json()
+    r = client_admin.put(f"/api/alerts/channels/{b['id']}", json={
+        "name": "a", "kind": "generic", "config": {"url": "u"}, "enabled": True,
+    })
+    assert r.status_code == 409
+
+
+def test_update_channel_allows_same_name(client_admin):
+    a = client_admin.post("/api/alerts/channels", json={"name": "x", "kind": "generic",
+                                                        "config": {"url": "u"}}).json()
+    r = client_admin.put(f"/api/alerts/channels/{a['id']}", json={
+        "name": "x", "kind": "generic", "config": {"url": "u"}, "enabled": False,
+    })
+    assert r.status_code == 200
+
+
 def test_test_channel_endpoint_calls_transport(client_admin):
     from unittest.mock import patch, MagicMock
     rid = client_admin.post("/api/alerts/channels", json={"name": "c", "kind": "generic",
