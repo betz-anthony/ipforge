@@ -92,3 +92,60 @@ def test_channel(ch_id: int, db: Session = Depends(get_db), user=Depends(require
                    "pagerduty": to_pagerduty}.get(ch.kind, to_generic)
         result = send_webhook(ch, payload=builder(fake_event, fake_rule))
     return {"status": result.status, "error": result.error}
+
+
+# ------------- rules -------------
+def _validate_rule(db: Session, body: RuleIn) -> None:
+    for cid in body.channel_ids:
+        ch = db.get(AlertChannel, cid)
+        if not ch:
+            raise HTTPException(400, f"channel {cid} not found")
+    smtp_in_rule = any(db.get(AlertChannel, cid).kind == "smtp" for cid in body.channel_ids)
+    if smtp_in_rule and not body.recipients:
+        raise HTTPException(400, "recipients required when an SMTP channel is selected")
+
+
+@router.get("/rules", response_model=list[RuleOut])
+def list_rules(db: Session = Depends(get_db)):
+    return [RuleOut.from_orm(r) for r in db.query(AlertRule).order_by(AlertRule.name).all()]
+
+
+@router.post("/rules", response_model=RuleOut, status_code=201)
+def create_rule(body: RuleIn, db: Session = Depends(get_db), user=Depends(require_admin)):
+    if db.query(AlertRule).filter_by(name=body.name).first():
+        raise HTTPException(409, "rule name exists")
+    _validate_rule(db, body)
+    r = AlertRule(name=body.name, trigger_type=body.trigger_type, condition=body.condition,
+                  channel_ids=body.channel_ids, recipients=body.recipients,
+                  renotify_minutes=body.renotify_minutes, enabled=body.enabled)
+    db.add(r); db.commit(); db.refresh(r)
+    write_audit(db, user.username, "create", "alert_rule", str(r.id), r.name,
+                after={"name": r.name, "trigger": r.trigger_type})
+    return RuleOut.from_orm(r)
+
+
+@router.put("/rules/{rule_id}", response_model=RuleOut)
+def update_rule(rule_id: int, body: RuleIn, db: Session = Depends(get_db), user=Depends(require_admin)):
+    r = db.get(AlertRule, rule_id) or _404()
+    dup = db.query(AlertRule).filter(AlertRule.name == body.name, AlertRule.id != rule_id).first()
+    if dup:
+        raise HTTPException(409, "rule name exists")
+    _validate_rule(db, body)
+    before = {"name": r.name, "trigger": r.trigger_type, "enabled": r.enabled}
+    r.name, r.trigger_type, r.condition = body.name, body.trigger_type, body.condition
+    r.channel_ids, r.recipients, r.renotify_minutes, r.enabled = (
+        body.channel_ids, body.recipients, body.renotify_minutes, body.enabled
+    )
+    db.commit()
+    write_audit(db, user.username, "update", "alert_rule", str(r.id), r.name,
+                before=before, after={"name": r.name, "trigger": r.trigger_type, "enabled": r.enabled})
+    return RuleOut.from_orm(r)
+
+
+@router.delete("/rules/{rule_id}", status_code=204)
+def delete_rule(rule_id: int, db: Session = Depends(get_db), user=Depends(require_admin)):
+    r = db.get(AlertRule, rule_id) or _404()
+    name = r.name
+    db.delete(r); db.commit()
+    write_audit(db, user.username, "delete", "alert_rule", str(rule_id), name)
+    return Response(status_code=204)
