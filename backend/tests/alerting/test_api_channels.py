@@ -59,6 +59,18 @@ def test_non_admin_forbidden(client_operator):
     assert r.status_code == 403
 
 
+def test_list_channels_operator_403(client_operator):
+    assert client_operator.get("/api/alerts/channels").status_code == 403
+
+
+def test_list_channels_readonly_403(client_gr):
+    assert client_gr.get("/api/alerts/channels").status_code == 403
+
+
+def test_list_channels_scoped_403(client_scoped):
+    assert client_scoped.get("/api/alerts/channels").status_code == 403
+
+
 def test_update_channel_rejects_rename_to_existing_name(client_admin):
     a = client_admin.post("/api/alerts/channels", json={"name": "a", "kind": "generic",
                                                         "config": {"url": "u"}}).json()

@@ -23,7 +23,8 @@ def _404():
 
 
 # ------------- channels -------------
-@router.get("/channels", response_model=list[ChannelOut])
+@router.get("/channels", response_model=list[ChannelOut],
+            dependencies=[Depends(require_admin)])
 def list_channels(db: Session = Depends(get_db)):
     return [ChannelOut.from_orm_safe(c) for c in db.query(AlertChannel).order_by(AlertChannel.name).all()]
 
@@ -107,7 +108,8 @@ def _validate_rule(db: Session, body: RuleIn) -> None:
         raise HTTPException(400, "recipients required when an SMTP channel is selected")
 
 
-@router.get("/rules", response_model=list[RuleOut])
+@router.get("/rules", response_model=list[RuleOut],
+            dependencies=[Depends(require_admin)])
 def list_rules(db: Session = Depends(get_db)):
     return [RuleOut.from_orm(r) for r in db.query(AlertRule).order_by(AlertRule.name).all()]
 

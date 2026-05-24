@@ -70,3 +70,15 @@ def test_non_admin_forbidden_on_rules(client_operator):
     r = client_operator.post("/api/alerts/rules", json={"name": "x", "trigger_type": "collision",
                                                          "channel_ids": [], "recipients": [], "condition": {}})
     assert r.status_code == 403
+
+
+def test_list_rules_operator_403(client_operator):
+    assert client_operator.get("/api/alerts/rules").status_code == 403
+
+
+def test_list_rules_readonly_403(client_gr):
+    assert client_gr.get("/api/alerts/rules").status_code == 403
+
+
+def test_list_rules_scoped_403(client_scoped):
+    assert client_scoped.get("/api/alerts/rules").status_code == 403
