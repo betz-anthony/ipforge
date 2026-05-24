@@ -44,6 +44,12 @@ def create_channel(body: ChannelIn, db: Session = Depends(get_db), user=Depends(
 @router.put("/channels/{ch_id}", response_model=ChannelOut)
 def update_channel(ch_id: int, body: ChannelIn, db: Session = Depends(get_db), user=Depends(require_admin)):
     ch = db.get(AlertChannel, ch_id) or _404()
+    existing = db.query(AlertChannel).filter(
+        AlertChannel.name == body.name,
+        AlertChannel.id != ch_id,
+    ).first()
+    if existing:
+        raise HTTPException(409, "channel name exists")
     before = {"name": ch.name, "kind": ch.kind, "enabled": ch.enabled}
     ch.name = body.name
     ch.kind = body.kind
