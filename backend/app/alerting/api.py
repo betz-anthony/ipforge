@@ -1,8 +1,9 @@
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import Response
+from sqlalchemy import desc
 from sqlalchemy.orm import Session
 from app.database import get_db
-from app.core.deps import require_admin
+from app.core.deps import require_admin, require_operator, require_global_read
 from app.core.audit import write_audit
 from app.core.crypto import encrypt_secret
 from app.core.time import utcnow
@@ -12,6 +13,7 @@ from app.alerting.delivery import send_smtp, send_webhook
 from app.alerting.payload import (
     to_generic, to_slack, to_teams, to_pagerduty, build_subject, build_body,
 )
+from app.alerting.state import transition_to_resolved
 
 router = APIRouter()
 
@@ -149,3 +151,26 @@ def delete_rule(rule_id: int, db: Session = Depends(get_db), user=Depends(requir
     db.delete(r); db.commit()
     write_audit(db, user.username, "delete", "alert_rule", str(rule_id), name)
     return Response(status_code=204)
+
+
+# ------------- events -------------
+@router.get("/events", response_model=list[EventOut], dependencies=[Depends(require_global_read)])
+def list_events(state: str | None = None, trigger_type: str | None = None,
+                limit: int = 200, db: Session = Depends(get_db)):
+    q = db.query(AlertingEvent)
+    if state:
+        q = q.filter(AlertingEvent.state == state)
+    if trigger_type:
+        q = q.join(AlertRule, AlertingEvent.rule_id == AlertRule.id).filter(AlertRule.trigger_type == trigger_type)
+    q = q.order_by(desc(AlertingEvent.last_fired_at)).limit(min(limit, 1000))
+    return [EventOut.from_orm(e) for e in q.all()]
+
+
+@router.post("/events/{event_id}/ack", response_model=EventOut)
+def ack_event(event_id: int, db: Session = Depends(get_db), user=Depends(require_operator)):
+    e = db.get(AlertingEvent, event_id) or _404()
+    if e.state == "firing":
+        transition_to_resolved(db, e)
+        write_audit(db, user.username, "update", "alert_event", str(event_id),
+                    e.resource_key, after={"state": "resolved"})
+    return EventOut.from_orm(e)
