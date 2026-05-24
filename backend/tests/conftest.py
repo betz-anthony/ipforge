@@ -52,6 +52,12 @@ def db():
 
 
 @pytest.fixture
+def db_session(db):
+    """Alias for the db fixture, used by alerting tests."""
+    yield db
+
+
+@pytest.fixture
 def client(db):
     def override_get_db():
         yield db
