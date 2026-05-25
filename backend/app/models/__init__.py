@@ -14,6 +14,7 @@ from app.models.api_token import ApiToken
 from app.models.user_group import UserGroup, user_group_members
 from app.models.subnet_grant import SubnetGrant
 from app.alerting import models as _alerting_models  # noqa: F401  registers alerting tables with Base.metadata
+from app.models.ip_request import IPRequest  # noqa: F401
 
 __all__ = [
     "Subnet", "IPAddress", "AppSetting",
@@ -26,4 +27,5 @@ __all__ = [
     "AuditLog",
     "ApiToken",
     "UserGroup", "user_group_members", "SubnetGrant",
+    "IPRequest",
 ]
