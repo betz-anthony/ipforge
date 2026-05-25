@@ -1,4 +1,5 @@
-from sqlalchemy import String, Integer, Text, DateTime, ForeignKey
+import sqlalchemy as sa
+from sqlalchemy import Boolean, String, Integer, Text, DateTime, ForeignKey
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from datetime import datetime
 from app.database import Base
@@ -21,6 +22,7 @@ class Subnet(Base):
     scan_interval_minutes: Mapped[int | None] = mapped_column(Integer, nullable=True)
     dns_provider_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
     dhcp_provider_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    request_eligible: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default=sa.false())
 
     addresses: Mapped[list["IPAddress"]] = relationship(
         "IPAddress", back_populates="subnet", cascade="all, delete-orphan"
