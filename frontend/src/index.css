@@ -179,6 +179,10 @@ thead th {
   font-weight: 600; text-align: left;
   border-bottom: 1px solid var(--border);
 }
+th.th-sortable { cursor: pointer; user-select: none; }
+th.th-sortable:hover { color: var(--text); }
+th.th-sortable > span { display: inline-flex; align-items: center; gap: 0.3rem; }
+.sort-icon-idle { opacity: 0.35; }
 
 tbody td {
   padding: 0.6875rem 1rem;

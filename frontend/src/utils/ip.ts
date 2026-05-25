@@ -38,3 +38,27 @@ export function rangeSize(start: string, end: string): number {
   const n = ipToNum(end) - ipToNum(start) + 1
   return n > 0 ? n : 0
 }
+
+// Expand IPv6 to 8 groups of 4 hex digits, returning BigInt
+function ipv6ToBigInt(ip: string): bigint {
+  const [head, tail] = ip.includes('::') ? ip.split('::') : [ip, '']
+  const headParts = head ? head.split(':') : []
+  const tailParts = tail ? tail.split(':') : []
+  const fill = 8 - headParts.length - tailParts.length
+  const parts = [...headParts, ...Array(fill).fill('0'), ...tailParts]
+  let n = 0n
+  for (const p of parts) n = (n << 16n) + BigInt(parseInt(p || '0', 16))
+  return n
+}
+
+// Compare two IP strings numerically. Handles v4 and v6 (mixed: v4 < v6).
+export function ipCompare(a: string, b: string): number {
+  const av6 = a.includes(':')
+  const bv6 = b.includes(':')
+  if (av6 !== bv6) return av6 ? 1 : -1
+  if (av6) {
+    const an = ipv6ToBigInt(a), bn = ipv6ToBigInt(b)
+    return an < bn ? -1 : an > bn ? 1 : 0
+  }
+  return ipToNum(a) - ipToNum(b)
+}
