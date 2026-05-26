@@ -1,6 +1,6 @@
 """IP-REQUEST-001 — see docs/superpowers/specs/2026-05-24-ip-request-design.md"""
 from typing import Literal
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Response
 from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import desc
 from sqlalchemy.orm import Session
@@ -256,3 +256,66 @@ def approve_request(
     write_audit(db, user.username, "update", "ip_request", str(r.id), r.hostname,
                 after={"status": "approved", "allocated_ip": r.allocated_ip})
     return RequestOut.from_orm_obj(r, subnet.cidr)
+
+
+class DenyIn(BaseModel):
+    review_notes: str = Field(min_length=1, max_length=2000)
+
+
+@router.put("/{request_id}/deny", response_model=RequestOut)
+def deny_request(
+    request_id: int,
+    body: DenyIn,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_operator),
+):
+    r = db.get(IPRequest, request_id)
+    if not r:
+        raise HTTPException(404, "not found")
+    if r.status != "pending":
+        raise HTTPException(409, f"request is already {r.status}")
+    subnet = db.get(Subnet, r.subnet_id) if r.subnet_id else None
+
+    r.status = "denied"
+    r.reviewer_username = user.username
+    r.reviewed_at = utcnow()
+    r.review_notes = body.review_notes
+    db.commit(); db.refresh(r)
+
+    emit(
+        "ip_request_resolved",
+        f"ip_request:{r.id}",
+        {
+            "request_id": r.id, "status": "denied",
+            "requester": r.requester_username, "reviewer": user.username,
+            "subnet_cidr": subnet.cidr if subnet else None, "hostname": r.hostname,
+            "review_notes": body.review_notes,
+        },
+    )
+    write_audit(db, user.username, "update", "ip_request", str(r.id), r.hostname,
+                after={"status": "denied", "review_notes": body.review_notes})
+    return RequestOut.from_orm_obj(r, subnet.cidr if subnet else None)
+
+
+@router.delete("/{request_id}", status_code=204)
+def delete_request(
+    request_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    _block_scoped(user)
+    r = db.get(IPRequest, request_id)
+    if not r:
+        raise HTTPException(404, "not found")
+    if user.role == "requester":
+        if r.requester_username != user.username:
+            raise HTTPException(403, "not your request")
+        if r.status != "pending":
+            raise HTTPException(403, "cannot delete a resolved request")
+    elif user.role == "readonly":
+        raise HTTPException(403, "readonly cannot delete requests")
+    # admin/operator: any
+    name = r.hostname
+    db.delete(r); db.commit()
+    write_audit(db, user.username, "delete", "ip_request", str(request_id), name)
+    return Response(status_code=204)
