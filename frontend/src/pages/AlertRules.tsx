@@ -12,7 +12,9 @@ const TRIGGERS = [
   { value: 'utilization',  label: 'Subnet utilization threshold' },
   { value: 'rogue',        label: 'Rogue device on scan' },
   { value: 'sync_error',   label: 'Provider sync error' },
-  { value: 'stale_queue',  label: 'Stale-IP queue threshold' },
+  { value: 'stale_queue',         label: 'Stale-IP queue threshold' },
+  { value: 'ip_request_submitted', label: 'IP request submitted' },
+  { value: 'ip_request_resolved',  label: 'IP request resolved (approved/denied)' },
 ] as const
 
 const blank: AlertRuleIn = {

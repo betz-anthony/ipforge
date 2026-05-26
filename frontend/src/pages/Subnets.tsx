@@ -78,7 +78,7 @@ function SubnetGrants({ subnetId }: { subnetId: number }) {
 
 const emptyForm = { name: '', cidr: '', vlan_id: '', description: '', scan_interval_minutes: '', dns_provider_name: '', dhcp_provider_name: '' }
 
-const emptyEditForm = { name: '', vlan_id: '', description: '', notes: '', scan_interval_minutes: '', dns_provider_name: '', dhcp_provider_name: '' }
+const emptyEditForm = { name: '', vlan_id: '', description: '', notes: '', scan_interval_minutes: '', dns_provider_name: '', dhcp_provider_name: '', request_eligible: false }
 
 export default function Subnets() {
   const [showForm, setShowForm]             = useState(false)
@@ -237,6 +237,7 @@ export default function Subnets() {
       scan_interval_minutes: editForm.scan_interval_minutes ? Number(editForm.scan_interval_minutes) : null,
       dns_provider_name:  editForm.dns_provider_name || null,
       dhcp_provider_name: editForm.dhcp_provider_name || null,
+      request_eligible:   editForm.request_eligible,
       ...(editParentId !== undefined ? { parent_id: editParentId } : {}),
     }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['subnets'] }),
@@ -273,6 +274,7 @@ export default function Subnets() {
       scan_interval_minutes: s.scan_interval_minutes ? String(s.scan_interval_minutes) : '',
       dns_provider_name:  s.dns_provider_name ?? '',
       dhcp_provider_name: s.dhcp_provider_name ?? '',
+      request_eligible:   s.request_eligible ?? false,
     })
     setEditParentId(s.parent_id ?? null)
     setShowRangePicker(false)
@@ -802,6 +804,18 @@ export default function Subnets() {
             <label>DHCP Provider</label>
             <input value={editForm.dhcp_provider_name} onChange={setEdit('dhcp_provider_name')} />
           </div>
+          {isAdmin && (
+            <div className="form-field" style={{ gridColumn: '1 / -1' }}>
+              <label>
+                <input
+                  type="checkbox"
+                  checked={editForm.request_eligible}
+                  onChange={e => setEditForm(f => ({ ...f, request_eligible: e.target.checked }))}
+                />
+                {' '}Request-eligible
+              </label>
+            </div>
+          )}
           <div className="form-field" style={{ gridColumn: '1 / -1' }}>
             <label>Parent Subnet</label>
             <select

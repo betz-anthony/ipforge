@@ -10,7 +10,9 @@ const TRIGGERS = [
   { value: 'utilization',  label: 'Utilization' },
   { value: 'rogue',        label: 'Rogue device' },
   { value: 'sync_error',   label: 'Sync error' },
-  { value: 'stale_queue',  label: 'Stale-IP queue' },
+  { value: 'stale_queue',          label: 'Stale-IP queue' },
+  { value: 'ip_request_submitted', label: 'IP request submitted' },
+  { value: 'ip_request_resolved',  label: 'IP request resolved' },
 ]
 
 export default function Alerts() {

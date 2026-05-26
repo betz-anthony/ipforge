@@ -60,6 +60,7 @@ def _build_stats_rows(subnets: list[Subnet], db: Session) -> list[dict]:
             "scan_interval_minutes": s.scan_interval_minutes,
             "dns_provider_name": s.dns_provider_name,
             "dhcp_provider_name": s.dhcp_provider_name,
+            "request_eligible": s.request_eligible,
             "used_count": used, "total_count": total, "utilization_pct": pct,
             "rollup_used_count": used, "rollup_total_count": total,
             "rollup_utilization_pct": pct,
@@ -179,6 +180,7 @@ def create_subnet(
         scan_interval_minutes=data.scan_interval_minutes,
         dns_provider_name=data.dns_provider_name,
         dhcp_provider_name=data.dhcp_provider_name,
+        request_eligible=data.request_eligible,
     )
     db.add(subnet)
     db.flush()
