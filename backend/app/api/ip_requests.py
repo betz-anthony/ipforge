@@ -6,14 +6,16 @@ from sqlalchemy import desc
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.core.deps import get_current_user
+from app.core.deps import get_current_user, require_operator
 from app.core.audit import write_audit
 from app.core.mac import normalize_mac_optional
 from app.core.validators import validate_hostname
+from app.core.time import utcnow
 from app.alerting.emit import emit
 from app.models.user import User
 from app.models.subnet import Subnet
 from app.models.ip_request import IPRequest
+from app.api.allocation import _do_allocate, _BYPASS_ACCESS, AllocateRequest
 
 router = APIRouter()
 
@@ -188,4 +190,69 @@ def get_request(
         raise HTTPException(404, "not found")
     if user.role == "requester" and r.requester_username != user.username:
         raise HTTPException(403, "not your request")
+    return _to_out(db, r)
+
+
+class ApproveIn(BaseModel):
+    description: str | None = None
+    register_dns: bool = False
+    register_dhcp: bool = False
+    dns_zone: str | None = None
+    dns_provider: str | None = None
+    dhcp_provider: str | None = None
+    register_ptr: bool = False
+
+
+@router.put("/{request_id}/approve", response_model=RequestOut)
+def approve_request(
+    request_id: int,
+    body: ApproveIn = ApproveIn(),
+    db: Session = Depends(get_db),
+    user: User = Depends(require_operator),
+):
+    r = db.get(IPRequest, request_id)
+    if not r:
+        raise HTTPException(404, "not found")
+    if r.status != "pending":
+        raise HTTPException(409, f"request is already {r.status}")
+    if r.subnet_id is None:
+        raise HTTPException(409, "request's subnet has been deleted")
+    subnet = db.get(Subnet, r.subnet_id)
+    if not subnet:
+        raise HTTPException(409, "request's subnet has been deleted")
+
+    allocate_req = AllocateRequest(
+        hostname=r.hostname,
+        description=body.description or f"From IP request #{r.id}",
+        mac_address=r.mac_address,
+        register_dns=body.register_dns,
+        register_dhcp=body.register_dhcp,
+        dns_zone=body.dns_zone,
+        dns_provider=body.dns_provider,
+        dhcp_provider=body.dhcp_provider,
+        register_ptr=body.register_ptr,
+    )
+    # access=_BYPASS_ACCESS: operator-gated route, authorization already satisfied
+    result = _do_allocate(db, r.subnet_id, allocate_req, user, access=_BYPASS_ACCESS)
+
+    r.status = "approved"
+    r.reviewer_username = user.username
+    r.reviewed_at = utcnow()
+    r.allocated_ip = result["address"]
+    r.allocated_id = result["id"]
+    db.commit()
+    db.refresh(r)
+
+    emit(
+        "ip_request_resolved",
+        f"ip_request:{r.id}",
+        {
+            "request_id": r.id, "status": "approved",
+            "requester": r.requester_username, "reviewer": user.username,
+            "subnet_cidr": subnet.cidr, "hostname": r.hostname,
+            "allocated_ip": r.allocated_ip,
+        },
+    )
+    write_audit(db, user.username, "update", "ip_request", str(r.id), r.hostname,
+                after={"status": "approved", "allocated_ip": r.allocated_ip})
     return _to_out(db, r)

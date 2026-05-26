@@ -166,3 +166,82 @@ def test_submit_as_readonly(client_gr, db):
     })
     assert r.status_code == 201
     assert r.json()["requester_username"] == "test_readonly"
+
+
+def test_approve_success(client_admin, client_requester, db):
+    from app.models.subnet import Subnet
+    from app.models.ip_request import IPRequest
+    s = Subnet(cidr="10.0.0.0/29", name="t", request_eligible=True)
+    db.add(s); db.commit()
+    rid = client_requester.post("/api/requests", json={
+        "subnet_id": s.id, "hostname": "newhost", "purpose": "valid purpose here",
+    }).json()["id"]
+    r = client_admin.put(f"/api/requests/{rid}/approve", json={
+        "description": "approved by ops",
+        "register_dns": False, "register_dhcp": False,
+    })
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["status"] == "approved"
+    assert body["allocated_ip"].startswith("10.0.0.")
+    db.expire_all()
+    req = db.get(IPRequest, rid)
+    assert req.status == "approved"
+    assert req.reviewer_username == "test_admin"
+    assert req.allocated_id is not None
+
+
+def test_approve_not_pending_409(client_admin, client_requester, db):
+    from app.models.subnet import Subnet
+    s = Subnet(cidr="10.0.0.0/29", name="t", request_eligible=True)
+    db.add(s); db.commit()
+    rid = client_requester.post("/api/requests", json={
+        "subnet_id": s.id, "hostname": "h", "purpose": "valid purpose here",
+    }).json()["id"]
+    assert client_admin.put(f"/api/requests/{rid}/approve", json={}).status_code == 200
+    r2 = client_admin.put(f"/api/requests/{rid}/approve", json={})
+    assert r2.status_code == 409
+
+
+def test_approve_subnet_exhausted_keeps_pending(client_admin, client_requester, db):
+    from app.models.subnet import Subnet
+    from app.models.address import IPAddress, AddressStatus
+    from app.models.ip_request import IPRequest
+    s = Subnet(cidr="10.0.0.0/30", name="t", request_eligible=True)  # tiny
+    db.add(s); db.commit()
+    for ip in ["10.0.0.1", "10.0.0.2"]:
+        db.add(IPAddress(address=ip, subnet_id=s.id, status=AddressStatus.assigned))
+    db.commit()
+    rid = client_requester.post("/api/requests", json={
+        "subnet_id": s.id, "hostname": "wont-fit", "purpose": "valid purpose here",
+    }).json()["id"]
+    r = client_admin.put(f"/api/requests/{rid}/approve", json={})
+    assert r.status_code in (400, 409)
+    db.expire_all()
+    assert db.get(IPRequest, rid).status == "pending"
+
+
+def test_approve_requires_operator(client_requester, client_gr, db):
+    from app.models.subnet import Subnet
+    s = Subnet(cidr="10.0.0.0/29", name="t", request_eligible=True)
+    db.add(s); db.commit()
+    rid = client_requester.post("/api/requests", json={
+        "subnet_id": s.id, "hostname": "h", "purpose": "valid purpose here",
+    }).json()["id"]
+    assert client_gr.put(f"/api/requests/{rid}/approve", json={}).status_code == 403
+    assert client_requester.put(f"/api/requests/{rid}/approve", json={}).status_code == 403
+
+
+def test_approve_emits_resolved(client_admin, client_requester, db):
+    from unittest.mock import patch
+    from app.models.subnet import Subnet
+    s = Subnet(cidr="10.0.0.0/29", name="t", request_eligible=True)
+    db.add(s); db.commit()
+    rid = client_requester.post("/api/requests", json={
+        "subnet_id": s.id, "hostname": "h", "purpose": "valid purpose here",
+    }).json()["id"]
+    with patch("app.api.ip_requests.emit") as e:
+        client_admin.put(f"/api/requests/{rid}/approve", json={})
+    resolved_calls = [c for c in e.mock_calls if c.args and c.args[0] == "ip_request_resolved"]
+    assert len(resolved_calls) == 1
+    assert resolved_calls[0].args[1] == f"ip_request:{rid}"
