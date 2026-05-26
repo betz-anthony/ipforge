@@ -255,4 +255,4 @@ def approve_request(
     )
     write_audit(db, user.username, "update", "ip_request", str(r.id), r.hostname,
                 after={"status": "approved", "allocated_ip": r.allocated_ip})
-    return _to_out(db, r)
+    return RequestOut.from_orm_obj(r, subnet.cidr)
