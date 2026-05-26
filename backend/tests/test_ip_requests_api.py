@@ -150,3 +150,19 @@ def test_submit_alerting_emit_fired(client_requester, db):
         })
     submitted_calls = [c for c in e.mock_calls if c.args and c.args[0] == "ip_request_submitted"]
     assert len(submitted_calls) == 1
+
+
+def test_list_invalid_status_422(client_admin):
+    assert client_admin.get("/api/requests?status=garbage").status_code == 422
+
+
+def test_submit_as_readonly(client_gr, db):
+    """readonly role can submit requests (spec permission matrix)."""
+    from app.models.subnet import Subnet
+    s = Subnet(cidr="10.0.0.0/29", name="t", request_eligible=True)
+    db.add(s); db.commit()
+    r = client_gr.post("/api/requests", json={
+        "subnet_id": s.id, "hostname": "rohost", "purpose": "valid purpose here",
+    })
+    assert r.status_code == 201
+    assert r.json()["requester_username"] == "test_readonly"

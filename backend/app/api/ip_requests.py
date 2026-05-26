@@ -1,5 +1,4 @@
 """IP-REQUEST-001 — see docs/superpowers/specs/2026-05-24-ip-request-design.md"""
-import re
 from typing import Literal
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field, field_validator
@@ -10,6 +9,7 @@ from app.database import get_db
 from app.core.deps import get_current_user
 from app.core.audit import write_audit
 from app.core.mac import normalize_mac_optional
+from app.core.validators import validate_hostname
 from app.alerting.emit import emit
 from app.models.user import User
 from app.models.subnet import Subnet
@@ -27,12 +27,7 @@ class RequestIn(BaseModel):
     @field_validator("hostname")
     @classmethod
     def _hostname(cls, v: str) -> str:
-        v = v.strip().lower()
-        if not re.match(r'^[a-z0-9][a-z0-9\-]*$', v) or len(v) > 63:
-            raise ValueError(
-                "hostname must be 1-63 chars, start with alphanumeric, contain only a-z, 0-9, hyphen"
-            )
-        return v
+        return validate_hostname(v)
 
     @field_validator("mac_address")
     @classmethod
@@ -140,7 +135,7 @@ def submit_request(
 
 @router.get("", response_model=list[RequestOut])
 def list_requests(
-    status: str | None = None,
+    status: Literal["pending", "approved", "denied"] | None = None,
     limit: int = 200,
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
@@ -151,8 +146,17 @@ def list_requests(
         q = q.filter(IPRequest.requester_username == user.username)
     if status:
         q = q.filter(IPRequest.status == status)
-    q = q.order_by(desc(IPRequest.created_at)).limit(min(limit, 1000))
-    return [_to_out(db, r) for r in q.all()]
+    rows = q.order_by(desc(IPRequest.created_at)).limit(min(limit, 1000)).all()
+
+    # Bulk-load subnets to avoid N+1
+    subnet_ids = {r.subnet_id for r in rows if r.subnet_id is not None}
+    subnet_map: dict[int, str] = {}
+    if subnet_ids:
+        subnet_map = {
+            s.id: s.cidr
+            for s in db.query(Subnet).filter(Subnet.id.in_(subnet_ids)).all()
+        }
+    return [RequestOut.from_orm_obj(r, subnet_map.get(r.subnet_id)) for r in rows]
 
 
 @router.get("/eligible-subnets", response_model=list[EligibleSubnetOut])
