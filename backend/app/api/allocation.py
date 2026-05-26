@@ -1,6 +1,5 @@
 import ipaddress
 import logging
-import re
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, field_validator
@@ -13,6 +12,7 @@ from app.core.deps import get_current_user
 from app.core.access import AccessContext, get_access_context
 from app.core.audit import write_audit
 from app.core.mac import normalize_mac_optional
+from app.core.validators import validate_hostname
 from app.core.ptr import find_reverse_zone, build_ptr_record
 from app.database import get_db
 from app.models.address import IPAddress, AddressStatus
@@ -48,13 +48,10 @@ class AllocateRequest(BaseModel):
 
     @field_validator("hostname")
     @classmethod
-    def validate_hostname(cls, v: str | None) -> str | None:
+    def _hostname(cls, v: str | None) -> str | None:
         if v is None:
             return v
-        v = v.strip().lower()
-        if not re.match(r'^[a-z0-9][a-z0-9\-]*$', v) or len(v) > 63:
-            raise ValueError("hostname must be 1-63 chars, start with alphanumeric, contain only a-z, 0-9, hyphen")
-        return v
+        return validate_hostname(v)
 
     @field_validator("mac_address")
     @classmethod
