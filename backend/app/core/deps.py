@@ -68,7 +68,7 @@ def get_current_user(
 
 
 def require_operator(user: User = Depends(get_current_user)) -> User:
-    if user.role in ("readonly", "scoped", "requester"):
+    if user.role not in ("operator", "admin"):
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Operator or admin role required")
     return user
 
