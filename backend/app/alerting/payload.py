@@ -75,6 +75,8 @@ _PD_SEVERITY = {
     "utilization": "warning",
     "sync_error": "error",
     "stale_queue": "info",
+    "ip_request_submitted": "info",
+    "ip_request_resolved": "info",
 }
 
 
