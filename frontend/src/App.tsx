@@ -19,6 +19,7 @@ import ApiTokens from './pages/ApiTokens'
 import ReclaimPage from './pages/Reclaim'
 import Groups from './pages/Groups'
 import Login from './pages/Login'
+import Requests from './pages/Requests'
 
 const NAV = [
   { to: '/',          label: 'Dashboard', icon: LayoutDashboard, end: true },
@@ -87,6 +88,13 @@ export default function App() {
             <NavLink to="/alerts" className={({ isActive }) => 'nav-link' + (isActive ? ' active' : '')}>
               <Bell size={15} strokeWidth={1.75} />
               Alerts
+            </NavLink>
+          )}
+
+          {!isScoped && (
+            <NavLink to="/requests" className={({ isActive }) => 'nav-link' + (isActive ? ' active' : '')}>
+              <ClipboardList size={15} strokeWidth={1.75} />
+              Requests
             </NavLink>
           )}
 
@@ -162,6 +170,7 @@ export default function App() {
           <Route path="/search"    element={<SearchPage />} />
           <Route path="/audit"     element={<AuditPage />} />
           {!isScoped && <Route path="/alerts" element={<AlertsPage />} />}
+          {!isScoped && <Route path="/requests" element={<Requests />} />}
           <Route path="/tokens"    element={<ApiTokens />} />
           {isOperator && <Route path="/reclaim" element={<ReclaimPage />} />}
           {isAdmin && <Route path="/groups" element={<Groups />} />}

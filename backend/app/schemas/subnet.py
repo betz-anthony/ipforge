@@ -13,6 +13,7 @@ class SubnetCreate(BaseModel):
     scan_interval_minutes: int | None = Field(default=None, ge=1)
     dns_provider_name: str | None = None
     dhcp_provider_name: str | None = None
+    request_eligible: bool = False
 
 
 class SubnetUpdate(BaseModel):
@@ -24,6 +25,7 @@ class SubnetUpdate(BaseModel):
     scan_interval_minutes: int | None = Field(default=None, ge=1)
     dns_provider_name: str | None = None
     dhcp_provider_name: str | None = None
+    request_eligible: bool | None = None
 
 
 class SubnetRead(BaseModel):
@@ -39,6 +41,7 @@ class SubnetRead(BaseModel):
     scan_interval_minutes: int | None
     dns_provider_name: str | None
     dhcp_provider_name: str | None
+    request_eligible: bool
 
     model_config = {"from_attributes": True}
 

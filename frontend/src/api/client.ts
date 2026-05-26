@@ -135,6 +135,7 @@ export interface Subnet {
   scan_interval_minutes: number | null
   dns_provider_name: string | null
   dhcp_provider_name: string | null
+  request_eligible?: boolean
 }
 
 export interface IPAddress {
@@ -597,7 +598,7 @@ export const alertChannelsApi = {
 export interface AlertRule {
   id: number
   name: string
-  trigger_type: 'collision' | 'utilization' | 'rogue' | 'sync_error' | 'stale_queue'
+  trigger_type: 'collision' | 'utilization' | 'rogue' | 'sync_error' | 'stale_queue' | 'ip_request_submitted' | 'ip_request_resolved'
   condition: Record<string, any>
   channel_ids: number[]
   recipients: string[]
