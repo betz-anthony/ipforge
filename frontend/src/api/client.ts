@@ -24,7 +24,7 @@ api.interceptors.response.use(
 
 export interface AuthUser {
   username: string
-  role: 'readonly' | 'operator' | 'admin' | 'scoped'
+  role: 'readonly' | 'operator' | 'admin' | 'scoped' | 'requester'
 }
 
 export const authApi = {
@@ -644,4 +644,55 @@ export const alertEventsApi = {
     api.get<AlertingEvent[]>('/alerts/events', { params }).then(r => r.data),
   ack: (id: number) =>
     api.post<AlertingEvent>(`/alerts/events/${id}/ack`).then(r => r.data),
+}
+
+export interface IPRequest {
+  id: number
+  requester_username: string
+  subnet_id: number | null
+  subnet_cidr: string | null
+  hostname: string
+  mac_address: string | null
+  purpose: string
+  status: 'pending' | 'approved' | 'denied'
+  reviewer_username: string | null
+  reviewed_at: string | null
+  review_notes: string | null
+  allocated_ip: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface IPRequestIn {
+  subnet_id: number
+  hostname: string
+  mac_address?: string | null
+  purpose: string
+}
+
+export interface EligibleSubnet {
+  id: number
+  cidr: string
+  name: string | null
+  description: string | null
+}
+
+export interface ApproveIn {
+  description?: string
+  register_dns: boolean
+  register_dhcp: boolean
+  dns_zone?: string
+  dns_provider?: string
+  dhcp_provider?: string
+  register_ptr: boolean
+}
+
+export const ipRequestsApi = {
+  list:    (status?: string)             => api.get<IPRequest[]>('/requests', { params: { status } }).then(r => r.data),
+  get:     (id: number)                  => api.get<IPRequest>(`/requests/${id}`).then(r => r.data),
+  submit:  (body: IPRequestIn)           => api.post<IPRequest>('/requests', body).then(r => r.data),
+  approve: (id: number, body: ApproveIn) => api.put<IPRequest>(`/requests/${id}/approve`, body).then(r => r.data),
+  deny:    (id: number, review_notes: string) => api.put<IPRequest>(`/requests/${id}/deny`, { review_notes }).then(r => r.data),
+  delete:  (id: number)                  => api.delete(`/requests/${id}`),
+  eligibleSubnets: () => api.get<EligibleSubnet[]>('/requests/eligible-subnets').then(r => r.data),
 }
