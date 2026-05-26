@@ -106,15 +106,20 @@ def _find_dhcp_scope(provider, ip_address: str) -> str | None:
     return None
 
 
-@router.post("/{subnet_id}/allocate")
-def allocate_ip(
+def _do_allocate(
+    db: Session,
     subnet_id: int,
     body: AllocateRequest,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
-    access: AccessContext = Depends(get_access_context),
-):
-    access.require_write(subnet_id)
+    current_user: User,
+    access: AccessContext | None = None,
+) -> dict:
+    """Core allocation logic, reusable from HTTP route and IP-request approval.
+
+    access=None skips the per-subnet write check (use only from operator-gated
+    callers where authorization has already been verified)."""
+    if access is not None:
+        access.require_write(subnet_id)
+
     # Hostname idempotency relies on a single allocator — concurrent calls for the
     # same new hostname may both pass the existing-check and allocate different IPs.
     hostname = body.hostname or ""
@@ -263,19 +268,28 @@ def allocate_ip(
                     after={"address": addr.address, "hostname": hostname})
     db.commit()
 
-    return JSONResponse(
-        status_code=201 if is_new else 200,
-        content={
-            "id":              addr.id,
-            "address":         addr.address,
-            "subnet_id":       subnet_id,
-            "subnet_cidr":     subnet.cidr,
-            "hostname":        addr.hostname,
-            "status":          addr.status.value,
-            "mac_address":     addr.mac_address,
-            "dns_registered":  dns_registered,
-            "dhcp_registered": dhcp_registered,
-            "ptr_registered":  ptr_registered,
-            "is_new":          is_new,
-        },
-    )
+    return {
+        "id":              addr.id,
+        "address":         addr.address,
+        "subnet_id":       subnet_id,
+        "subnet_cidr":     subnet.cidr,
+        "hostname":        addr.hostname,
+        "status":          addr.status.value,
+        "mac_address":     addr.mac_address,
+        "dns_registered":  dns_registered,
+        "dhcp_registered": dhcp_registered,
+        "ptr_registered":  ptr_registered,
+        "is_new":          is_new,
+    }
+
+
+@router.post("/{subnet_id}/allocate")
+def allocate_ip(
+    subnet_id: int,
+    body: AllocateRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    access: AccessContext = Depends(get_access_context),
+):
+    result = _do_allocate(db, subnet_id, body, current_user, access=access)
+    return JSONResponse(status_code=201 if result["is_new"] else 200, content=result)
