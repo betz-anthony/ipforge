@@ -1,9 +1,12 @@
 """IP-REQUEST-001 — see docs/superpowers/specs/2026-05-24-ip-request-design.md"""
 from datetime import datetime
+from typing import Literal
 from sqlalchemy import String, Integer, Text, DateTime, ForeignKey, Index
 from sqlalchemy.orm import Mapped, mapped_column
 from app.database import Base
 from app.core.time import utcnow
+
+RequestStatus = Literal["pending", "approved", "denied"]
 
 
 class IPRequest(Base):

@@ -337,3 +337,28 @@ def test_delete_operator_can_delete_any(client_operator, client_requester, db):
         "subnet_id": s.id, "hostname": "h", "purpose": "valid purpose here",
     }).json()["id"]
     assert client_operator.delete(f"/api/requests/{rid}").status_code == 204
+
+
+def test_deny_requires_operator(client_gr, client_requester, db):
+    from app.models.subnet import Subnet
+    s = Subnet(cidr="10.0.0.0/29", name="t", request_eligible=True)
+    db.add(s); db.commit()
+    rid = client_requester.post("/api/requests", json={
+        "subnet_id": s.id, "hostname": "h", "purpose": "valid purpose here",
+    }).json()["id"]
+    assert client_gr.put(f"/api/requests/{rid}/deny", json={"review_notes": "x"}).status_code == 403
+    assert client_requester.put(f"/api/requests/{rid}/deny", json={"review_notes": "x"}).status_code == 403
+
+
+def test_delete_readonly_403(client_gr, client_admin, db):
+    from app.models.subnet import Subnet
+    s = Subnet(cidr="10.0.0.0/29", name="t", request_eligible=True)
+    db.add(s); db.commit()
+    rid = client_admin.post("/api/requests", json={
+        "subnet_id": s.id, "hostname": "h", "purpose": "valid purpose here",
+    }).json()["id"]
+    assert client_gr.delete(f"/api/requests/{rid}").status_code == 403
+
+
+def test_delete_not_found_404(client_admin):
+    assert client_admin.delete("/api/requests/99999").status_code == 404

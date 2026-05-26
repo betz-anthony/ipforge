@@ -1,5 +1,4 @@
 """IP-REQUEST-001 — see docs/superpowers/specs/2026-05-24-ip-request-design.md"""
-from typing import Literal
 from fastapi import APIRouter, Depends, HTTPException, Response
 from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import desc
@@ -14,7 +13,7 @@ from app.core.time import utcnow
 from app.alerting.emit import emit
 from app.models.user import User
 from app.models.subnet import Subnet
-from app.models.ip_request import IPRequest
+from app.models.ip_request import IPRequest, RequestStatus
 from app.api.allocation import _do_allocate, _BYPASS_ACCESS, AllocateRequest
 
 router = APIRouter()
@@ -45,7 +44,7 @@ class RequestOut(BaseModel):
     hostname: str
     mac_address: str | None
     purpose: str
-    status: Literal["pending", "approved", "denied"]
+    status: RequestStatus
     reviewer_username: str | None
     reviewed_at: str | None
     review_notes: str | None
@@ -137,7 +136,7 @@ def submit_request(
 
 @router.get("", response_model=list[RequestOut])
 def list_requests(
-    status: Literal["pending", "approved", "denied"] | None = None,
+    status: RequestStatus | None = None,
     limit: int = 200,
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
@@ -303,18 +302,18 @@ def delete_request(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
-    _block_scoped(user)
     r = db.get(IPRequest, request_id)
     if not r:
         raise HTTPException(404, "not found")
-    if user.role == "requester":
+    if user.role in ("admin", "operator"):
+        pass  # any request
+    elif user.role == "requester":
         if r.requester_username != user.username:
             raise HTTPException(403, "not your request")
         if r.status != "pending":
             raise HTTPException(403, "cannot delete a resolved request")
-    elif user.role == "readonly":
-        raise HTTPException(403, "readonly cannot delete requests")
-    # admin/operator: any
+    else:
+        raise HTTPException(403, "insufficient role")
     name = r.hostname
     db.delete(r); db.commit()
     write_audit(db, user.username, "delete", "ip_request", str(request_id), name)
