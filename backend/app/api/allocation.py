@@ -24,6 +24,8 @@ from app.providers.dhcp.base import DHCPReservation
 
 router = APIRouter()
 
+_BYPASS_ACCESS = object()  # opt-in sentinel: caller has already verified authorization
+
 _INELIGIBLE = {
     AddressStatus.reserved,
     AddressStatus.assigned,
@@ -111,13 +113,17 @@ def _do_allocate(
     subnet_id: int,
     body: AllocateRequest,
     current_user: User,
-    access: AccessContext | None = None,
+    *,
+    access: AccessContext | object,
 ) -> dict:
-    """Core allocation logic, reusable from HTTP route and IP-request approval.
-
-    access=None skips the per-subnet write check (use only from operator-gated
-    callers where authorization has already been verified)."""
-    if access is not None:
+    """`access` is keyword-only and required. Pass an AccessContext to enforce
+    the per-subnet write check, or pass `_BYPASS_ACCESS` only when the caller has
+    already verified authorization (e.g., operator-gated routes)."""
+    if access is _BYPASS_ACCESS:
+        pass  # explicit bypass
+    elif access is None:
+        raise RuntimeError("_do_allocate: access argument cannot be None — pass _BYPASS_ACCESS to explicitly skip")
+    else:
         access.require_write(subnet_id)
 
     # Hostname idempotency relies on a single allocator — concurrent calls for the
