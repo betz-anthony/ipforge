@@ -245,3 +245,95 @@ def test_approve_emits_resolved(client_admin, client_requester, db):
     resolved_calls = [c for c in e.mock_calls if c.args and c.args[0] == "ip_request_resolved"]
     assert len(resolved_calls) == 1
     assert resolved_calls[0].args[1] == f"ip_request:{rid}"
+
+
+def test_deny_success(client_admin, client_requester, db):
+    from app.models.subnet import Subnet
+    s = Subnet(cidr="10.0.0.0/29", name="t", request_eligible=True)
+    db.add(s); db.commit()
+    rid = client_requester.post("/api/requests", json={
+        "subnet_id": s.id, "hostname": "h", "purpose": "valid purpose here",
+    }).json()["id"]
+    r = client_admin.put(f"/api/requests/{rid}/deny", json={"review_notes": "not approved — bad purpose"})
+    assert r.status_code == 200
+    body = r.json()
+    assert body["status"] == "denied"
+    assert body["review_notes"] == "not approved — bad purpose"
+
+
+def test_deny_requires_notes(client_admin, client_requester, db):
+    from app.models.subnet import Subnet
+    s = Subnet(cidr="10.0.0.0/29", name="t", request_eligible=True)
+    db.add(s); db.commit()
+    rid = client_requester.post("/api/requests", json={
+        "subnet_id": s.id, "hostname": "h", "purpose": "valid purpose here",
+    }).json()["id"]
+    r = client_admin.put(f"/api/requests/{rid}/deny", json={"review_notes": ""})
+    assert r.status_code == 422
+
+
+def test_deny_not_pending_409(client_admin, client_requester, db):
+    from app.models.subnet import Subnet
+    s = Subnet(cidr="10.0.0.0/29", name="t", request_eligible=True)
+    db.add(s); db.commit()
+    rid = client_requester.post("/api/requests", json={
+        "subnet_id": s.id, "hostname": "h", "purpose": "valid purpose here",
+    }).json()["id"]
+    client_admin.put(f"/api/requests/{rid}/deny", json={"review_notes": "no"})
+    r2 = client_admin.put(f"/api/requests/{rid}/deny", json={"review_notes": "still no"})
+    assert r2.status_code == 409
+
+
+def test_deny_emits_resolved(client_admin, client_requester, db):
+    from unittest.mock import patch
+    from app.models.subnet import Subnet
+    s = Subnet(cidr="10.0.0.0/29", name="t", request_eligible=True)
+    db.add(s); db.commit()
+    rid = client_requester.post("/api/requests", json={
+        "subnet_id": s.id, "hostname": "h", "purpose": "valid purpose here",
+    }).json()["id"]
+    with patch("app.api.ip_requests.emit") as e:
+        client_admin.put(f"/api/requests/{rid}/deny", json={"review_notes": "no"})
+    resolved = [c for c in e.mock_calls if c.args and c.args[0] == "ip_request_resolved"]
+    assert len(resolved) == 1
+
+
+def test_delete_own_pending(client_requester, db):
+    from app.models.subnet import Subnet
+    s = Subnet(cidr="10.0.0.0/29", name="t", request_eligible=True)
+    db.add(s); db.commit()
+    rid = client_requester.post("/api/requests", json={
+        "subnet_id": s.id, "hostname": "h", "purpose": "valid purpose here",
+    }).json()["id"]
+    assert client_requester.delete(f"/api/requests/{rid}").status_code == 204
+
+
+def test_delete_requester_cant_delete_others(client_requester, client_admin, db):
+    from app.models.subnet import Subnet
+    s = Subnet(cidr="10.0.0.0/29", name="t", request_eligible=True)
+    db.add(s); db.commit()
+    rid = client_admin.post("/api/requests", json={
+        "subnet_id": s.id, "hostname": "admin-req", "purpose": "valid purpose here",
+    }).json()["id"]
+    assert client_requester.delete(f"/api/requests/{rid}").status_code == 403
+
+
+def test_delete_requester_cant_delete_approved(client_requester, client_admin, db):
+    from app.models.subnet import Subnet
+    s = Subnet(cidr="10.0.0.0/29", name="t", request_eligible=True)
+    db.add(s); db.commit()
+    rid = client_requester.post("/api/requests", json={
+        "subnet_id": s.id, "hostname": "h", "purpose": "valid purpose here",
+    }).json()["id"]
+    client_admin.put(f"/api/requests/{rid}/approve", json={})
+    assert client_requester.delete(f"/api/requests/{rid}").status_code == 403
+
+
+def test_delete_operator_can_delete_any(client_operator, client_requester, db):
+    from app.models.subnet import Subnet
+    s = Subnet(cidr="10.0.0.0/29", name="t", request_eligible=True)
+    db.add(s); db.commit()
+    rid = client_requester.post("/api/requests", json={
+        "subnet_id": s.id, "hostname": "h", "purpose": "valid purpose here",
+    }).json()["id"]
+    assert client_operator.delete(f"/api/requests/{rid}").status_code == 204
