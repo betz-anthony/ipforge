@@ -66,3 +66,9 @@ def test_to_pagerduty_resolved_uses_resolve_action():
     e.state = "resolved"
     p = to_pagerduty(e, _rule())
     assert p["event_action"] == "resolve"
+
+
+def test_pagerduty_severity_for_ip_request_triggers():
+    from app.alerting.payload import _PD_SEVERITY
+    assert _PD_SEVERITY["ip_request_submitted"] == "info"
+    assert _PD_SEVERITY["ip_request_resolved"] == "info"

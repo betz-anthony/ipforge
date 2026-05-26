@@ -27,7 +27,7 @@ class ChannelOut(BaseModel):
                    has_secret=bool(ch.secret_enc), enabled=ch.enabled)
 
 
-TriggerType = Literal["collision", "utilization", "rogue", "sync_error", "stale_queue"]
+TriggerType = Literal["collision", "utilization", "rogue", "sync_error", "stale_queue", "ip_request_submitted", "ip_request_resolved"]
 
 
 class RuleIn(BaseModel):
