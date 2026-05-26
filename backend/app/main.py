@@ -25,6 +25,7 @@ from app.api import allocation as allocation_router
 from app.api import reclaim as reclaim_router
 from app.api import groups as groups_router
 from app.api import subnet_grants as subnet_grants_router
+from app.api import ip_requests as ip_requests_router
 from app.alerting import api as alerting_api
 from app.alerting.dispatcher import start as start_alert_dispatcher
 import app.models  # noqa: F401
@@ -169,6 +170,9 @@ app.include_router(cache_router.router,            prefix="/api/cache",         
 app.include_router(users_router.router,            prefix="/api/users",            tags=["users"],            dependencies=_adm)
 app.include_router(groups_router.router,           prefix="/api/groups",           tags=["groups"],           dependencies=_adm)
 app.include_router(subnet_grants_router.router,    prefix="/api/subnet-grants",    tags=["grants"],           dependencies=_adm)
+
+# IP requests (requester+ role; scoped blocked per-endpoint)
+app.include_router(ip_requests_router.router, prefix="/api/requests", tags=["ip-requests"])
 
 # Alerting (channel/rule writes are admin-only; enforced per-endpoint via require_admin)
 app.include_router(alerting_api.router, prefix="/api/alerts", tags=["alerts"],

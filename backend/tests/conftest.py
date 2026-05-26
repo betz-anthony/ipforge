@@ -71,20 +71,48 @@ def client(db):
     app.dependency_overrides.clear()
 
 
+class _StickyClient:
+    """TestClient wrapper that re-applies its own dependency overrides before
+    every request, so multiple role-based clients can coexist in the same test
+    without trampling each other's overrides."""
+
+    def __init__(self, db, role: str):
+        from app.models.user import User as _User
+        self._user = _User(id=10000, username=f"test_{role}", role=role, enabled=True, hashed_password="x")
+        self._db = db
+        self._tc = TestClient(app)
+
+    def _install(self):
+        db = self._db
+        user = self._user
+
+        def override_get_db():
+            yield db
+
+        def override_get_current_user():
+            return user
+
+        app.dependency_overrides[get_db] = override_get_db
+        app.dependency_overrides[get_current_user] = override_get_current_user
+
+    def get(self, *args, **kwargs):
+        self._install(); return self._tc.get(*args, **kwargs)
+
+    def post(self, *args, **kwargs):
+        self._install(); return self._tc.post(*args, **kwargs)
+
+    def put(self, *args, **kwargs):
+        self._install(); return self._tc.put(*args, **kwargs)
+
+    def patch(self, *args, **kwargs):
+        self._install(); return self._tc.patch(*args, **kwargs)
+
+    def delete(self, *args, **kwargs):
+        self._install(); return self._tc.delete(*args, **kwargs)
+
+
 def _make_client_for_role(db, role: str):
-    from app.models.user import User
-    from app.core.deps import get_current_user
-    user = User(id=10000, username=f"test_{role}", role=role, enabled=True, hashed_password="x")
-
-    def override_get_db():
-        yield db
-
-    def override_get_current_user():
-        return user
-
-    app.dependency_overrides[get_db] = override_get_db
-    app.dependency_overrides[get_current_user] = override_get_current_user
-    return TestClient(app)
+    return _StickyClient(db, role)
 
 
 @pytest.fixture
@@ -108,4 +136,10 @@ def client_gr(db):
 @pytest.fixture
 def client_scoped(db):
     yield _make_client_for_role(db, "scoped")
+    app.dependency_overrides.clear()
+
+
+@pytest.fixture
+def client_requester(db):
+    yield _make_client_for_role(db, "requester")
     app.dependency_overrides.clear()
