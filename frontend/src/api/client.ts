@@ -697,3 +697,29 @@ export const ipRequestsApi = {
   delete:  (id: number)                  => api.delete(`/requests/${id}`),
   eligibleSubnets: () => api.get<EligibleSubnet[]>('/requests/eligible-subnets').then(r => r.data),
 }
+
+export interface Vlan {
+  id: number
+  vlan_id: number
+  name: string
+  description: string | null
+  notes: string | null
+  subnet_count: number
+  created_at: string | null
+  updated_at: string | null
+}
+
+export interface VlanIn {
+  vlan_id: number
+  name: string
+  description?: string | null
+  notes?: string | null
+}
+
+export const vlansApi = {
+  list:   ()                                  => api.get<Vlan[]>('/vlans').then(r => r.data),
+  get:    (id: number)                        => api.get<Vlan>(`/vlans/${id}`).then(r => r.data),
+  create: (body: VlanIn)                      => api.post<Vlan>('/vlans', body).then(r => r.data),
+  update: (id: number, body: Partial<VlanIn>) => api.put<Vlan>(`/vlans/${id}`, body).then(r => r.data),
+  delete: (id: number)                        => api.delete(`/vlans/${id}`),
+}

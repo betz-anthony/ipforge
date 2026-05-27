@@ -76,6 +76,7 @@ ul, ol { padding-left: 1.5rem; }
 <li><a href="#roles">Roles</a></li>
 <li><a href="#provider-configuration">Provider Configuration</a></li>
 <li><a href="#subnets">Subnets</a></li>
+<li><a href="#vlans">VLANs</a></li>
 <li><a href="#ip-addresses">IP Addresses</a></li>
 <li><a href="#ip-requests">IP Requests</a></li>
 <li><a href="#allocation-api">Allocation API</a></li>
@@ -377,6 +378,46 @@ docker compose up -d
 <h3 id="scanning-a-subnet">Scanning a subnet</h3>
 <p>From the subnet detail drawer or the Subnets page, click <strong>Scan</strong>. This triggers an ICMP ping sweep of all host IPs in the subnet. Results update <code>last_seen</code> on each address and feed the 7-day availability history.</p>
 <p>Large subnets: the UI warns if the subnet is too large for a quick scan (<code>/24</code> max for IPv4, <code>/120</code> for IPv6). You can still scan — it just takes longer.</p>
+<hr>
+<h2 id="vlans">VLANs</h2>
+<p>The <strong>VLANs</strong> page is a lightweight catalog of 802.1Q VLAN IDs with human-readable names. It's decoupled from the subnet table — a subnet's <code>vlan_id</code> is still a plain integer, but when a VLAN entry exists for that ID the Subnets page shows it as <code>100 (Production)</code> instead of just <code>100</code>.</p>
+<h3 id="creating-a-vlan">Creating a VLAN</h3>
+<p>Click <strong>Add VLAN</strong>. Fields:</p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>VLAN ID</td>
+<td>1–4094 (12-bit, 0 and 4095 reserved). Must be unique.</td>
+</tr>
+<tr>
+<td>Name</td>
+<td>Human-readable label. Required.</td>
+</tr>
+<tr>
+<td>Description</td>
+<td>Optional one-liner.</td>
+</tr>
+<tr>
+<td>Notes</td>
+<td>Optional free text.</td>
+</tr>
+</tbody>
+</table>
+<h3 id="editing-deleting">Editing / deleting</h3>
+<p>Click the pencil icon to edit, trash to delete. Delete is disabled while any subnet still carries that VLAN ID — change those subnets first.</p>
+<h3 id="counts">Counts</h3>
+<p>The <strong>Subnets</strong> column shows how many subnets currently reference each VLAN ID. Sortable so heavily-used VLANs surface to the top.</p>
+<h3 id="permissions">Permissions</h3>
+<ul>
+<li>Any authenticated user can list and read VLANs</li>
+<li>Operator+ can create, edit, delete</li>
+</ul>
 <hr>
 <h2 id="ip-addresses">IP Addresses</h2>
 <h3 id="viewing-addresses">Viewing addresses</h3>

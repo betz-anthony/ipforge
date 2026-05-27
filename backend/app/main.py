@@ -26,6 +26,7 @@ from app.api import reclaim as reclaim_router
 from app.api import groups as groups_router
 from app.api import subnet_grants as subnet_grants_router
 from app.api import ip_requests as ip_requests_router
+from app.api import vlans as vlans_router
 from app.alerting import api as alerting_api
 from app.alerting.dispatcher import start as start_alert_dispatcher
 import app.models  # noqa: F401
@@ -173,6 +174,9 @@ app.include_router(subnet_grants_router.router,    prefix="/api/subnet-grants", 
 
 # IP requests (requester+ role; scoped blocked per-endpoint)
 app.include_router(ip_requests_router.router, prefix="/api/requests", tags=["ip-requests"])
+
+# VLANs (any authenticated user reads; operator+ writes — enforced per-endpoint)
+app.include_router(vlans_router.router, prefix="/api/vlans", tags=["vlans"], dependencies=_ro)
 
 # Alerting (channel/rule writes are admin-only; enforced per-endpoint via require_admin)
 app.include_router(alerting_api.router, prefix="/api/alerts", tags=["alerts"],
