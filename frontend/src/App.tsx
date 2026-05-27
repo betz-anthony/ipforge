@@ -1,7 +1,7 @@
 import { Routes, Route, NavLink } from 'react-router-dom'
 import {
   LayoutDashboard, Network, List, Server, Globe, Search, Settings, LogOut, ClipboardList,
-  ArchiveRestore, KeyRound, Users, Bell,
+  ArchiveRestore, KeyRound, Users, Bell, Tag,
 } from 'lucide-react'
 import { useQuery } from '@tanstack/react-query'
 import { useAuth } from './contexts/AuthContext'
@@ -20,10 +20,12 @@ import ReclaimPage from './pages/Reclaim'
 import Groups from './pages/Groups'
 import Login from './pages/Login'
 import Requests from './pages/Requests'
+import Vlans from './pages/Vlans'
 
 const NAV = [
   { to: '/',          label: 'Dashboard', icon: LayoutDashboard, end: true },
   { to: '/subnets',   label: 'Subnets',   icon: Network },
+  { to: '/vlans',     label: 'VLANs',     icon: Tag },
   { to: '/addresses', label: 'Addresses', icon: List },
   { to: '/dhcp',      label: 'DHCP',      icon: Server },
   { to: '/dns',       label: 'DNS',       icon: Globe },
@@ -164,6 +166,7 @@ export default function App() {
         <Routes>
           <Route path="/"          element={isScoped ? <Subnets /> : <Dashboard />} />
           <Route path="/subnets"   element={<Subnets />} />
+          <Route path="/vlans"     element={<Vlans />} />
           <Route path="/addresses" element={<Addresses />} />
           <Route path="/dhcp"      element={<DHCP />} />
           <Route path="/dns"       element={<DNS />} />

@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect, useRef } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Plus, X, Scan, AlertTriangle, GitBranch, Download, Upload } from 'lucide-react'
-import { subnetsApi, dhcpApi, addressesApi, scanApi, settingsApi, importExportApi, grantsApi, groupsApi, usersApi, type Subnet, type DHCPScope, type Collision, type ImportResult } from '../api/client'
+import { subnetsApi, dhcpApi, addressesApi, scanApi, settingsApi, importExportApi, grantsApi, groupsApi, usersApi, vlansApi, type Subnet, type DHCPScope, type Collision, type ImportResult } from '../api/client'
 import { ipInCidr, ipCompare, isValidCidr } from '../utils/ip'
 import DetailDrawer from '../components/DetailDrawer'
 import UtilBar from '../components/UtilBar'
@@ -202,6 +202,12 @@ export default function Subnets() {
   const [treeSelectedId, setTreeSelectedId] = useState<number | null>(null)
 
   const { data: settingsData } = useQuery({ queryKey: ['settings'], queryFn: settingsApi.get })
+  const { data: vlans } = useQuery({ queryKey: ['vlans'], queryFn: vlansApi.list })
+  const vlanNameById = useMemo(() => {
+    const m = new Map<number, string>()
+    for (const v of vlans ?? []) m.set(v.vlan_id, v.name)
+    return m
+  }, [vlans])
   const warnAt     = settingsData?.util_warn_threshold     ?? 80
   const criticalAt = settingsData?.util_critical_threshold ?? 95
 
@@ -751,7 +757,13 @@ export default function Subnets() {
                   </td>
                   <td><span className="font-mono">{s.cidr}</span></td>
                   <td><span className="badge badge-blue">IPv{s.ip_version}</span></td>
-                  <td>{s.vlan_id ?? <span className="text-muted">—</span>}</td>
+                  <td>
+                    {s.vlan_id == null ? <span className="text-muted">—</span> : (
+                      vlanNameById.has(s.vlan_id)
+                        ? <>{s.vlan_id} <span className="text-muted" style={{ fontSize: '0.72rem' }}>({vlanNameById.get(s.vlan_id)})</span></>
+                        : s.vlan_id
+                    )}
+                  </td>
                   <td>{s.description ?? <span className="text-muted">—</span>}</td>
                   <td>
                     <UtilBar pct={s.utilization_pct} warn={warnAt} critical={criticalAt} />
