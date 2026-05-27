@@ -100,4 +100,6 @@ Implement `DNSProvider` (or `DHCPProvider`) in `backend/app/providers/<category>
 
 ## License
 
-MIT
+GNU General Public License v3.0 — see [LICENSE](LICENSE).
+
+Modifications you distribute (including container images you publish) must be released under GPL v3 with source available.
