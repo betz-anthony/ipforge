@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Plus, Pencil, Trash2, Check, X, Send } from 'lucide-react'
 import { alertChannelsApi, type AlertChannel, type AlertChannelIn } from '../api/client'
 import { useToast } from '../contexts/ToastContext'
+import Collapsible from '../components/Collapsible'
 
 const KINDS = [
   { value: 'smtp',      label: 'SMTP (email)' },
@@ -63,11 +64,14 @@ export default function AlertChannels() {
   }
 
   return (
-    <div>
-      <div className="settings-section-title" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <span>Alert Channels</span>
+    <Collapsible
+      title="Alert Channels"
+      storageKey="alert-channels"
+      defaultOpen={false}
+      headerExtra={
         <button className="btn-primary btn-sm" onClick={startNew}><Plus size={13} /> Add Channel</button>
-      </div>
+      }
+    >
       <table className="data-table" style={{ width: '100%', fontSize: '0.82rem' }}>
         <thead>
           <tr><th>Name</th><th>Kind</th><th>Enabled</th><th></th></tr>
@@ -209,6 +213,6 @@ export default function AlertChannels() {
           </div>
         </div>
       )}
-    </div>
+    </Collapsible>
   )
 }

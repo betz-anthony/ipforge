@@ -8,6 +8,7 @@ import {
   type LdapSettings,
 } from '../api/client'
 import ConfirmModal from '../components/ConfirmModal'
+import Collapsible from '../components/Collapsible'
 import { useToast } from '../contexts/ToastContext'
 import AlertChannels from './AlertChannels'
 import AlertRules from './AlertRules'
@@ -85,10 +86,6 @@ function Field({ label, hint, children }: { label: string; hint?: string; childr
       {children}
     </div>
   )
-}
-
-function SectionTitle({ children }: { children: React.ReactNode }) {
-  return <div className="settings-section-title">{children}</div>
 }
 
 // ── Provider inline form ───────────────────────────────────────────────────
@@ -271,16 +268,15 @@ function ProviderSection({
   const mine = providers.filter(p => p.category === category)
 
   return (
-    <div className="settings-section">
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <SectionTitle>{category === 'dns' ? 'DNS' : 'DHCP'} Providers</SectionTitle>
-        {!adding && (
-          <button className="btn-ghost btn-sm" onClick={() => { setAdding(true); setEditId(null) }}>
-            <Plus size={13} /> Add
-          </button>
-        )}
-      </div>
-
+    <Collapsible
+      title={`${category === 'dns' ? 'DNS' : 'DHCP'} Providers`}
+      storageKey={`provider-${category}`}
+      headerExtra={!adding && (
+        <button className="btn-ghost btn-sm" onClick={() => { setAdding(true); setEditId(null) }}>
+          <Plus size={13} /> Add
+        </button>
+      )}
+    >
       {mine.length === 0 && !adding && (
         <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', margin: '0.5rem 0' }}>
           No {category === 'dns' ? 'DNS' : 'DHCP'} providers configured.
@@ -380,7 +376,7 @@ function ProviderSection({
           onCancel={() => setConfirmCacheFlush(null)}
         />
       )}
-    </div>
+    </Collapsible>
   )
 }
 
@@ -439,16 +435,15 @@ function UsersSection({ currentUsername }: { currentUsername: string }) {
   if (isLoading) return null
 
   return (
-    <div className="settings-section">
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <SectionTitle>Users</SectionTitle>
-        {!adding && (
-          <button className="btn-ghost btn-sm" onClick={() => { setAdding(true); setEditId(null) }}>
-            <Plus size={13} /> Add
-          </button>
-        )}
-      </div>
-
+    <Collapsible
+      title="Users"
+      storageKey="users"
+      headerExtra={!adding && (
+        <button className="btn-ghost btn-sm" onClick={() => { setAdding(true); setEditId(null) }}>
+          <Plus size={13} /> Add
+        </button>
+      )}
+    >
       {users.map(u => (
         <div key={u.id}>
           {editId === u.id ? (
@@ -570,7 +565,7 @@ function UsersSection({ currentUsername }: { currentUsername: string }) {
           onCancel={() => setConfirmDeleteUser(null)}
         />
       )}
-    </div>
+    </Collapsible>
   )
 }
 
@@ -620,8 +615,7 @@ function LdapSection() {
   if (isLoading) return null
 
   return (
-    <div className="settings-section">
-      <SectionTitle>LDAP / Active Directory</SectionTitle>
+    <Collapsible title="LDAP / Active Directory" storageKey="ldap" defaultOpen={false}>
       <form onSubmit={e => { e.preventDefault(); mutation.mutate() }}>
         <div className="form-grid">
           <Field label="Enable LDAP">
@@ -703,7 +697,7 @@ function LdapSection() {
           )}
         </div>
       </form>
-    </div>
+    </Collapsible>
   )
 }
 
@@ -762,9 +756,8 @@ export default function SettingsPage() {
       <LdapSection />
 
       {/* ── Utilization ── */}
-      <form onSubmit={e => { e.preventDefault(); mutation.mutate() }}>
-        <div className="settings-section">
-          <SectionTitle>Utilization Thresholds</SectionTitle>
+      <Collapsible title="Utilization Thresholds" storageKey="utilization">
+        <form onSubmit={e => { e.preventDefault(); mutation.mutate() }}>
           <div className="form-grid">
             <Field label="Warn threshold (%)" hint="default 80">
               <input type="number" min={1} max={99} value={form.util_warn_threshold ?? 80} onChange={s('util_warn_threshold')} />
@@ -792,32 +785,27 @@ export default function SettingsPage() {
               />
             </Field>
           </div>
-        </div>
-
-        <div className="form-actions">
-          <button type="submit" className="btn-primary" disabled={mutation.isPending}>
-            <Save size={13} />
-            {mutation.isPending ? 'Saving…' : 'Save Settings'}
-          </button>
-          {saved && <span className="feedback-success">Saved.</span>}
-          {mutation.isError && (
-            <span className="feedback-error">{String((mutation.error as Error).message)}</span>
-          )}
-        </div>
-      </form>
+          <div className="form-actions">
+            <button type="submit" className="btn-primary" disabled={mutation.isPending}>
+              <Save size={13} />
+              {mutation.isPending ? 'Saving…' : 'Save Settings'}
+            </button>
+            {saved && <span className="feedback-success">Saved.</span>}
+            {mutation.isError && (
+              <span className="feedback-error">{String((mutation.error as Error).message)}</span>
+            )}
+          </div>
+        </form>
+      </Collapsible>
 
       {/* ── Users ── */}
       {user && <UsersSection currentUsername={user.username} />}
 
       {/* ── Alert Channels ── */}
-      <div className="settings-section" style={{ marginTop: '1.5rem' }}>
-        <AlertChannels />
-      </div>
+      <AlertChannels />
 
       {/* ── Alert Rules ── */}
-      <div className="settings-section" style={{ marginTop: '1.5rem' }}>
-        <AlertRules />
-      </div>
+      <AlertRules />
     </div>
   )
 }
