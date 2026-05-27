@@ -1,0 +1,912 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>IPForge User Guide</title>
+<style>
+:root { color-scheme: light dark; }
+* { box-sizing: border-box; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  line-height: 1.6;
+  max-width: 920px;
+  margin: 2rem auto;
+  padding: 0 1.25rem;
+  color: #1f2328;
+  background: #ffffff;
+}
+@media (prefers-color-scheme: dark) {
+  body { color: #e6edf3; background: #0d1117; }
+  a { color: #58a6ff; }
+  code { background: #161b22; }
+  pre { background: #161b22; }
+  th { background: #161b22; }
+  tr:nth-child(even) td { background: #0d1117; }
+  blockquote { color: #8b949e; border-left-color: #30363d; }
+  hr { border-color: #30363d; }
+  table, th, td { border-color: #30363d; }
+}
+h1, h2, h3, h4 { line-height: 1.25; margin-top: 1.75rem; }
+h1 { border-bottom: 1px solid #d0d7de; padding-bottom: 0.3rem; }
+h2 { border-bottom: 1px solid #d0d7de; padding-bottom: 0.3rem; }
+a { color: #0969da; text-decoration: none; }
+a:hover { text-decoration: underline; }
+code {
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  font-size: 0.9em;
+  background: #f6f8fa;
+  padding: 0.15em 0.35em;
+  border-radius: 4px;
+}
+pre {
+  background: #f6f8fa;
+  padding: 0.85rem 1rem;
+  border-radius: 6px;
+  overflow-x: auto;
+  font-size: 0.85em;
+}
+pre code { background: none; padding: 0; font-size: 1em; }
+table { border-collapse: collapse; width: 100%; margin: 0.75rem 0 1.25rem; }
+th, td {
+  border: 1px solid #d0d7de;
+  padding: 0.45rem 0.7rem;
+  text-align: left;
+  vertical-align: top;
+}
+th { background: #f6f8fa; }
+blockquote {
+  border-left: 4px solid #d0d7de;
+  margin: 0.5rem 0;
+  padding: 0.1rem 0.9rem;
+  color: #57606a;
+}
+hr { border: 0; border-top: 1px solid #d0d7de; margin: 2rem 0; }
+ul, ol { padding-left: 1.5rem; }
+</style>
+</head>
+<body>
+<h1 id="ipforge-user-guide">IPForge User Guide</h1>
+<p>IPForge is a self-hosted IP address management tool with DNS and DHCP integration. It tracks subnets and IP addresses, syncs live data from your DNS/DHCP servers, and exposes an allocation API for Terraform and Ansible.</p>
+<hr>
+<h2 id="table-of-contents">Table of Contents</h2>
+<ol>
+<li><a href="#deployment">Deployment</a></li>
+<li><a href="#first-boot">First Boot</a></li>
+<li><a href="#roles">Roles</a></li>
+<li><a href="#provider-configuration">Provider Configuration</a></li>
+<li><a href="#subnets">Subnets</a></li>
+<li><a href="#ip-addresses">IP Addresses</a></li>
+<li><a href="#ip-requests">IP Requests</a></li>
+<li><a href="#allocation-api">Allocation API</a></li>
+<li><a href="#dns">DNS</a></li>
+<li><a href="#dhcp">DHCP</a></li>
+<li><a href="#subnet-scanning">Subnet Scanning</a></li>
+<li><a href="#stale-ip-reclamation">Stale IP Reclamation</a></li>
+<li><a href="#alerting">Alerting</a></li>
+<li><a href="#search">Search</a></li>
+<li><a href="#import--export">Import / Export</a></li>
+<li><a href="#audit-log">Audit Log</a></li>
+<li><a href="#api-tokens">API Tokens</a></li>
+<li><a href="#prometheus-metrics">Prometheus Metrics</a></li>
+<li><a href="#settings">Settings</a></li>
+<li><a href="#ldap--active-directory-authentication">LDAP / Active Directory</a></li>
+</ol>
+<hr>
+<h2 id="deployment">Deployment</h2>
+<h3 id="docker-compose-recommended">Docker Compose (recommended)</h3>
+<pre><code class="language-bash">cp .env.example .env
+# Edit .env — see Environment Variables below
+docker compose up -d
+</code></pre>
+<p>The app is available at <code>http://localhost</code> (nginx on port 80). API docs at <code>/api/docs</code>.</p>
+<h3 id="environment-variables">Environment Variables</h3>
+<table>
+<thead>
+<tr>
+<th>Variable</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>DB_PASSWORD</code></td>
+<td><code>ipam</code></td>
+<td>PostgreSQL password</td>
+</tr>
+<tr>
+<td><code>JWT_SECRET_KEY</code></td>
+<td><code>change-me-in-production-...</code></td>
+<td><strong>Change this.</strong> Signs auth tokens.</td>
+</tr>
+<tr>
+<td><code>SECRET_KEY</code></td>
+<td><em>(empty)</em></td>
+<td>Fernet key for encrypting provider credentials at rest. Generate: <code>python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"</code>. If empty, credentials stored as plaintext.</td>
+</tr>
+<tr>
+<td><code>DEFAULT_ADMIN_PASSWORD</code></td>
+<td><code>admin</code></td>
+<td>Initial admin password. Change on first login.</td>
+</tr>
+<tr>
+<td><code>JWT_EXPIRE_MINUTES</code></td>
+<td><code>480</code></td>
+<td>Token lifetime (8 hours).</td>
+</tr>
+<tr>
+<td><code>SYNC_MODE</code></td>
+<td><code>background</code></td>
+<td><code>background</code> = Docker Compose (built-in scheduler). <code>disabled</code> = Kubernetes (external CronJob handles sync).</td>
+</tr>
+<tr>
+<td><code>SCAN_INTERVAL_MINUTES</code></td>
+<td><code>30</code></td>
+<td>Default ping-sweep interval for subnets with no per-subnet override.</td>
+</tr>
+<tr>
+<td><code>UTIL_WARN_THRESHOLD</code></td>
+<td><code>80</code></td>
+<td>Utilization % that turns subnet bar yellow.</td>
+</tr>
+<tr>
+<td><code>UTIL_CRITICAL_THRESHOLD</code></td>
+<td><code>95</code></td>
+<td>Utilization % that turns subnet bar red.</td>
+</tr>
+</tbody>
+</table>
+<h3 id="ms-winrm-variables-if-using-ms-dns-ms-dhcp">MS WinRM Variables (if using MS DNS / MS DHCP)</h3>
+<table>
+<thead>
+<tr>
+<th>Variable</th>
+<th>Example</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>MS_WINRM_HOST</code></td>
+<td><code>dc01.corp.local</code></td>
+</tr>
+<tr>
+<td><code>MS_WINRM_USER</code></td>
+<td><code>CORP\svcipam</code></td>
+</tr>
+<tr>
+<td><code>MS_WINRM_PASSWORD</code></td>
+<td><em>(service account password)</em></td>
+</tr>
+<tr>
+<td><code>MS_WINRM_TRANSPORT</code></td>
+<td><code>ntlm</code></td>
+</tr>
+<tr>
+<td><code>MS_DNS_SERVER</code></td>
+<td><code>dns01.corp.local</code></td>
+</tr>
+<tr>
+<td><code>MS_DHCP_SERVER</code></td>
+<td><code>dhcp01.corp.local</code></td>
+</tr>
+</tbody>
+</table>
+<p>WinRM must be enabled on the target host (<code>Enable-PSRemoting</code>). The WinRM host can be a jumpbox — it doesn't need to be the DNS/DHCP server itself.</p>
+<hr>
+<h2 id="first-boot">First Boot</h2>
+<ol>
+<li>Navigate to the app and log in with <code>admin</code> / <code>admin</code> (or <code>DEFAULT_ADMIN_PASSWORD</code> if set).</li>
+<li>You will see a warning banner — <strong>change the admin password immediately</strong> via Settings → Users.</li>
+<li>Set <code>JWT_SECRET_KEY</code> and <code>SECRET_KEY</code> in <code>.env</code> and restart if not already done.</li>
+<li>Add at least one DNS and/or DHCP provider in Settings → Providers.</li>
+<li>Trigger an initial sync (Settings → Providers → Sync Now) to populate DNS/DHCP caches.</li>
+</ol>
+<hr>
+<h2 id="roles">Roles</h2>
+<p>Five roles. <code>read-only</code>, <code>operator</code>, and <code>admin</code> are nested (each a superset of the one below). <code>requester</code> and <code>scoped</code> are orthogonal — granted alongside global limits.</p>
+<table>
+<thead>
+<tr>
+<th>Role</th>
+<th>Can do</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>requester</strong></td>
+<td>Submit IP requests for subnets flagged <em>request-eligible</em> and see only their own requests. Cannot view other resources.</td>
+</tr>
+<tr>
+<td><strong>scoped</strong></td>
+<td>Read-only on the full app, plus full read/write only on subnets they have been granted access to (see <a href="#per-subnet-grants">Per-Subnet Grants</a>).</td>
+</tr>
+<tr>
+<td><strong>read-only</strong></td>
+<td>View all pages, search, browse DNS/DHCP/audit data. Cannot write anything.</td>
+</tr>
+<tr>
+<td><strong>operator</strong></td>
+<td>Everything read-only can do, plus: create/edit/delete subnets and addresses, trigger scans, allocate IPs, import CSVs, add/delete DNS records and DHCP reservations, approve/deny IP requests, acknowledge alerts.</td>
+</tr>
+<tr>
+<td><strong>admin</strong></td>
+<td>Everything operator can do, plus: manage users + groups, manage provider configurations, manage alert channels + rules, change utilization/scan/stale thresholds, clear provider caches, mint API tokens, grant per-subnet access.</td>
+</tr>
+</tbody>
+</table>
+<p>Manage users at <strong>Settings → Users</strong> (admin only).</p>
+<h3 id="per-subnet-grants">Per-Subnet Grants</h3>
+<p>For finer-grained access, the <code>scoped</code> role pairs with per-subnet grants. Admins open a subnet → <strong>Access</strong> section → add a grant for a user or group with <code>view</code> or <code>manage</code> permission. A <code>scoped</code> user gets read-only access to the rest of the app and full write access only to the subnets they (or their groups) have <code>manage</code> on.</p>
+<p>Manage groups at <strong>Settings → Groups</strong> — assign users to groups, then grant subnet access by group rather than per-user.</p>
+<hr>
+<h2 id="provider-configuration">Provider Configuration</h2>
+<p>IPForge connects to external DNS and DHCP servers to read and write live data. Providers are configured in the UI — no env var changes needed after initial deployment.</p>
+<h3 id="adding-a-provider">Adding a provider</h3>
+<ol>
+<li>Go to <strong>Settings → Providers</strong>.</li>
+<li>Click <strong>Add Provider</strong>.</li>
+<li>Select category (DNS or DHCP) and type (see below).</li>
+<li>Fill in connection details. Credentials are encrypted at rest if <code>SECRET_KEY</code> is set.</li>
+<li>Enable the provider and set sort order (lower number = higher priority for auto-selection).</li>
+</ol>
+<h3 id="supported-dns-providers">Supported DNS providers</h3>
+<table>
+<thead>
+<tr>
+<th>Type</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>msdns</code></td>
+<td>Microsoft DNS via WinRM/PowerShell. Requires MS WinRM variables.</td>
+</tr>
+<tr>
+<td><code>bind</code></td>
+<td>BIND 9 via AXFR (read) + RFC 2136 dynamic update (write).</td>
+</tr>
+<tr>
+<td><code>pihole</code></td>
+<td>Pi-hole v5/v6. Read-only for zones; record creation supported.</td>
+</tr>
+</tbody>
+</table>
+<h3 id="supported-dhcp-providers">Supported DHCP providers</h3>
+<table>
+<thead>
+<tr>
+<th>Type</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>msdhcp</code></td>
+<td>Microsoft DHCP via WinRM/PowerShell. Requires MS WinRM variables.</td>
+</tr>
+<tr>
+<td><code>isc_kea</code></td>
+<td>ISC Kea. IPv4 only (IPv6 lease sync not yet implemented).</td>
+</tr>
+<tr>
+<td><code>pihole</code></td>
+<td>Pi-hole DHCP.</td>
+</tr>
+</tbody>
+</table>
+<h3 id="sync">Sync</h3>
+<p>IPForge caches DNS zones/records and DHCP scopes/leases locally for fast lookups. The cache is refreshed on a background schedule.</p>
+<ul>
+<li><strong>Manual sync:</strong> Settings → Providers → Sync Now (or per-category).</li>
+<li><strong>Sync status</strong> shows last sync time and any errors on the Dashboard.</li>
+<li><strong>Clear cache:</strong> Settings → Providers → Clear Cache button (per provider, admin only). Use this when removing a provider or after major DNS/DHCP changes that haven't propagated.</li>
+</ul>
+<hr>
+<h2 id="subnets">Subnets</h2>
+<h3 id="viewing-subnets">Viewing subnets</h3>
+<p>The Subnets page has two view modes:</p>
+<ul>
+<li><strong>Flat table</strong> — all subnets listed with utilization bars. Default view.</li>
+<li><strong>Tree view</strong> — hierarchical two-panel layout. Left panel shows the subnet tree; right panel shows addresses in the selected subnet. Toggle with the Tree/Flat button.</li>
+</ul>
+<p>Each subnet row shows:
+- CIDR and name
+- Utilization bar (% of IPs with non-available status). Yellow at warn threshold, red at critical threshold.
+- Rollup utilization (includes child subnets)
+- Parent badge (links to parent subnet)
+- Collision badge (count of unresolved collisions — click to resolve)</p>
+<p>Click any column header to sort (CIDR sorts numerically across IPv4 and IPv6). Use the search box above the table to filter by name, CIDR, VLAN, or description.</p>
+<h3 id="creating-a-subnet">Creating a subnet</h3>
+<p>Click <strong>Add Subnet</strong>. Fields:</p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Name</td>
+<td>Display name</td>
+</tr>
+<tr>
+<td>CIDR</td>
+<td>e.g. <code>10.0.0.0/24</code>. Parent subnet auto-suggested.</td>
+</tr>
+<tr>
+<td>VLAN ID</td>
+<td>Optional</td>
+</tr>
+<tr>
+<td>Description</td>
+<td>Optional</td>
+</tr>
+<tr>
+<td>Notes</td>
+<td>Optional free text</td>
+</tr>
+<tr>
+<td>Scan Interval</td>
+<td>Minutes between automatic ping sweeps. Overrides the global setting. Leave blank to use global.</td>
+</tr>
+<tr>
+<td>DNS Provider</td>
+<td>Optional. Name of the provider to use for allocation DNS registration in this subnet. Overrides the first-enabled provider.</td>
+</tr>
+<tr>
+<td>DHCP Provider</td>
+<td>Optional. Name of the provider to use for allocation DHCP registration in this subnet.</td>
+</tr>
+<tr>
+<td>Parent Subnet</td>
+<td>Auto-suggested from CIDR. Manually selectable.</td>
+</tr>
+</tbody>
+</table>
+<h3 id="subnet-hierarchy">Subnet hierarchy</h3>
+<p>Subnets can be nested. A <code>/16</code> can contain multiple <code>/24</code>s. Creating a <code>/24</code> when a <code>/16</code> already exists will auto-suggest the <code>/16</code> as the parent.</p>
+<p>Rules:
+- Parent must strictly contain the child CIDR.
+- Cycles are rejected.
+- Deleting a subnet that has children is rejected (409) — delete children first.</p>
+<h3 id="editing-a-subnet">Editing a subnet</h3>
+<p>Click any subnet row to open the detail drawer. Edit fields inline and click <strong>Save</strong>.</p>
+<h3 id="scanning-a-subnet">Scanning a subnet</h3>
+<p>From the subnet detail drawer or the Subnets page, click <strong>Scan</strong>. This triggers an ICMP ping sweep of all host IPs in the subnet. Results update <code>last_seen</code> on each address and feed the 7-day availability history.</p>
+<p>Large subnets: the UI warns if the subnet is too large for a quick scan (<code>/24</code> max for IPv4, <code>/120</code> for IPv6). You can still scan — it just takes longer.</p>
+<hr>
+<h2 id="ip-addresses">IP Addresses</h2>
+<h3 id="viewing-addresses">Viewing addresses</h3>
+<p>Go to <strong>Addresses</strong> or open a subnet and click into the tree view. Filter by subnet or status using the controls at the top. Sort by any column header (IPs sort numerically) and use the search box to filter by IP, hostname, MAC, or description.</p>
+<p>Address statuses:</p>
+<table>
+<thead>
+<tr>
+<th>Status</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>available</code></td>
+<td>IP is free (no active use recorded)</td>
+</tr>
+<tr>
+<td><code>reserved</code></td>
+<td>Manually reserved or allocated via the API</td>
+</tr>
+<tr>
+<td><code>assigned</code></td>
+<td>In active use</td>
+</tr>
+<tr>
+<td><code>deprecated</code></td>
+<td>Retired — not available for allocation</td>
+</tr>
+<tr>
+<td><code>discovered</code></td>
+<td>Found by a scan but not otherwise registered</td>
+</tr>
+</tbody>
+</table>
+<h3 id="address-drawer">Address drawer</h3>
+<p>Click any address row to open the drawer. Shows:
+- IP, hostname, MAC, status, description, notes
+- <code>last_seen</code> timestamp (last successful ping)
+- 7-day reachability dot row (filled = reachable that day)
+- DNS records matching this IP (from cache)
+- DHCP reservations matching this IP (from cache)</p>
+<h3 id="creating-an-address">Creating an address</h3>
+<p>Click <strong>Add Address</strong>. Manually specify the IP and status. For automated allocation use the <a href="#allocation-api">Allocation API</a> instead.</p>
+<h3 id="collision-detection">Collision detection</h3>
+<p>Three collision types are detected automatically during scans:</p>
+<table>
+<thead>
+<tr>
+<th>Type</th>
+<th>Meaning</th>
+<th>Resolution</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>active_but_available</code></td>
+<td>IP responds to ping but is marked <code>available</code></td>
+<td>Update status to <code>reserved</code> or <code>assigned</code></td>
+</tr>
+<tr>
+<td><code>hostname_mismatch</code></td>
+<td>IPAM hostname differs from DHCP/DNS hostname</td>
+<td>Choose canonical hostname, push to DNS+DHCP</td>
+</tr>
+<tr>
+<td><code>multi_dhcp_scope</code></td>
+<td>Same IP has reservations in multiple DHCP scopes</td>
+<td>Delete the duplicate reservation(s)</td>
+</tr>
+</tbody>
+</table>
+<p>Collisions appear as badges on subnet rows and a card on the Dashboard. Click the badge or card to open the <strong>Guided Resolve</strong> dialog — it walks through the correct action for each type.</p>
+<hr>
+<h2 id="ip-requests">IP Requests</h2>
+<p>Non-operators (the <code>requester</code> role) can ask for an IP without touching the allocation API directly. Operators review and approve from a queue.</p>
+<h3 id="submitting-requester">Submitting (requester)</h3>
+<ol>
+<li>Open the <strong>Requests</strong> page → <strong>Request IP</strong>.</li>
+<li>Select a <em>request-eligible</em> subnet from the dropdown. Admins flag eligible subnets with the <strong>Request-eligible</strong> checkbox on the subnet edit form — only those appear here.</li>
+<li>Fill in hostname, purpose, and (optionally) MAC. Submit.</li>
+<li>The request shows up in your list with status <strong>pending</strong>. You can cancel pending requests.</li>
+</ol>
+<h3 id="reviewing-operator-admin">Reviewing (operator / admin)</h3>
+<ol>
+<li>Open the <strong>Requests</strong> page — default filter is <code>pending</code>.</li>
+<li><strong>Approve</strong> — allocates the next free IP in the selected subnet (uses the <a href="#allocation-api">Allocation API</a> internally). Tickboxes during approval let you also register DNS, DHCP, and PTR in one step.</li>
+<li><strong>Deny</strong> — requires a reason; written to <code>notes</code> and notified to the requester (if alerting configured).</li>
+</ol>
+<p>Both actions write to the audit log and fire <code>ip_request_resolved</code> alerts; submission fires <code>ip_request_submitted</code>.</p>
+<hr>
+<h2 id="allocation-api">Allocation API</h2>
+<p>The allocation API lets automation tools (Terraform, Ansible, scripts) claim the next free IP in a subnet without manual intervention.</p>
+<h3 id="endpoint">Endpoint</h3>
+<pre><code>POST /api/subnets/{subnet_id}/allocate
+</code></pre>
+<p>Requires operator+ token.</p>
+<h3 id="request-body">Request body</h3>
+<pre><code class="language-json">{
+  &quot;hostname&quot;:      &quot;web-01&quot;,
+  &quot;description&quot;:   &quot;&quot;,
+  &quot;mac_address&quot;:   &quot;aa:bb:cc:dd:ee:ff&quot;,
+  &quot;notes&quot;:         &quot;&quot;,
+  &quot;register_dns&quot;:  false,
+  &quot;register_dhcp&quot;: false,
+  &quot;dns_zone&quot;:      &quot;example.com&quot;,
+  &quot;dns_provider&quot;:  &quot;&quot;,
+  &quot;dhcp_provider&quot;: &quot;&quot;
+}
+</code></pre>
+<p><code>hostname</code> is required. All other fields are optional.</p>
+<h3 id="how-ip-selection-works">How IP selection works</h3>
+<ol>
+<li>Loads all ineligible IPs in the subnet (<code>reserved</code>, <code>assigned</code>, <code>deprecated</code>, <code>discovered</code>).</li>
+<li>Walks <code>ipaddress.hosts()</code> ascending — this excludes the network address and broadcast address.</li>
+<li>Skips <code>.1</code> (router convention) and <code>.255</code> (broadcast-like convention).</li>
+<li>Returns the first IP not in the ineligible set.</li>
+</ol>
+<h3 id="idempotency">Idempotency</h3>
+<p>Hostname is the idempotency key (case-insensitive). If <code>web-01</code> is already allocated in this subnet with a non-deprecated status, the existing record is returned — no second IP is created. This makes the endpoint safe to re-run from Terraform or Ansible.</p>
+<ul>
+<li>First call → 201 Created, <code>is_new: true</code></li>
+<li>Subsequent calls with same hostname → 200 OK, <code>is_new: false</code></li>
+</ul>
+<p>If <code>mac_address</code> is provided on a repeat call and the existing record has no MAC, the MAC is updated.</p>
+<h3 id="ddi-registration">DDI registration</h3>
+<p>Set <code>register_dns: true</code> and/or <code>register_dhcp: true</code> to register the IP at allocation time.</p>
+<table>
+<thead>
+<tr>
+<th>Flag</th>
+<th>Required fields</th>
+<th>Action</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>register_dns: true</code></td>
+<td><code>dns_zone</code></td>
+<td>Creates an A record: <code>hostname → IP</code> in the specified zone</td>
+</tr>
+<tr>
+<td><code>register_dhcp: true</code></td>
+<td><code>mac_address</code></td>
+<td>Creates a reservation in the DHCP scope that contains the allocated IP</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Rollback on failure (new allocations only):</strong> If DNS registration fails, the IP is not committed. If DHCP registration fails, the DNS record is deleted and the IP is not committed. This keeps IPAM, DNS, and DHCP consistent.</p>
+<p><strong>Idempotent hits:</strong> If the hostname already exists, DNS/DHCP registration still runs (re-registration after partial failure), but failure does not affect the existing IP record.</p>
+<h3 id="provider-selection">Provider selection</h3>
+<p>For both <code>dns_provider</code> and <code>dhcp_provider</code>:</p>
+<ol>
+<li>Explicit value in request body</li>
+<li><code>dns_provider_name</code> / <code>dhcp_provider_name</code> on the subnet record (set this per-subnet in the subnet form)</li>
+<li>First enabled provider of that category</li>
+</ol>
+<h3 id="response">Response</h3>
+<pre><code class="language-json">{
+  &quot;id&quot;:              42,
+  &quot;address&quot;:         &quot;10.0.1.5&quot;,
+  &quot;subnet_id&quot;:       1,
+  &quot;subnet_cidr&quot;:     &quot;10.0.0.0/16&quot;,
+  &quot;hostname&quot;:        &quot;web-01&quot;,
+  &quot;status&quot;:          &quot;reserved&quot;,
+  &quot;mac_address&quot;:     &quot;aa:bb:cc:dd:ee:ff&quot;,
+  &quot;dns_registered&quot;:  true,
+  &quot;dhcp_registered&quot;: false,
+  &quot;is_new&quot;:          true
+}
+</code></pre>
+<h3 id="getting-a-token">Getting a token</h3>
+<pre><code class="language-bash">curl -s -X POST https://ipam.example.com/api/auth/login \
+  -d &quot;username=svcaccount&amp;password=yourpassword&quot; \
+  | jq -r .access_token
+</code></pre>
+<h3 id="terraform-example">Terraform example</h3>
+<p>See <code>docs/examples/terraform/main.tf</code>. Uses the <code>Mastercard/restapi</code> provider. Key points:
+- <code>read_path = "/addresses/{id}"</code> — Terraform tracks the resource by database ID, so re-apply after state loss does a <code>GET /addresses/{id}</code> rather than re-allocating.
+- <code>destroy_path = "/addresses/{id}"</code> — <code>terraform destroy</code> deletes the address record (sets it back to available).
+- <code>id_attribute = "id"</code> — tells the provider which field carries the stable ID.</p>
+<h3 id="ansible-example">Ansible example</h3>
+<p>See <code>docs/examples/ansible/allocate.yml</code>. Key point:
+- <code>status_code: [200, 201]</code> — the task succeeds on both new allocation and idempotent hit. Playbooks are safe to re-run.</p>
+<hr>
+<h2 id="dns">DNS</h2>
+<p>The DNS page shows zones and records synced from your configured DNS providers.</p>
+<h3 id="zones">Zones</h3>
+<p>Zones are listed on the left. Each zone is tagged with its source provider. Click a zone to load its records.</p>
+<p>Zones are grouped into three tabs: <strong>Forward</strong>, <strong>Reverse</strong>, and <strong>Trust</strong> (PTR/stub zones).</p>
+<h3 id="records">Records</h3>
+<p>Records are displayed with name, type, value, TTL, and source. Use the search box to filter within a zone.</p>
+<h3 id="adding-a-record">Adding a record</h3>
+<p>Click <strong>Add Record</strong>. Specify name, type (A, AAAA, CNAME, MX, etc.), value, and TTL. The record is written to the provider immediately.</p>
+<h3 id="deleting-a-record">Deleting a record</h3>
+<p>Click the delete icon on any record row. Confirmation required.</p>
+<blockquote>
+<p>Note: DNS data shown is from the local cache. After adding or deleting records, the cache updates on the next sync cycle. Use <strong>Sync Now</strong> to force an immediate refresh.</p>
+</blockquote>
+<h3 id="ptr-records">PTR records</h3>
+<p>When you add an <code>A</code> or <code>AAAA</code> record, the <strong>Also create PTR</strong> checkbox writes the matching reverse-zone record in one step. Deleting an A/AAAA prompts you to delete its PTR via the delete preview dialog (preview lists every provider record that will be removed; uncheck any you want to keep).</p>
+<p>PTR is also auto-created when the <a href="#allocation-api">Allocation API</a> is called with <code>register_ptr: true</code>, or when an operator approves an IP request with the PTR checkbox ticked.</p>
+<p>The reverse zone must already exist on the DNS provider. PTR creation is silently skipped if no reverse zone covers the IP.</p>
+<hr>
+<h2 id="dhcp">DHCP</h2>
+<p>The DHCP page shows scopes and leases/reservations synced from your DHCP providers.</p>
+<h3 id="scopes">Scopes</h3>
+<p>Scopes are listed with subnet mask, range, active status, and source provider.</p>
+<h3 id="leases-reservations">Leases / Reservations</h3>
+<p>Click a scope to see its leases and reservations. Shows IP, MAC, name, and description.</p>
+<h3 id="adding-a-reservation">Adding a reservation</h3>
+<p>Click <strong>Add Reservation</strong> from within a scope. Specify IP, MAC, name, and description. The reservation is written to the DHCP provider immediately.</p>
+<h3 id="deleting-a-reservation">Deleting a reservation</h3>
+<p>Click the delete icon on any reservation row. Confirmation required.</p>
+<hr>
+<h2 id="subnet-scanning">Subnet Scanning</h2>
+<p>IPForge can ping-sweep subnets to discover active hosts.</p>
+<h3 id="on-demand-scan">On-demand scan</h3>
+<p>From the Subnets page, open a subnet and click <strong>Scan</strong>. A real-time status indicator appears. Results are available when the scan completes.</p>
+<h3 id="continuous-scanning">Continuous scanning</h3>
+<p>Each subnet can have an automatic scan interval. Set <strong>Scan Interval</strong> on the subnet (in minutes). Leave blank to use the global default (Settings → Scan Interval). Set to 0 to disable scanning for that subnet.</p>
+<p>The background scheduler fires every 60 seconds and runs pending scans.</p>
+<h3 id="what-scanning-does">What scanning does</h3>
+<ul>
+<li>Sends ICMP pings to each host IP.</li>
+<li>Updates <code>last_seen</code> on address records that respond.</li>
+<li>Creates <code>discovered</code> records for IPs that respond but aren't in the database.</li>
+<li>Records daily availability aggregates (used by the 7-day dot row in the address drawer).</li>
+<li>Fires <strong>scan alerts</strong> when a host transitions: <code>went_unreachable</code> or <code>came_back</code>.</li>
+</ul>
+<h3 id="scan-alerts">Scan alerts</h3>
+<p>Alerts appear on the Dashboard. Each alert shows the IP, event type, and timestamp. Acknowledge individually or bulk-acknowledge all (with optional subnet filter).</p>
+<p>For routed notifications (email/Slack/Teams/PagerDuty), configure an alert channel + rule — see <a href="#alerting">Alerting</a>.</p>
+<hr>
+<h2 id="stale-ip-reclamation">Stale IP Reclamation</h2>
+<p>Addresses that haven't responded to a scan for a configurable number of days are flagged <strong>stale</strong>. The Dashboard shows a count; the <strong>Reclaim</strong> page lists them grouped by subnet.</p>
+<h3 id="how-staleness-is-decided">How staleness is decided</h3>
+<ul>
+<li>Threshold set globally in <strong>Settings → Stale Reclaim Threshold (days)</strong>. <code>0</code> disables the feature.</li>
+<li>An address is stale when <code>last_seen</code> is older than threshold AND its status is <code>assigned</code> or <code>reserved</code> (free / deprecated / discovered are not candidates).</li>
+<li>The check runs as part of every scan; counts are cached.</li>
+</ul>
+<h3 id="reclaim-workflow">Reclaim workflow</h3>
+<p>From the Reclaim page, for each stale IP:
+- <strong>Mark deprecated</strong> — sets status to <code>deprecated</code> so it won't be re-allocated but stays in the database for audit.
+- <strong>Delete with cleanup</strong> — opens the delete-preview dialog and removes the IPAM record plus any DNS/DHCP records you tick.
+- <strong>Ignore</strong> — clears the stale flag without changing status (resets the timer for one cycle).</p>
+<p>When the stale queue depth crosses configured rule conditions, a <code>stale_queue</code> alert fires.</p>
+<hr>
+<h2 id="alerting">Alerting</h2>
+<p>IPForge can notify operators when something noteworthy happens. Two pieces: <strong>channels</strong> (where to send) and <strong>rules</strong> (what to send + when).</p>
+<h3 id="channels-settings-alert-channels">Channels (Settings → Alert Channels)</h3>
+<table>
+<thead>
+<tr>
+<th>Kind</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>smtp</code></td>
+<td>SMTP relay. Fields: host, port, username, password, from, to (comma-separated).</td>
+</tr>
+<tr>
+<td><code>slack</code></td>
+<td>Incoming webhook URL.</td>
+</tr>
+<tr>
+<td><code>teams</code></td>
+<td>Microsoft Teams incoming webhook URL.</td>
+</tr>
+<tr>
+<td><code>pagerduty</code></td>
+<td>PagerDuty Events API v2 integration key. Severity mapping is automatic.</td>
+</tr>
+<tr>
+<td><code>generic</code></td>
+<td>Generic JSON POST to any URL.</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Test</strong> sends a synthetic event to verify connectivity. Secrets are encrypted with <code>SECRET_KEY</code>.</p>
+<h3 id="rules-settings-alert-rules">Rules (Settings → Alert Rules)</h3>
+<p>A rule binds one or more channels to a <strong>trigger</strong> with optional condition + re-notify cadence.</p>
+<table>
+<thead>
+<tr>
+<th>Trigger</th>
+<th>Fires when</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>collision</code></td>
+<td>Any new unresolved collision is detected</td>
+</tr>
+<tr>
+<td><code>utilization</code></td>
+<td>A subnet's utilization crosses the rule threshold (%)</td>
+</tr>
+<tr>
+<td><code>rogue</code></td>
+<td>A scan finds a responsive IP that doesn't match any expected source</td>
+</tr>
+<tr>
+<td><code>sync_error</code></td>
+<td>A DNS/DHCP provider sync fails</td>
+</tr>
+<tr>
+<td><code>stale_queue</code></td>
+<td>Stale-IP queue depth exceeds the rule threshold</td>
+</tr>
+<tr>
+<td><code>ip_request_submitted</code></td>
+<td>A requester submits a new IP request</td>
+</tr>
+<tr>
+<td><code>ip_request_resolved</code></td>
+<td>A pending request is approved or denied</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Re-notify</strong> — minutes between re-sends while an event remains in <code>firing</code> state. Empty = notify once per state change.</p>
+<h3 id="events-alerts-page">Events (Alerts page)</h3>
+<p>Lists every alert event with deliveries (✅ sent / ❌ failed per channel). Filter by state (<code>firing</code> / <code>resolved</code>) and trigger. Operators can acknowledge a firing event to stop re-notifications.</p>
+<hr>
+<h2 id="search">Search</h2>
+<p>The global search bar (top of every page) searches across subnets, addresses, DNS records, and DHCP leases simultaneously.</p>
+<p>Results are grouped by type. Click any result to navigate to it.</p>
+<p>Search is server-side with a 50-item cap per type. Results are debounced 250ms.</p>
+<hr>
+<h2 id="import-export">Import / Export</h2>
+<p>Bulk-load data from CSV or extract the full database for backup or migration.</p>
+<h3 id="export">Export</h3>
+<p>On the Subnets or Addresses page, click <strong>Export CSV</strong>. Downloads all records immediately.</p>
+<p><strong>Subnets CSV columns:</strong> <code>name</code>, <code>cidr</code>, <code>ip_version</code>, <code>vlan_id</code>, <code>description</code>, <code>notes</code>, <code>parent_cidr</code>, <code>scan_interval_minutes</code>, <code>dns_provider_name</code>, <code>dhcp_provider_name</code></p>
+<p><strong>Addresses CSV columns:</strong> <code>address</code>, <code>subnet_cidr</code>, <code>hostname</code>, <code>status</code>, <code>mac_address</code>, <code>description</code>, <code>notes</code></p>
+<h3 id="import">Import</h3>
+<p>Click <strong>Import CSV</strong> on the Subnets or Addresses page. Select your file. The import upserts — existing records are updated, new records are created.</p>
+<p><strong>Key rules:</strong>
+- Subnets are keyed by CIDR. Addresses are keyed by IP address.
+- <code>parent_cidr</code> is resolved at import time — if the parent exists in the database or appears earlier in the same file, the relationship is set automatically.
+- Address <code>status</code> defaults to <code>available</code> if omitted.
+- Rows with validation errors are skipped; a per-row error list is shown in the result banner.
+- Import requires operator role.</p>
+<p><strong>Import order matters for hierarchical subnets:</strong> parents must appear before children in the CSV, or already exist in the database.</p>
+<hr>
+<h2 id="audit-log">Audit Log</h2>
+<p>Every write operation is recorded. Go to <strong>Audit</strong> to view the log.</p>
+<h3 id="what-is-recorded">What is recorded</h3>
+<ul>
+<li><strong>Subnets:</strong> create, update, delete</li>
+<li><strong>Addresses:</strong> create, update, delete, allocation</li>
+<li><strong>DNS:</strong> record create, delete</li>
+<li><strong>DHCP:</strong> reservation create, delete</li>
+</ul>
+<p>Each entry captures: timestamp, username, action, resource type, resource ID, before-state JSON, after-state JSON.</p>
+<h3 id="filtering">Filtering</h3>
+<p>Filter by resource type, username, date range, and free-text search. Click any row to expand the before/after state JSON.</p>
+<hr>
+<h2 id="api-tokens">API Tokens</h2>
+<p>For machine clients (scripts, Terraform, Prometheus scrapers) use long-lived API tokens instead of JWT user sessions.</p>
+<h3 id="creating-a-token">Creating a token</h3>
+<ol>
+<li><strong>API Tokens</strong> page → <strong>Create Token</strong>.</li>
+<li>Pick a name and role (the token's effective role caps what it can do — choose the least privilege that works).</li>
+<li>Optional: expiry date. Blank = never expires.</li>
+<li>Copy the displayed token <strong>immediately</strong> — it is shown once and never again.</li>
+</ol>
+<h3 id="using-a-token">Using a token</h3>
+<pre><code class="language-bash">curl -H &quot;Authorization: Bearer ipfg_&lt;the-token&gt;&quot; https://your-ipforge/api/subnets
+</code></pre>
+<h3 id="revoking">Revoking</h3>
+<p>From the API Tokens page, <strong>Revoke</strong> disables the token immediately. Audit log records who revoked when.</p>
+<hr>
+<h2 id="prometheus-metrics">Prometheus Metrics</h2>
+<p><code>GET /metrics</code> exposes Prometheus-format gauges. Requires an API token with at least <code>read-only</code> role.</p>
+<h3 id="scrape-config">Scrape config</h3>
+<pre><code class="language-yaml">- job_name: ipforge
+  metrics_path: /metrics
+  bearer_token: ipfg_&lt;your-token&gt;
+  static_configs:
+    - targets: ['ipforge.example.com']
+</code></pre>
+<h3 id="metrics-published">Metrics published</h3>
+<table>
+<thead>
+<tr>
+<th>Metric</th>
+<th>Type</th>
+<th>Labels</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>ipam_subnets_total</code></td>
+<td>gauge</td>
+<td>—</td>
+</tr>
+<tr>
+<td><code>ipam_addresses</code></td>
+<td>gauge</td>
+<td><code>status</code></td>
+</tr>
+<tr>
+<td><code>ipam_subnet_used</code> / <code>_total</code> / <code>_utilization_ratio</code></td>
+<td>gauge</td>
+<td><code>cidr</code>, <code>name</code></td>
+</tr>
+<tr>
+<td><code>ipam_subnet_scan_age_seconds</code></td>
+<td>gauge</td>
+<td><code>cidr</code>, <code>name</code></td>
+</tr>
+<tr>
+<td><code>ipam_sync_age_seconds</code> / <code>ipam_sync_ok</code></td>
+<td>gauge</td>
+<td><code>category</code>, <code>source</code></td>
+</tr>
+<tr>
+<td><code>ipam_open_collisions</code></td>
+<td>gauge</td>
+<td>—</td>
+</tr>
+<tr>
+<td><code>ipam_stale_addresses</code></td>
+<td>gauge</td>
+<td>—</td>
+</tr>
+</tbody>
+</table>
+<p>All values are computed at scrape time from the database — no separate exporter to run.</p>
+<hr>
+<h2 id="settings">Settings</h2>
+<p>Settings is admin-only.</p>
+<h3 id="providers">Providers</h3>
+<p>Add, edit, enable/disable, and reorder DNS and DHCP provider configurations. Credentials are stored encrypted if <code>SECRET_KEY</code> is set.</p>
+<p><strong>Sort order</strong> determines auto-selection priority for the allocation API. Lower number = higher priority.</p>
+<h3 id="sync_1">Sync</h3>
+<ul>
+<li><strong>Sync Now</strong> — triggers an immediate full sync from all enabled providers.</li>
+<li><strong>DNS Sync Now / DHCP Sync Now</strong> — sync a single category.</li>
+<li>Per-provider <strong>Clear Cache</strong> — purges all cached records for that source. Use after removing a provider or when the cache is stale.</li>
+</ul>
+<h3 id="utilization-thresholds">Utilization Thresholds</h3>
+<ul>
+<li><strong>Warn threshold</strong> (default 80%) — subnet utilization bar turns yellow above this.</li>
+<li><strong>Critical threshold</strong> (default 95%) — turns red.</li>
+<li><strong>Dashboard top-N</strong> — how many subnets appear in the utilization widget on the Dashboard.</li>
+<li><strong>Default scan interval</strong> (minutes) — global ping-sweep interval, overridable per subnet.</li>
+<li><strong>Stale Reclaim Threshold (days)</strong> — days since <code>last_seen</code> after which an assigned/reserved IP is flagged stale. <code>0</code> disables. See <a href="#stale-ip-reclamation">Stale IP Reclamation</a>.</li>
+</ul>
+<p>Every settings section on this page is collapsible — click the section title to fold/unfold. Open/closed state is remembered per browser.</p>
+<h3 id="users">Users</h3>
+<p>Create, edit, enable/disable user accounts. Set roles (<code>requester</code>, <code>scoped</code>, <code>read-only</code>, <code>operator</code>, <code>admin</code>). Change any user's password. Disable accounts without deleting them.</p>
+<p>The default <code>admin</code> account cannot be deleted.</p>
+<h3 id="groups">Groups</h3>
+<p>Create groups and assign users to them. Combined with per-subnet grants on individual subnets, groups let you express "the DBAs can manage the database subnets" without per-user maintenance. See <a href="#per-subnet-grants">Per-Subnet Grants</a>.</p>
+<h3 id="alert-channels-alert-rules">Alert Channels / Alert Rules</h3>
+<p>See <a href="#alerting">Alerting</a>.</p>
+<h3 id="ldap-active-directory">LDAP / Active Directory</h3>
+<p>Configure optional LDAP/AD authentication in <strong>Settings → LDAP / Active Directory</strong>.</p>
+<hr>
+<h2 id="ldap-active-directory-authentication">LDAP / Active Directory Authentication</h2>
+<p>IPForge supports optional LDAP/AD authentication alongside local accounts.</p>
+<p><strong>How it works:</strong>
+- Users with a local password always authenticate locally (LDAP is not consulted).
+- Users without a local password are authenticated against the configured LDAP server.
+- On first successful LDAP login, a shadow account is created in IPForge with no local password.
+- Role is refreshed from LDAP group membership on every login.</p>
+<p><strong>Setup (Settings → LDAP / Active Directory):</strong></p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>LDAP Host</td>
+<td>Hostname or IP of your domain controller</td>
+</tr>
+<tr>
+<td>Port</td>
+<td>389 (LDAP) or 636 (LDAPS)</td>
+</tr>
+<tr>
+<td>Use SSL</td>
+<td>Enable for LDAPS</td>
+</tr>
+<tr>
+<td>Bind DN</td>
+<td>Service account DN: <code>cn=svc-ipam,dc=example,dc=com</code></td>
+</tr>
+<tr>
+<td>Bind Password</td>
+<td>Service account password (stored encrypted if <code>SECRET_KEY</code> env var is set)</td>
+</tr>
+<tr>
+<td>Base DN</td>
+<td>Search root: <code>dc=example,dc=com</code></td>
+</tr>
+<tr>
+<td>User Filter</td>
+<td>LDAP filter with <code>{username}</code> placeholder. Default: <code>(sAMAccountName={username})</code></td>
+</tr>
+<tr>
+<td>Admin/Operator/Readonly Group DN</td>
+<td>Optional — group membership determines role</td>
+</tr>
+<tr>
+<td>Default Role</td>
+<td>Role assigned when no group DN matches</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Role mapping:</strong>
+Groups are checked in order: Admin → Operator → Readonly. The first match wins. If no groups are configured, all LDAP users get the Default Role.</p>
+<p><strong>Local accounts are always preserved.</strong> The <code>admin</code> account created at first startup is a local account and is unaffected by LDAP configuration.</p>
+<hr>
+<h2 id="api-reference">API Reference</h2>
+<p>Interactive API docs are available at <code>/api/docs</code> (Swagger UI) and <code>/api/redoc</code> (ReDoc). All endpoints require a Bearer token.</p>
+<p>Authentication endpoint:</p>
+<pre><code>POST /api/auth/login
+Content-Type: application/x-www-form-urlencoded
+
+username=...&amp;password=...
+</code></pre>
+<p>Returns <code>{ "access_token": "...", "token_type": "bearer" }</code>. Token lifetime is 8 hours by default.</p>
+</body>
+</html>
