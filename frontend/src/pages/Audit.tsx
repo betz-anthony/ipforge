@@ -2,6 +2,7 @@ import { useState, useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { auditApi, type AuditEntry } from '../api/client'
 import SearchInput from '../components/SearchInput'
+import { Skeleton } from '../components/Skeleton'
 
 const RESOURCE_TYPES = ['subnet', 'address', 'dns_record', 'dhcp_reservation']
 
@@ -109,7 +110,13 @@ export default function AuditPage() {
         </div>
       </div>
 
-      {isLoading && <p className="loading">Loading…</p>}
+      {isLoading && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+          {Array.from({ length: 6 }).map((_, i) => (
+            <Skeleton key={i} height="2.25rem" radius="6px" />
+          ))}
+        </div>
+      )}
       {isError   && <p className="feedback-error">Failed to load audit log.</p>}
 
       {!isLoading && visibleEntries.length === 0 && (

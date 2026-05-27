@@ -8,6 +8,7 @@ import {
 } from '../api/client'
 import { ipCompare } from '../utils/ip'
 import SearchInput from '../components/SearchInput'
+import { TableSkeleton } from '../components/Skeleton'
 import { useTableSort } from '../hooks/useTableSort'
 
 export default function Requests() {
@@ -19,7 +20,7 @@ export default function Requests() {
   const { showToast } = useToast()
   const [statusFilter, setStatusFilter] = useState<string>(isOperator ? 'pending' : '')
 
-  const { data: requests = [] } = useQuery({
+  const { data: requests = [], isLoading } = useQuery({
     queryKey: ['ip-requests', statusFilter],
     queryFn: () => ipRequestsApi.list(statusFilter || undefined),
   })
@@ -94,6 +95,7 @@ export default function Requests() {
         />
       </div>
 
+      {isLoading ? <TableSkeleton cols={9} /> : (
       <div className="table-wrap">
         <table>
           <thead>
@@ -146,6 +148,7 @@ export default function Requests() {
           </tbody>
         </table>
       </div>
+      )}
 
       {submitOpen && (
         <SubmitForm

@@ -3,9 +3,10 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Plus, X, Download, Upload } from 'lucide-react'
 import { addressesApi, subnetsApi, dnsApi, dhcpApi, scanHistoryApi, importExportApi, type IPAddress, type ImportResult, type DeletePreview } from '../api/client'
 import { formatRelative } from '../utils/time'
-import { ipCompare } from '../utils/ip'
+import { ipCompare, isValidIPv4, isValidIPv6, isValidEUI48 } from '../utils/ip'
 import DetailDrawer from '../components/DetailDrawer'
 import SearchInput from '../components/SearchInput'
+import { TableSkeleton } from '../components/Skeleton'
 import { useTableSort } from '../hooks/useTableSort'
 import { useToast } from '../contexts/ToastContext'
 import { rowActivation } from '../utils/a11y'
@@ -44,6 +45,8 @@ export default function Addresses() {
   const [importResult, setImportResult] = useState<ImportResult | null>(null)
   const importRef = useRef<HTMLInputElement>(null)
   const [importing, setImporting] = useState(false)
+  const [ipError, setIpError]   = useState('')
+  const [macError, setMacError] = useState('')
 
   const { data: ipDnsRecords } = useQuery({
     queryKey: ['dns-by-ip', selectedAddress?.address],
@@ -414,9 +417,16 @@ export default function Addresses() {
       {showForm && (
         <div className="inline-form">
           <div className="form-grid">
-            <div className="form-field">
+            <div className={`form-field${ipError ? ' form-field-error' : ''}`}>
               <label>IP Address</label>
-              <input placeholder="10.0.1.50" value={form.address} onChange={set('address')} autoFocus />
+              <input
+                placeholder="10.0.1.50"
+                value={form.address}
+                autoFocus
+                onChange={e => { setForm(f => ({ ...f, address: e.target.value })); if (ipError) setIpError('') }}
+                onBlur={() => setIpError(form.address && !isValidIPv4(form.address) && !isValidIPv6(form.address) ? 'Invalid IP address' : '')}
+              />
+              {ipError && <span className="form-field-error-msg">{ipError}</span>}
             </div>
             <div className="form-field">
               <label>Subnet</label>
@@ -437,9 +447,15 @@ export default function Addresses() {
               <label>Hostname</label>
               <input placeholder="Optional" value={form.hostname} onChange={set('hostname')} />
             </div>
-            <div className="form-field">
+            <div className={`form-field${macError ? ' form-field-error' : ''}`}>
               <label>MAC Address</label>
-              <input placeholder="Optional" value={form.mac_address} onChange={set('mac_address')} />
+              <input
+                placeholder="Optional — aa:bb:cc:dd:ee:ff"
+                value={form.mac_address}
+                onChange={e => { setForm(f => ({ ...f, mac_address: e.target.value })); if (macError) setMacError('') }}
+                onBlur={() => setMacError(form.mac_address && !isValidEUI48(form.mac_address) ? 'Invalid MAC — expected e.g. aa:bb:cc:dd:ee:ff' : '')}
+              />
+              {macError && <span className="form-field-error-msg">{macError}</span>}
             </div>
             <div className="form-field">
               <label>Description</label>
@@ -450,7 +466,11 @@ export default function Addresses() {
             <button
               className="btn-primary btn-sm"
               onClick={() => createMutation.mutate()}
-              disabled={createMutation.isPending || !form.address || !form.subnet_id}
+              disabled={
+                createMutation.isPending || !form.address || !form.subnet_id ||
+                (!isValidIPv4(form.address) && !isValidIPv6(form.address)) ||
+                (!!form.mac_address && !isValidEUI48(form.mac_address))
+              }
             >
               {createMutation.isPending ? 'Adding…' : 'Add'}
             </button>
@@ -466,7 +486,7 @@ export default function Addresses() {
         </div>
       )}
 
-      {isLoading && <p className="loading">Loading…</p>}
+      {isLoading && <TableSkeleton cols={7} />}
       {error    && <p className="feedback-error">Failed to load addresses.</p>}
 
       {data && (
@@ -498,7 +518,7 @@ export default function Addresses() {
                 </td></tr>
               )}
               {visibleAddresses.map((a: IPAddress) => (
-                <tr key={a.id} className="clickable" {...rowActivation(() => openDrawer(a))}>
+                <tr key={a.id} className={`clickable${selectedAddress?.id === a.id ? ' row-selected' : ''}`} {...rowActivation(() => openDrawer(a))}>
                   <td><span className="font-mono">{a.address}</span></td>
                   <td>{a.hostname ?? <span className="text-muted">—</span>}</td>
                   <td>

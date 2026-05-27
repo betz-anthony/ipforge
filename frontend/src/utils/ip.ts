@@ -23,6 +23,27 @@ export function isValidEUI64(id: string): boolean {
   return /^([0-9a-fA-F]{2}[:-]){7}[0-9a-fA-F]{2}$/.test(id)
 }
 
+export function isValidCidr(cidr: string): boolean {
+  const [net, bits] = cidr.split('/')
+  if (!net || !bits) return false
+  const prefix = Number(bits)
+  if (!Number.isInteger(prefix)) return false
+  if (net.includes(':')) {
+    if (prefix < 0 || prefix > 128) return false
+    return isValidIPv6(net)
+  }
+  if (prefix < 0 || prefix > 32) return false
+  return isValidIPv4(net)
+}
+
+// RFC 1123: 1–63 chars per label, [a-z0-9-], no leading/trailing hyphen.
+// Accepts single label or FQDN.
+export function isValidHostname(name: string): boolean {
+  if (!name || name.length > 253) return false
+  const labels = name.split('.')
+  return labels.every(l => /^[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?$/.test(l))
+}
+
 export function ipToNum(ip: string): number {
   return ip.split('.').reduce((acc, p) => (acc << 8) + parseInt(p, 10), 0) >>> 0
 }

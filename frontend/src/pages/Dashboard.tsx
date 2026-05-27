@@ -2,10 +2,11 @@ import { useState } from 'react'
 import { useQuery, useMutation } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
 import { Network, List, Server, Globe, Search } from 'lucide-react'
-import { statsApi, dnsApi, dhcpApi, scanApi, subnetsApi, settingsApi, scanAlertsApi, reclaimApi, type Collision } from '../api/client'
+import { statsApi, dnsApi, dhcpApi, scanApi, subnetsApi, settingsApi, scanAlertsApi, reclaimApi, providerConfigsApi, type Collision } from '../api/client'
 import { formatRelative } from '../utils/time'
 import SlidePanel from '../components/SlidePanel'
 import UtilBar from '../components/UtilBar'
+import Banner from '../components/Banner'
 import CollisionResolveDialog from './CollisionResolveDialog'
 
 const TILES = [
@@ -64,8 +65,15 @@ export default function Dashboard() {
     queryFn: reclaimApi.countStale,
   })
 
-  const { data: subnets }      = useQuery({ queryKey: ['subnets'],  queryFn: subnetsApi.list })
-  const { data: settingsData } = useQuery({ queryKey: ['settings'], queryFn: settingsApi.get })
+  const { data: subnets }         = useQuery({ queryKey: ['subnets'],         queryFn: subnetsApi.list })
+  const { data: settingsData }    = useQuery({ queryKey: ['settings'],        queryFn: settingsApi.get })
+  const { data: providerConfigs } = useQuery({ queryKey: ['provider-configs'], queryFn: providerConfigsApi.list })
+
+  const enabledByCategory = (cat: 'dns' | 'dhcp') =>
+    (providerConfigs ?? []).filter(p => p.category === cat && p.enabled)
+  const missingDns  = providerConfigs !== undefined && enabledByCategory('dns').length === 0
+  const missingDhcp = providerConfigs !== undefined && enabledByCategory('dhcp').length === 0
+  const missingList = [missingDns && 'DNS', missingDhcp && 'DHCP'].filter(Boolean).join(' + ')
 
   const warnAt     = settingsData?.util_warn_threshold     ?? 80
   const criticalAt = settingsData?.util_critical_threshold  ?? 95
@@ -85,6 +93,13 @@ export default function Dashboard() {
       <div className="page-header">
         <h1>Dashboard</h1>
       </div>
+
+      {(missingDns || missingDhcp) && (
+        <Banner variant="warning" storageKey={`missing-providers-${missingList}`}>
+          No enabled <strong>{missingList}</strong> provider configured. Records from {missingList} sources won't appear and the allocation API can't register them. {' '}
+          <Link to="/settings">Open Settings → Providers</Link> to add one.
+        </Banner>
+      )}
 
       <p className="section-label">Overview</p>
       <div className="stats-grid">

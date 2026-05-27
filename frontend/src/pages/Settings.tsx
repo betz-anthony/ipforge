@@ -745,7 +745,7 @@ export default function SettingsPage() {
   if (isLoading) return <p className="loading">Loading…</p>
 
   return (
-    <div style={{ maxWidth: '760px' }}>
+    <div style={{ maxWidth: '960px' }}>
       <div className="page-header"><h1>Settings</h1></div>
 
       {/* ── Providers ── */}

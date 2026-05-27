@@ -198,6 +198,10 @@ tbody td {
 }
 tbody tr:last-child td { border-bottom: none; }
 tbody tr:hover td { background: rgba(30, 41, 59, 0.5); }
+tbody tr.row-selected td {
+  background: var(--accent-dim);
+  box-shadow: inset 2px 0 0 var(--accent);
+}
 
 .font-mono { font-family: var(--font-mono); font-size: 0.8rem; }
 .text-muted { color: var(--text-muted); }
@@ -694,3 +698,55 @@ tbody tr.clickable { cursor: pointer; }
   line-height: 1; margin-left: auto; opacity: 0.7;
 }
 .toast-close:hover { opacity: 1; }
+
+/* ── Skeleton loader ─────────────────────────────────── */
+.skeleton {
+  background: linear-gradient(90deg, var(--surface-2) 0%, var(--border) 50%, var(--surface-2) 100%);
+  background-size: 200% 100%;
+  animation: skeleton-shimmer 1.4s ease-in-out infinite;
+}
+@keyframes skeleton-shimmer {
+  0%   { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .skeleton { animation: none; background: var(--surface-2); }
+}
+
+/* ── App banner (config warnings, etc) ───────────────── */
+.app-banner {
+  display: flex; align-items: flex-start; gap: 0.6rem;
+  padding: 0.6rem 0.85rem; margin-bottom: 1.25rem;
+  border-radius: var(--radius); border: 1px solid;
+  font-size: 0.82rem; line-height: 1.4;
+}
+.app-banner-warning {
+  background: rgba(245, 158, 11, 0.08);
+  border-color: rgba(245, 158, 11, 0.35);
+  color: var(--text);
+}
+.app-banner-info {
+  background: rgba(56, 189, 248, 0.08);
+  border-color: rgba(56, 189, 248, 0.35);
+  color: var(--text);
+}
+.app-banner-warning .app-banner-icon { color: var(--warning, #f59e0b); flex-shrink: 0; margin-top: 2px; }
+.app-banner-info .app-banner-icon    { color: var(--accent);            flex-shrink: 0; margin-top: 2px; }
+.app-banner-body { flex: 1; }
+.app-banner-body a { color: var(--accent); text-decoration: underline; }
+.app-banner-close {
+  background: none; border: none; cursor: pointer;
+  color: var(--text-muted); padding: 2px; display: flex;
+  align-items: center; line-height: 0;
+}
+.app-banner-close:hover { color: var(--text); }
+
+/* ── Inline form field validation ────────────────────── */
+.form-field-error > input,
+.form-field-error > select,
+.form-field-error > textarea {
+  border-color: var(--danger, #f87171);
+}
+.form-field-error-msg {
+  font-size: 0.7rem; color: var(--danger, #f87171); margin-top: 0.25rem;
+}

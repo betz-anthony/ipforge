@@ -4,6 +4,7 @@ import { CheckCircle2 } from 'lucide-react'
 import { alertEventsApi, alertChannelsApi } from '../api/client'
 import { useToast } from '../contexts/ToastContext'
 import SearchInput from '../components/SearchInput'
+import { TableSkeleton } from '../components/Skeleton'
 import { useTableSort } from '../hooks/useTableSort'
 
 const TRIGGERS = [
@@ -23,7 +24,7 @@ export default function Alerts() {
   const [state, setState] = useState('')
   const [trigger, setTrigger] = useState('')
 
-  const { data: events = [] } = useQuery({
+  const { data: events = [], isLoading } = useQuery({
     queryKey: ['alert-events', state, trigger],
     queryFn: () => alertEventsApi.list({
       state: state || undefined,
@@ -89,6 +90,7 @@ export default function Alerts() {
         />
       </div>
 
+      {isLoading ? <TableSkeleton cols={6} /> : (
       <table className="data-table">
         <thead>
           <tr>
@@ -131,6 +133,7 @@ export default function Alerts() {
           )}
         </tbody>
       </table>
+      )}
     </div>
   )
 }
