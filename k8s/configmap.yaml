@@ -4,19 +4,14 @@ metadata:
   name: ipforge-config
   namespace: ipforge
 data:
-  MS_WINRM_HOST: ""          # e.g. dc01.corp.example.com
-  MS_WINRM_USER: ""          # e.g. CORP\svc-ipam
-  MS_WINRM_PORT: "5985"
-  MS_WINRM_TRANSPORT: "ntlm"
-  MS_DNS_SERVER: ""          # hostname or IP of DNS server
-  MS_DHCP_SERVER: ""         # hostname or IP of DHCP server
+  # Provider selection only. Hostnames, usernames, URLs, and credentials
+  # for the selected providers live in the ipforge-secret Secret
+  # (see k8s/secret.example.yaml).
   DNS_PROVIDER: "msdns"      # comma-separated: msdns,pihole,bind
   DHCP_PROVIDER: "msdhcp"    # comma-separated: msdhcp,keadhcp
-  PIHOLE_URL: ""
-  BIND_HOST: ""
+  MS_WINRM_TRANSPORT: "ntlm" # non-sensitive WinRM auth scheme: ntlm|kerberos|basic
+  MS_WINRM_PORT: "5985"      # non-sensitive default WinRM port
   BIND_PORT: "53"
-  BIND_TSIG_KEY_NAME: ""
   BIND_TSIG_ALGORITHM: "hmac-sha256"
   BIND_ZONES: ""
-  KEA_URL: ""
   SYNC_MODE: "disabled"      # CronJob handles sync in K8s
