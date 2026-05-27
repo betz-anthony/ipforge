@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Plus, Check, X, Trash2 } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
@@ -6,6 +6,9 @@ import { useToast } from '../contexts/ToastContext'
 import {
   ipRequestsApi, type IPRequest, type IPRequestIn, type ApproveIn, type EligibleSubnet,
 } from '../api/client'
+import { ipCompare } from '../utils/ip'
+import SearchInput from '../components/SearchInput'
+import { useTableSort } from '../hooks/useTableSort'
 
 export default function Requests() {
   const { user } = useAuth()
@@ -24,6 +27,41 @@ export default function Requests() {
   const [submitOpen, setSubmitOpen] = useState(false)
   const [approveTarget, setApproveTarget] = useState<IPRequest | null>(null)
   const [denyTarget, setDenyTarget] = useState<IPRequest | null>(null)
+  const [searchTerm, setSearchTerm] = useState('')
+  const { sortKey, toggleSort, sortIcon, dir } = useTableSort<
+    'requester' | 'subnet' | 'hostname' | 'mac' | 'status' | 'allocated' | 'created'
+  >('created', 'desc')
+
+  const visibleRequests = useMemo(() => {
+    const q = searchTerm.trim().toLowerCase()
+    const filtered = q
+      ? requests.filter(r =>
+          r.requester_username.toLowerCase().includes(q) ||
+          (r.subnet_cidr ?? '').toLowerCase().includes(q) ||
+          r.hostname.toLowerCase().includes(q) ||
+          (r.mac_address ?? '').toLowerCase().includes(q) ||
+          r.purpose.toLowerCase().includes(q) ||
+          (r.allocated_ip ?? '').toLowerCase().includes(q)
+        )
+      : requests.slice()
+    const cmp = (a: IPRequest, b: IPRequest) => {
+      switch (sortKey) {
+        case 'requester': return a.requester_username.localeCompare(b.requester_username) * dir
+        case 'subnet':    return (a.subnet_cidr ?? '').localeCompare(b.subnet_cidr ?? '') * dir
+        case 'hostname':  return a.hostname.localeCompare(b.hostname) * dir
+        case 'mac':       return (a.mac_address ?? '').localeCompare(b.mac_address ?? '') * dir
+        case 'status':    return a.status.localeCompare(b.status) * dir
+        case 'allocated': {
+          if (!a.allocated_ip && !b.allocated_ip) return 0
+          if (!a.allocated_ip) return 1
+          if (!b.allocated_ip) return -1
+          return ipCompare(a.allocated_ip, b.allocated_ip) * dir
+        }
+        case 'created':   return a.created_at.localeCompare(b.created_at) * dir
+      }
+    }
+    return filtered.sort(cmp)
+  }, [requests, searchTerm, sortKey, dir])
 
   const del = useMutation({
     mutationFn: (id: number) => ipRequestsApi.delete(id),
@@ -42,28 +80,42 @@ export default function Requests() {
         )}
       </div>
 
-      <div style={{ marginBottom: '0.75rem' }}>
+      <div style={{ marginBottom: '0.75rem', display: 'flex', gap: '0.5rem', alignItems: 'center', justifyContent: 'space-between' }}>
         <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)}>
           <option value="">All statuses</option>
           <option value="pending">Pending</option>
           <option value="approved">Approved</option>
           <option value="denied">Denied</option>
         </select>
+        <SearchInput
+          value={searchTerm}
+          onChange={setSearchTerm}
+          placeholder="Search requester, host, IP…"
+        />
       </div>
 
       <div className="table-wrap">
         <table>
           <thead>
             <tr>
-              <th>Requester</th><th>Subnet</th><th>Hostname</th><th>MAC</th>
-              <th>Purpose</th><th>Status</th><th>Allocated</th><th>Submitted</th><th></th>
+              <th className="th-sortable" onClick={() => toggleSort('requester')}><span>Requester {sortIcon('requester')}</span></th>
+              <th className="th-sortable" onClick={() => toggleSort('subnet')}><span>Subnet {sortIcon('subnet')}</span></th>
+              <th className="th-sortable" onClick={() => toggleSort('hostname')}><span>Hostname {sortIcon('hostname')}</span></th>
+              <th className="th-sortable" onClick={() => toggleSort('mac')}><span>MAC {sortIcon('mac')}</span></th>
+              <th>Purpose</th>
+              <th className="th-sortable" onClick={() => toggleSort('status')}><span>Status {sortIcon('status')}</span></th>
+              <th className="th-sortable" onClick={() => toggleSort('allocated')}><span>Allocated {sortIcon('allocated')}</span></th>
+              <th className="th-sortable" onClick={() => toggleSort('created')}><span>Submitted {sortIcon('created')}</span></th>
+              <th></th>
             </tr>
           </thead>
           <tbody>
-            {requests.length === 0 && (
-              <tr><td colSpan={9} className="empty-state">No requests.</td></tr>
+            {visibleRequests.length === 0 && (
+              <tr><td colSpan={9} className="empty-state">
+                {requests.length === 0 ? 'No requests.' : 'No requests match search.'}
+              </td></tr>
             )}
-            {requests.map(r => (
+            {visibleRequests.map(r => (
               <tr key={r.id}>
                 <td>{r.requester_username}</td>
                 <td><span className="font-mono">{r.subnet_cidr ?? '—'}</span></td>

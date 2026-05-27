@@ -2,12 +2,14 @@ import { useState, useMemo, useEffect, useRef } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Plus, X, Scan, AlertTriangle, GitBranch, Download, Upload } from 'lucide-react'
 import { subnetsApi, dhcpApi, addressesApi, scanApi, settingsApi, importExportApi, grantsApi, groupsApi, usersApi, type Subnet, type DHCPScope, type Collision, type ImportResult } from '../api/client'
-import { ipInCidr } from '../utils/ip'
+import { ipInCidr, ipCompare } from '../utils/ip'
 import DetailDrawer from '../components/DetailDrawer'
 import UtilBar from '../components/UtilBar'
 import CollisionResolveDialog from './CollisionResolveDialog'
 import SubnetTree from './SubnetTree'
 import ConfirmModal from '../components/ConfirmModal'
+import SearchInput from '../components/SearchInput'
+import { useTableSort } from '../hooks/useTableSort'
 import { useToast } from '../contexts/ToastContext'
 import { useAuth } from '../contexts/AuthContext'
 import { rowActivation } from '../utils/a11y'
@@ -205,6 +207,35 @@ export default function Subnets() {
     queryKey: ['subnets'],
     queryFn: subnetsApi.list,
   })
+
+  const [searchTerm, setSearchTerm] = useState('')
+  const { sortKey, toggleSort, sortIcon, dir } = useTableSort<
+    'name' | 'cidr' | 'ip_version' | 'vlan' | 'description' | 'utilization'
+  >('cidr')
+
+  const visibleSubnets = useMemo(() => {
+    if (!data) return []
+    const q = searchTerm.trim().toLowerCase()
+    const filtered = q
+      ? data.filter((s: Subnet) =>
+          s.name.toLowerCase().includes(q) ||
+          s.cidr.toLowerCase().includes(q) ||
+          (s.description ?? '').toLowerCase().includes(q) ||
+          (s.vlan_id != null && String(s.vlan_id).includes(q))
+        )
+      : data.slice()
+    const cmp = (a: Subnet, b: Subnet) => {
+      switch (sortKey) {
+        case 'name':        return a.name.localeCompare(b.name) * dir
+        case 'cidr':        return ipCompare(a.cidr.split('/')[0], b.cidr.split('/')[0]) * dir
+        case 'ip_version':  return (a.ip_version - b.ip_version) * dir
+        case 'vlan':        return ((a.vlan_id ?? Number.MAX_SAFE_INTEGER) - (b.vlan_id ?? Number.MAX_SAFE_INTEGER)) * dir
+        case 'description': return (a.description ?? '').localeCompare(b.description ?? '') * dir
+        case 'utilization': return (a.utilization_pct - b.utilization_pct) * dir
+      }
+    }
+    return filtered.sort(cmp)
+  }, [data, searchTerm, sortKey, dir])
 
   const createMutation = useMutation({
     mutationFn: () => subnetsApi.create({
@@ -664,24 +695,34 @@ export default function Subnets() {
       {error    && <p className="feedback-error">Failed to load subnets.</p>}
 
       {data && !treeView && (
-        <div className="table-wrap">
+        <>
+          <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '0.5rem' }}>
+            <SearchInput
+              value={searchTerm}
+              onChange={setSearchTerm}
+              placeholder="Search name, CIDR, VLAN…"
+            />
+          </div>
+          <div className="table-wrap">
           <table>
             <thead>
               <tr>
-                <th>Name</th>
-                <th>CIDR</th>
-                <th>Version</th>
-                <th>VLAN</th>
-                <th>Description</th>
-                <th>Utilization</th>
+                <th className="th-sortable" onClick={() => toggleSort('name')}><span>Name {sortIcon('name')}</span></th>
+                <th className="th-sortable" onClick={() => toggleSort('cidr')}><span>CIDR {sortIcon('cidr')}</span></th>
+                <th className="th-sortable" onClick={() => toggleSort('ip_version')}><span>Version {sortIcon('ip_version')}</span></th>
+                <th className="th-sortable" onClick={() => toggleSort('vlan')}><span>VLAN {sortIcon('vlan')}</span></th>
+                <th className="th-sortable" onClick={() => toggleSort('description')}><span>Description {sortIcon('description')}</span></th>
+                <th className="th-sortable" onClick={() => toggleSort('utilization')}><span>Utilization {sortIcon('utilization')}</span></th>
                 <th style={{ width: '2.5rem' }}></th>
               </tr>
             </thead>
             <tbody>
-              {data.length === 0 && (
-                <tr><td colSpan={7} className="empty-state">No subnets defined. Add one above.</td></tr>
+              {visibleSubnets.length === 0 && (
+                <tr><td colSpan={7} className="empty-state">
+                  {data.length === 0 ? 'No subnets defined. Add one above.' : 'No subnets match search.'}
+                </td></tr>
               )}
-              {data.map((s: Subnet) => {
+              {visibleSubnets.map((s: Subnet) => {
                 const collisionCount = collisionCountForSubnet(s)
                 return (
                 <tr key={s.id} className="clickable" {...rowActivation(() => openDrawer(s))}>
@@ -721,7 +762,8 @@ export default function Subnets() {
               )})}
             </tbody>
           </table>
-        </div>
+          </div>
+        </>
       )}
 
       {data && treeView && (

@@ -1,6 +1,7 @@
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { auditApi, type AuditEntry } from '../api/client'
+import SearchInput from '../components/SearchInput'
 
 const RESOURCE_TYPES = ['subnet', 'address', 'dns_record', 'dhcp_reservation']
 
@@ -48,6 +49,7 @@ export default function AuditPage() {
   const [fromDate,   setFromDate]   = useState('')
   const [toDate,     setToDate]     = useState('')
   const [expanded,   setExpanded]   = useState<number | null>(null)
+  const [searchTerm, setSearchTerm] = useState('')
 
   const { data: entries = [], isLoading, isError } = useQuery({
     queryKey: ['audit', filterType, filterUser, fromDate, toDate],
@@ -59,6 +61,18 @@ export default function AuditPage() {
       limit: 200,
     }),
   })
+
+  const visibleEntries = useMemo(() => {
+    const q = searchTerm.trim().toLowerCase()
+    if (!q) return entries
+    return entries.filter((e: AuditEntry) =>
+      (e.summary ?? '').toLowerCase().includes(q) ||
+      e.resource_type.toLowerCase().includes(q) ||
+      e.action.toLowerCase().includes(q) ||
+      e.username.toLowerCase().includes(q) ||
+      String(e.resource_id).includes(q)
+    )
+  }, [entries, searchTerm])
 
   return (
     <div style={{ maxWidth: '1000px' }}>
@@ -85,16 +99,26 @@ export default function AuditPage() {
           <label>To</label>
           <input type="date" value={toDate} onChange={e => setToDate(e.target.value)} />
         </div>
+        <div className="form-field" style={{ margin: 0, marginLeft: 'auto' }}>
+          <label>Search</label>
+          <SearchInput
+            value={searchTerm}
+            onChange={setSearchTerm}
+            placeholder="Search summary, action…"
+          />
+        </div>
       </div>
 
       {isLoading && <p className="loading">Loading…</p>}
       {isError   && <p className="feedback-error">Failed to load audit log.</p>}
 
-      {!isLoading && entries.length === 0 && (
-        <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>No entries found.</p>
+      {!isLoading && visibleEntries.length === 0 && (
+        <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>
+          {entries.length === 0 ? 'No entries found.' : 'No entries match search.'}
+        </p>
       )}
 
-      {entries.map((e: AuditEntry) => (
+      {visibleEntries.map((e: AuditEntry) => (
         <div
           key={e.id}
           style={{

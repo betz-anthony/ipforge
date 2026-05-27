@@ -1,8 +1,10 @@
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { CheckCircle2 } from 'lucide-react'
 import { alertEventsApi, alertChannelsApi } from '../api/client'
 import { useToast } from '../contexts/ToastContext'
+import SearchInput from '../components/SearchInput'
+import { useTableSort } from '../hooks/useTableSort'
 
 const TRIGGERS = [
   { value: '',             label: 'All triggers' },
@@ -45,26 +47,61 @@ export default function Alerts() {
 
   const chName = (id: number) => channels.find(c => c.id === id)?.name ?? `#${id}`
 
+  const [searchTerm, setSearchTerm] = useState('')
+  const { sortKey, toggleSort, sortIcon, dir } = useTableSort<
+    'state' | 'resource' | 'first' | 'last'
+  >('last', 'desc')
+
+  const visibleEvents = useMemo(() => {
+    const q = searchTerm.trim().toLowerCase()
+    const filtered = q
+      ? events.filter(e => e.resource_key.toLowerCase().includes(q) || e.state.toLowerCase().includes(q))
+      : events.slice()
+    const cmp = (a: typeof events[number], b: typeof events[number]) => {
+      switch (sortKey) {
+        case 'state':    return a.state.localeCompare(b.state) * dir
+        case 'resource': return a.resource_key.localeCompare(b.resource_key) * dir
+        case 'first':    return (a.first_fired_at ?? '').localeCompare(b.first_fired_at ?? '') * dir
+        case 'last':     return (a.last_fired_at ?? '').localeCompare(b.last_fired_at ?? '') * dir
+      }
+    }
+    return filtered.sort(cmp)
+  }, [events, searchTerm, sortKey, dir])
+
   return (
     <div>
       <h1 className="page-title">Alerts</h1>
-      <div className="filters" style={{ marginBottom: '1rem', display: 'flex', gap: '0.5rem' }}>
-        <select value={state} onChange={e => setState(e.target.value)}>
-          <option value="">All states</option>
-          <option value="firing">Firing</option>
-          <option value="resolved">Resolved</option>
-        </select>
-        <select value={trigger} onChange={e => setTrigger(e.target.value)}>
-          {TRIGGERS.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
-        </select>
+      <div className="filters" style={{ marginBottom: '1rem', display: 'flex', gap: '0.5rem', alignItems: 'center', justifyContent: 'space-between' }}>
+        <div style={{ display: 'flex', gap: '0.5rem' }}>
+          <select value={state} onChange={e => setState(e.target.value)}>
+            <option value="">All states</option>
+            <option value="firing">Firing</option>
+            <option value="resolved">Resolved</option>
+          </select>
+          <select value={trigger} onChange={e => setTrigger(e.target.value)}>
+            {TRIGGERS.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
+          </select>
+        </div>
+        <SearchInput
+          value={searchTerm}
+          onChange={setSearchTerm}
+          placeholder="Search resource…"
+        />
       </div>
 
       <table className="data-table">
         <thead>
-          <tr><th>State</th><th>Resource</th><th>First fired</th><th>Last fired</th><th>Deliveries</th><th></th></tr>
+          <tr>
+            <th className="th-sortable" onClick={() => toggleSort('state')}><span>State {sortIcon('state')}</span></th>
+            <th className="th-sortable" onClick={() => toggleSort('resource')}><span>Resource {sortIcon('resource')}</span></th>
+            <th className="th-sortable" onClick={() => toggleSort('first')}><span>First fired {sortIcon('first')}</span></th>
+            <th className="th-sortable" onClick={() => toggleSort('last')}><span>Last fired {sortIcon('last')}</span></th>
+            <th>Deliveries</th>
+            <th></th>
+          </tr>
         </thead>
         <tbody>
-          {events.map(e => (
+          {visibleEvents.map(e => (
             <tr key={e.id}>
               <td><span className={e.state === 'firing' ? 'badge badge-red' : 'badge badge-green'}>{e.state}</span></td>
               <td>{e.resource_key}</td>
@@ -87,8 +124,10 @@ export default function Alerts() {
               </td>
             </tr>
           ))}
-          {events.length === 0 && (
-            <tr><td colSpan={6} style={{ textAlign: 'center', color: 'var(--text-muted)' }}>No alerts.</td></tr>
+          {visibleEvents.length === 0 && (
+            <tr><td colSpan={6} style={{ textAlign: 'center', color: 'var(--text-muted)' }}>
+              {events.length === 0 ? 'No alerts.' : 'No alerts match search.'}
+            </td></tr>
           )}
         </tbody>
       </table>
