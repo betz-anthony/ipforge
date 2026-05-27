@@ -1,4 +1,6 @@
 # Requires an Ingress controller (nginx-ingress, Traefik, etc.)
+# TLS via wildcard *.example.com cert in ingress-nginx namespace,
+# auto-reflected here by emberstack/kubernetes-reflector.
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
@@ -6,11 +8,12 @@ metadata:
   namespace: ipforge
   annotations:
     nginx.ingress.kubernetes.io/proxy-read-timeout: "120"
-    # cert-manager.io/cluster-issuer: letsencrypt-prod  # uncomment for TLS
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
 spec:
-  # tls:                                                 # uncomment for TLS
-  #   - hosts: [ipforge.example.com]
-  #     secretName: ipforge-tls
+  ingressClassName: nginx
+  tls:
+    - hosts: [ipforge.example.com]
+      secretName: wildcard-tls
   rules:
     - host: ipforge.example.com  # replace with your hostname
       http:
