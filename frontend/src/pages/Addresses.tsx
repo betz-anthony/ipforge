@@ -1,9 +1,12 @@
-import { useState, useRef } from 'react'
+import { useState, useRef, useMemo } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Plus, X, Download, Upload } from 'lucide-react'
 import { addressesApi, subnetsApi, dnsApi, dhcpApi, scanHistoryApi, importExportApi, type IPAddress, type ImportResult, type DeletePreview } from '../api/client'
 import { formatRelative } from '../utils/time'
+import { ipCompare } from '../utils/ip'
 import DetailDrawer from '../components/DetailDrawer'
+import SearchInput from '../components/SearchInput'
+import { useTableSort } from '../hooks/useTableSort'
 import { useToast } from '../contexts/ToastContext'
 import { rowActivation } from '../utils/a11y'
 
@@ -143,10 +146,41 @@ export default function Addresses() {
     })
   }
 
-  const filtered = (data ?? []).filter(a =>
-    (filterStatus === '' || a.status === filterStatus) &&
-    (filterSubnet === '' || a.subnet_id === filterSubnet)
-  )
+  const [searchTerm, setSearchTerm] = useState('')
+  const { sortKey, toggleSort, sortIcon, dir } = useTableSort<
+    'address' | 'hostname' | 'status' | 'mac' | 'description' | 'last_seen'
+  >('address')
+
+  const visibleAddresses = useMemo(() => {
+    const base = (data ?? []).filter(a =>
+      (filterStatus === '' || a.status === filterStatus) &&
+      (filterSubnet === '' || a.subnet_id === filterSubnet)
+    )
+    const q = searchTerm.trim().toLowerCase()
+    const filtered = q
+      ? base.filter(a =>
+          a.address.toLowerCase().includes(q) ||
+          (a.hostname ?? '').toLowerCase().includes(q) ||
+          (a.mac_address ?? '').toLowerCase().includes(q) ||
+          (a.description ?? '').toLowerCase().includes(q)
+        )
+      : base.slice()
+    const cmp = (a: IPAddress, b: IPAddress) => {
+      switch (sortKey) {
+        case 'address':     return ipCompare(a.address, b.address) * dir
+        case 'hostname':    return (a.hostname ?? '').localeCompare(b.hostname ?? '') * dir
+        case 'status':      return a.status.localeCompare(b.status) * dir
+        case 'mac':         return (a.mac_address ?? '').localeCompare(b.mac_address ?? '') * dir
+        case 'description': return (a.description ?? '').localeCompare(b.description ?? '') * dir
+        case 'last_seen': {
+          const av = a.last_seen ? new Date(a.last_seen).getTime() : 0
+          const bv = b.last_seen ? new Date(b.last_seen).getTime() : 0
+          return (av - bv) * dir
+        }
+      }
+    }
+    return filtered.sort(cmp)
+  }, [data, filterStatus, filterSubnet, searchTerm, sortKey, dir])
 
   const SOURCE_LABEL: Record<string, string> = {
     msdhcp: 'MS DHCP', pihole: 'Pi-hole', keadhcp: 'Kea',
@@ -436,26 +470,34 @@ export default function Addresses() {
       {error    && <p className="feedback-error">Failed to load addresses.</p>}
 
       {data && (
-        <div className="table-wrap">
+        <>
+          <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '0.5rem' }}>
+            <SearchInput
+              value={searchTerm}
+              onChange={setSearchTerm}
+              placeholder="Search IP, hostname, MAC…"
+            />
+          </div>
+          <div className="table-wrap">
           <table>
             <thead>
               <tr>
-                <th>Address</th>
-                <th>Hostname</th>
-                <th>Status</th>
-                <th>MAC</th>
-                <th>Description</th>
-                <th>Last Seen</th>
+                <th className="th-sortable" onClick={() => toggleSort('address')}><span>Address {sortIcon('address')}</span></th>
+                <th className="th-sortable" onClick={() => toggleSort('hostname')}><span>Hostname {sortIcon('hostname')}</span></th>
+                <th className="th-sortable" onClick={() => toggleSort('status')}><span>Status {sortIcon('status')}</span></th>
+                <th className="th-sortable" onClick={() => toggleSort('mac')}><span>MAC {sortIcon('mac')}</span></th>
+                <th className="th-sortable" onClick={() => toggleSort('description')}><span>Description {sortIcon('description')}</span></th>
+                <th className="th-sortable" onClick={() => toggleSort('last_seen')}><span>Last Seen {sortIcon('last_seen')}</span></th>
                 <th style={{ width: '2.5rem' }}></th>
               </tr>
             </thead>
             <tbody>
-              {filtered.length === 0 && (
+              {visibleAddresses.length === 0 && (
                 <tr><td colSpan={7} className="empty-state">
                   {data?.length === 0 ? 'No addresses tracked. Add one above.' : 'No addresses match filters.'}
                 </td></tr>
               )}
-              {filtered.map((a: IPAddress) => (
+              {visibleAddresses.map((a: IPAddress) => (
                 <tr key={a.id} className="clickable" {...rowActivation(() => openDrawer(a))}>
                   <td><span className="font-mono">{a.address}</span></td>
                   <td>{a.hostname ?? <span className="text-muted">—</span>}</td>
@@ -495,7 +537,8 @@ export default function Addresses() {
               ))}
             </tbody>
           </table>
-        </div>
+          </div>
+        </>
       )}
 
       {deletePreview && deletingId !== null && (
