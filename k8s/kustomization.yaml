@@ -2,10 +2,13 @@ apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 
 # All IPForge manifests, applied as one unit with `kubectl apply -k k8s/`.
+# NOTE: secret.example.yaml is intentionally NOT a resource. The Secret
+# `ipforge-secret` must be created/maintained out-of-band (via kubectl
+# patch, Sealed Secrets, or ExternalSecrets) so CI deploys do not
+# overwrite live credentials with empty placeholders.
 resources:
   - namespace.yaml
   - configmap.yaml
-  - secret.yaml
   - postgres/pvc.yaml
   - postgres/service.yaml
   - postgres/statefulset.yaml
