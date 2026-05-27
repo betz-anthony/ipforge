@@ -2,13 +2,14 @@ import { useState, useMemo, useEffect, useRef } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Plus, X, Scan, AlertTriangle, GitBranch, Download, Upload } from 'lucide-react'
 import { subnetsApi, dhcpApi, addressesApi, scanApi, settingsApi, importExportApi, grantsApi, groupsApi, usersApi, type Subnet, type DHCPScope, type Collision, type ImportResult } from '../api/client'
-import { ipInCidr, ipCompare } from '../utils/ip'
+import { ipInCidr, ipCompare, isValidCidr } from '../utils/ip'
 import DetailDrawer from '../components/DetailDrawer'
 import UtilBar from '../components/UtilBar'
 import CollisionResolveDialog from './CollisionResolveDialog'
 import SubnetTree from './SubnetTree'
 import ConfirmModal from '../components/ConfirmModal'
 import SearchInput from '../components/SearchInput'
+import { TableSkeleton } from '../components/Skeleton'
 import { useTableSort } from '../hooks/useTableSort'
 import { useToast } from '../contexts/ToastContext'
 import { useAuth } from '../contexts/AuthContext'
@@ -94,6 +95,7 @@ export default function Subnets() {
   const [importResult, setImportResult] = useState<ImportResult | null>(null)
   const importRef = useRef<HTMLInputElement>(null)
   const [importing, setImporting] = useState(false)
+  const [cidrError, setCidrError] = useState('')
 
   const [formParentId, setFormParentId]                 = useState<number | null>(null)
   const [parentCandidates, setParentCandidates]         = useState<Subnet[]>([])
@@ -624,9 +626,15 @@ export default function Subnets() {
               <label>Name</label>
               <input placeholder="Server Network" value={form.name} onChange={set('name')} autoFocus />
             </div>
-            <div className="form-field">
+            <div className={`form-field${cidrError ? ' form-field-error' : ''}`}>
               <label>CIDR</label>
-              <input placeholder="10.0.1.0/24" value={form.cidr} onChange={set('cidr')} />
+              <input
+                placeholder="10.0.1.0/24"
+                value={form.cidr}
+                onChange={e => { setForm(f => ({ ...f, cidr: e.target.value })); if (cidrError) setCidrError('') }}
+                onBlur={() => setCidrError(form.cidr && !isValidCidr(form.cidr) ? 'Invalid CIDR — expected e.g. 10.0.1.0/24' : '')}
+              />
+              {cidrError && <span className="form-field-error-msg">{cidrError}</span>}
             </div>
             <div className="form-field">
               <label>VLAN ID</label>
@@ -675,7 +683,7 @@ export default function Subnets() {
             <button
               className="btn-primary btn-sm"
               onClick={() => createMutation.mutate()}
-              disabled={createMutation.isPending || !form.name || !form.cidr}
+              disabled={createMutation.isPending || !form.name || !form.cidr || !isValidCidr(form.cidr)}
             >
               {createMutation.isPending ? 'Adding…' : 'Add'}
             </button>
@@ -691,7 +699,7 @@ export default function Subnets() {
         </div>
       )}
 
-      {isLoading && <p className="loading">Loading…</p>}
+      {isLoading && <TableSkeleton cols={7} />}
       {error    && <p className="feedback-error">Failed to load subnets.</p>}
 
       {data && !treeView && (
@@ -725,7 +733,7 @@ export default function Subnets() {
               {visibleSubnets.map((s: Subnet) => {
                 const collisionCount = collisionCountForSubnet(s)
                 return (
-                <tr key={s.id} className="clickable" {...rowActivation(() => openDrawer(s))}>
+                <tr key={s.id} className={`clickable${selectedSubnet?.id === s.id ? ' row-selected' : ''}`} {...rowActivation(() => openDrawer(s))}>
                   <td>
                     <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                       {s.name}
