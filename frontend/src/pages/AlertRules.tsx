@@ -6,6 +6,7 @@ import {
   type AlertRule, type AlertRuleIn, type AlertChannel,
 } from '../api/client'
 import { useToast } from '../contexts/ToastContext'
+import Collapsible from '../components/Collapsible'
 
 const TRIGGERS = [
   { value: 'collision',    label: 'Collision detected' },
@@ -68,11 +69,14 @@ export default function AlertRules() {
   const channelName = (id: number) => channels.find((c: AlertChannel) => c.id === id)?.name ?? `#${id}`
 
   return (
-    <div>
-      <div className="settings-section-title" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <span>Alert Rules</span>
+    <Collapsible
+      title="Alert Rules"
+      storageKey="alert-rules"
+      defaultOpen={false}
+      headerExtra={
         <button className="btn-primary btn-sm" onClick={startNew}><Plus size={13} /> Add Rule</button>
-      </div>
+      }
+    >
       <table className="data-table" style={{ width: '100%', fontSize: '0.82rem' }}>
         <thead>
           <tr><th>Name</th><th>Trigger</th><th>Channels</th><th>Re-notify</th><th>Enabled</th><th></th></tr>
@@ -192,6 +196,6 @@ export default function AlertRules() {
           </div>
         </div>
       )}
-    </div>
+    </Collapsible>
   )
 }
