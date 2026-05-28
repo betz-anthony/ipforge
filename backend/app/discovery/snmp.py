@@ -28,15 +28,10 @@ class SnmpDiscovery(DiscoverySource):
         self._cfg = cfg
 
     # ── network layer (mocked in tests) ──────────────────────────────────────
-    def _walk(self, oid: str) -> list[tuple[str, object]]:
-        """Return [(index_suffix, decoded_value)] for an OID subtree.
-
-        ARP values are decoded to 'aa:bb:..' mac strings; fdb/baseport to int;
-        ifName to str.
-        """
-        from pysnmp.hlapi import (  # imported lazily so tests need no pysnmp
-            SnmpEngine, CommunityData, UsmUserData, UdpTransportTarget,
-            ContextData, ObjectType, ObjectIdentity, nextCmd,
+    def _auth_data(self):
+        # pysnmp 6.x async hlapi (lextudio). Classic sync pysnmp.hlapi was removed.
+        from pysnmp.hlapi.asyncio import (
+            CommunityData, UsmUserData,
             usmHMACSHAAuthProtocol, usmHMACMD5AuthProtocol,
             usmAesCfb128Protocol, usmDESPrivProtocol, usmNoAuthProtocol, usmNoPrivProtocol,
         )
@@ -45,32 +40,52 @@ class SnmpDiscovery(DiscoverySource):
                 self._cfg.get("auth_protocol"), usmNoAuthProtocol)
             priv = {"AES": usmAesCfb128Protocol, "DES": usmDESPrivProtocol}.get(
                 self._cfg.get("priv_protocol"), usmNoPrivProtocol)
-            auth_data = UsmUserData(
+            return UsmUserData(
                 self._cfg.get("v3_user", ""),
                 authKey=self._cfg.get("auth_key") or None,
                 privKey=self._cfg.get("priv_key") or None,
                 authProtocol=auth, privProtocol=priv,
             )
-        else:
-            auth_data = CommunityData(self._cfg.get("community", "public"))
+        return CommunityData(self._cfg.get("community", "public"))  # mpModel=1 (v2c) by default
+
+    def _decode(self, oid: str, name, val) -> tuple[str, object]:
+        suffix = str(name)[len(oid) + 1:]
+        if oid == OID_ARP:
+            return suffix, val.asOctets().hex(":")
+        if oid == OID_IFNAME:
+            return suffix, str(val)
+        return suffix, int(val)
+
+    def _walk(self, oid: str) -> list[tuple[str, object]]:
+        """Return [(index_suffix, decoded_value)] for an OID subtree.
+
+        ARP values decode to 'aa:bb:..' mac strings; fdb/baseport to int;
+        ifName to str. Uses the pysnmp 6.x asyncio hlapi, driven synchronously.
+        """
+        import asyncio
+        return asyncio.run(self._awalk(oid))
+
+    async def _awalk(self, oid: str) -> list[tuple[str, object]]:
+        from pysnmp.hlapi.asyncio import (
+            SnmpEngine, UdpTransportTarget, ContextData,
+            ObjectType, ObjectIdentity, walkCmd,
+        )
+        # Transport construction became an async classmethod in pysnmp 6.1+.
+        try:
+            transport = await UdpTransportTarget.create((self._host, 161), timeout=2, retries=1)
+        except AttributeError:
+            transport = UdpTransportTarget((self._host, 161), timeout=2, retries=1)
 
         out: list[tuple[str, object]] = []
-        for (err, status, _idx, binds) in nextCmd(
-            SnmpEngine(), auth_data,
-            UdpTransportTarget((self._host, 161), timeout=2, retries=1),
-            ContextData(), ObjectType(ObjectIdentity(oid)), lexicographicMode=False,
+        async for (err, status, _idx, binds) in walkCmd(
+            SnmpEngine(), self._auth_data(), transport, ContextData(),
+            ObjectType(ObjectIdentity(oid)), lexicographicMode=False,
         ):
             if err or status:
                 logger.warning("SNMP walk %s on %s: %s", oid, self._host, err or status)
                 break
             for name, val in binds:
-                suffix = str(name)[len(oid) + 1:]
-                if oid == OID_ARP:
-                    out.append((suffix, val.asOctets().hex(":")))
-                elif oid == OID_IFNAME:
-                    out.append((suffix, str(val)))
-                else:
-                    out.append((suffix, int(val)))
+                out.append(self._decode(oid, name, val))
         return out
 
     # ── merge logic (pure; unit-tested) ──────────────────────────────────────
