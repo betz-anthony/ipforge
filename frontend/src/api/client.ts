@@ -385,6 +385,29 @@ export const addressesApi = {
     api.get<DeletePreview>(`/addresses/${id}/delete-preview`).then(r => r.data),
   deleteWithCleanup: (id: number, cleanupKeys: string[]) =>
     api.delete(`/addresses/${id}`, { data: { cleanup_keys: cleanupKeys } }),
+  history: (id: number) => api.get<AddressHistory>(`/addresses/${id}/history`).then(r => r.data),
+  historyByIp: (ip: string, asOf?: string) =>
+    api.get<AddressHistory>(`/addresses/by-ip/${encodeURIComponent(ip)}/history`,
+      { params: asOf ? { as_of: asOf } : {} }).then(r => r.data),
+}
+
+export interface TimelineEvent {
+  ts: string | null
+  kind: 'change' | 'drift' | 'reachability'
+  action?: string
+  user?: string
+  before?: Record<string, unknown> | null
+  after?: Record<string, unknown> | null
+  category?: string
+  severity?: string
+  resolved?: boolean
+  event_type?: string
+}
+
+export interface AddressHistory {
+  ip: string
+  timeline: TimelineEvent[]
+  point_in_time?: Record<string, unknown> | null
 }
 
 export interface DHCPScope {

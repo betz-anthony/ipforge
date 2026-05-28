@@ -77,6 +77,16 @@ export default function Addresses() {
     retry: false,
   })
 
+  const [asOf, setAsOf] = useState('')
+  const { data: history } = useQuery({
+    queryKey: ['addr-history', selectedAddress?.id, asOf],
+    queryFn: () => selectedAddress!.address && asOf
+      ? addressesApi.historyByIp(selectedAddress!.address, asOf)
+      : addressesApi.history(selectedAddress!.id),
+    enabled: !!selectedAddress,
+    retry: false,
+  })
+
   const { data: scanHistory } = useQuery({
     queryKey: ['scan-history', selectedAddress?.id],
     queryFn: () => scanHistoryApi.list(selectedAddress!.id),
@@ -223,6 +233,42 @@ export default function Addresses() {
               </span>
             </div>
           ))}
+        </div>
+      )}
+      {history && (
+        <div style={{ marginBottom: '1rem' }}>
+          <div className="detail-section-title" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span>History</span>
+            <input type="date" value={asOf} onChange={e => setAsOf(e.target.value)}
+              title="Reconstruct state as of this date"
+              style={{ fontSize: '0.7rem', padding: '0.1rem 0.3rem' }} />
+          </div>
+          {asOf && history.point_in_time && (
+            <div style={{ fontSize: '0.78rem', padding: '0.4rem', background: 'var(--surface-2)', borderRadius: 4, margin: '0.4rem 0' }}>
+              As of {asOf}: <strong>{String((history.point_in_time as any).state)}</strong>
+              {(history.point_in_time as any).hostname && ` · ${(history.point_in_time as any).hostname}`}
+              {(history.point_in_time as any).status && ` · ${(history.point_in_time as any).status}`}
+            </div>
+          )}
+          {asOf && history.point_in_time === null && (
+            <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', margin: '0.4rem 0' }}>No record as of {asOf}.</div>
+          )}
+          {history.timeline.length === 0 ? (
+            <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', margin: '0.4rem 0' }}>No history.</p>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem', marginTop: '0.4rem' }}>
+              {history.timeline.slice(0, 50).map((e, i) => (
+                <div key={i} style={{ fontSize: '0.76rem', display: 'flex', gap: '0.5rem' }}>
+                  <span style={{ color: 'var(--text-muted)', minWidth: 130 }}>{e.ts ? new Date(e.ts).toLocaleString() : ''}</span>
+                  <span>
+                    {e.kind === 'change' && <><span className="badge badge-blue">{e.action}</span> {e.user && <span style={{ color: 'var(--text-muted)' }}>by {e.user}</span>}</>}
+                    {e.kind === 'drift' && <><span className="badge badge-yellow">drift</span> {e.category}</>}
+                    {e.kind === 'reachability' && <><span className={`badge ${e.event_type === 'came_back' ? 'badge-green' : 'badge-red'}`}>{e.event_type}</span></>}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
       {scanHistory && scanHistory.length > 0 && (() => {
