@@ -54,6 +54,7 @@ class SubnetWithStats(SubnetRead):
     used_count: int
     total_count: int
     utilization_pct: float
+    reserved_count: int = 0
     rollup_used_count: int = 0
     rollup_total_count: int = 0
     rollup_utilization_pct: float = 0.0

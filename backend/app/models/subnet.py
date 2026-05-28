@@ -27,3 +27,6 @@ class Subnet(Base):
     addresses: Mapped[list["IPAddress"]] = relationship(
         "IPAddress", back_populates="subnet", cascade="all, delete-orphan"
     )
+    ranges: Mapped[list["SubnetRange"]] = relationship(
+        "SubnetRange", cascade="all, delete-orphan"
+    )

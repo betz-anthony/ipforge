@@ -5,6 +5,7 @@ import { subnetsApi, dhcpApi, addressesApi, scanApi, settingsApi, importExportAp
 import { ipInCidr, ipCompare, isValidCidr } from '../utils/ip'
 import DetailDrawer from '../components/DetailDrawer'
 import EmptyState from '../components/EmptyState'
+import SubnetSpace from '../components/SubnetSpace'
 import CustomFieldsEditor, { parseTags } from '../components/CustomFieldsEditor'
 import UtilBar from '../components/UtilBar'
 import CollisionResolveDialog from './CollisionResolveDialog'
@@ -359,9 +360,11 @@ export default function Subnets() {
           pct={selectedSubnet.utilization_pct}
           warn={warnAt}
           critical={criticalAt}
+          reservedPct={selectedSubnet.total_count ? (selectedSubnet.reserved_count ?? 0) / selectedSubnet.total_count * 100 : 0}
         />
         <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>
           {selectedSubnet.used_count} / {selectedSubnet.total_count} hosts
+          {!!selectedSubnet.reserved_count && ` (+${selectedSubnet.reserved_count} reserved)`}
         </span>
       </div>
       {forecast && (
@@ -403,6 +406,8 @@ export default function Subnets() {
           ))}
         </div>
       )}
+      <SubnetSpace subnet={selectedSubnet} />
+
       <div style={{ marginTop: '1rem' }}>
         <div className="detail-section-title">IP Addresses</div>
         {!subnetAddresses ? (

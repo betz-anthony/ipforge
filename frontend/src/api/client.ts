@@ -129,6 +129,7 @@ export interface Subnet {
   used_count: number
   total_count: number
   utilization_pct: number
+  reserved_count?: number
   rollup_used_count: number
   rollup_total_count: number
   rollup_utilization_pct: number
@@ -239,6 +240,40 @@ export const subnetsApi = {
     api.get<Subnet[]>('/subnets/suggest-parent', { params: { cidr } }).then(r => r.data),
   listFiltered: (params: Record<string, string>) =>
     api.get<Subnet[]>('/subnets', { params }).then(r => r.data),
+}
+
+export type RangeKind = 'gateway' | 'dhcp_pool' | 'static' | 'reserved'
+
+export interface SubnetRange {
+  id: number
+  subnet_id: number
+  start_ip: string
+  end_ip: string
+  kind: RangeKind
+  label: string | null
+}
+
+export interface MapCell {
+  ip: string
+  status: 'free' | 'assigned' | 'reserved' | 'discovered' | 'deprecated' | 'available'
+  collision: boolean
+}
+
+export interface SubnetMap {
+  too_large: boolean
+  host_count: number
+  cells?: MapCell[]
+}
+
+export const subnetRangesApi = {
+  list: (subnetId: number) =>
+    api.get<SubnetRange[]>(`/subnets/${subnetId}/ranges`).then(r => r.data),
+  create: (subnetId: number, body: { start_ip: string; end_ip: string; kind: RangeKind; label?: string | null }) =>
+    api.post<SubnetRange>(`/subnets/${subnetId}/ranges`, body).then(r => r.data),
+  remove: (subnetId: number, rangeId: number) =>
+    api.delete(`/subnets/${subnetId}/ranges/${rangeId}`),
+  map: (subnetId: number) =>
+    api.get<SubnetMap>(`/subnets/${subnetId}/map`).then(r => r.data),
 }
 
 export const customFieldsApi = {

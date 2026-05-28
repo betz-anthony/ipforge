@@ -1,10 +1,14 @@
 import ipaddress
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from typing import Literal
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
+from pydantic import BaseModel
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 from app.database import get_db
 from app.models.subnet import Subnet
+from app.models.subnet_range import SubnetRange
 from app.models.address import IPAddress, AddressStatus
+from app.models.scan import Collision
 from app.models.user import User
 from app.schemas.subnet import SubnetCreate, SubnetRead, SubnetUpdate, SubnetWithStats, SubnetForecast
 from app.core.deps import get_current_user
@@ -53,6 +57,22 @@ def _build_stats_rows(subnets: list[Subnet], db: Session) -> list[dict]:
         .all()
     )
     count_map = {row.subnet_id: row.used for row in counts}
+
+    used_addr_rows = (
+        db.query(IPAddress.subnet_id, IPAddress.address)
+        .filter(IPAddress.status.in_(_USED_STATUSES))
+        .filter(IPAddress.subnet_id.in_(ids))
+        .all()
+    )
+    used_addrs: dict[int, set[str]] = {}
+    for sid, addr in used_addr_rows:
+        used_addrs.setdefault(sid, set()).add(addr)
+
+    range_rows = db.query(SubnetRange).filter(SubnetRange.subnet_id.in_(ids)).all()
+    ranges_by_subnet: dict[int, list[SubnetRange]] = {}
+    for r in range_rows:
+        ranges_by_subnet.setdefault(r.subnet_id, []).append(r)
+
     rows = []
     for s in subnets:
         used = count_map.get(s.id, 0)
@@ -63,6 +83,23 @@ def _build_stats_rows(subnets: list[Subnet], db: Session) -> list[dict]:
             total = net.num_addresses
         else:
             total = max(1, net.num_addresses - 2)
+
+        reserved_count = 0
+        srs = ranges_by_subnet.get(s.id)
+        if srs:
+            usable_excludes = set()
+            if net.version == 4 and net.prefixlen < 31:
+                usable_excludes = {str(net.network_address), str(net.broadcast_address)}
+            used_set = used_addrs.get(s.id, set())
+            reserved_ips: set[str] = set()
+            for r in srs:
+                a, b = int(ipaddress.ip_address(r.start_ip)), int(ipaddress.ip_address(r.end_ip))
+                for n in range(a, b + 1):
+                    reserved_ips.add(str(ipaddress.ip_address(n)))
+            reserved_ips -= usable_excludes
+            reserved_ips -= used_set
+            reserved_count = len(reserved_ips)
+
         pct = min(100.0, round(used / total * 100, 1)) if total > 0 else 0.0
         rows.append({
             "id": s.id, "name": s.name, "cidr": s.cidr,
@@ -74,6 +111,7 @@ def _build_stats_rows(subnets: list[Subnet], db: Session) -> list[dict]:
             "dhcp_provider_name": s.dhcp_provider_name,
             "request_eligible": s.request_eligible,
             "used_count": used, "total_count": total, "utilization_pct": pct,
+            "reserved_count": reserved_count,
             "rollup_used_count": used, "rollup_total_count": total,
             "rollup_utilization_pct": pct,
         })
@@ -322,6 +360,158 @@ def update_subnet(
     subnet.custom_fields = load_custom_fields(db, "subnet", subnet.id)
     subnet.tags = load_tags(db, "subnet", subnet.id)
     return subnet
+
+
+MAP_MAX_HOSTS = 1024
+
+
+@router.get("/{subnet_id}/map")
+def subnet_map(
+    subnet_id: int,
+    db: Session = Depends(get_db),
+    access: AccessContext = Depends(get_access_context),
+):
+    subnet = db.get(Subnet, subnet_id)
+    if not subnet:
+        raise HTTPException(404, "Subnet not found")
+    access.require_read(subnet_id)
+
+    net = ipaddress.ip_network(subnet.cidr, strict=False)
+    if net.version == 4 and net.prefixlen < 31:
+        host_count = max(0, net.num_addresses - 2)
+    else:
+        host_count = net.num_addresses
+
+    if host_count > MAP_MAX_HOSTS:
+        return {"too_large": True, "host_count": host_count}
+
+    addr_status = {
+        a.address: a.status.value
+        for a in db.query(IPAddress).filter(IPAddress.subnet_id == subnet_id).all()
+    }
+    reserved = reserved_ip_set(db, subnet_id)
+    collision_ips = {
+        c.ip_address for c in db.query(Collision.ip_address).filter(Collision.resolved.is_(False)).all()
+    }
+
+    cells = []
+    for ip in net.hosts():
+        s = str(ip)
+        if s in addr_status:
+            status = addr_status[s]
+        elif s in reserved:
+            status = "reserved"
+        else:
+            status = "free"
+        cells.append({"ip": s, "status": status, "collision": s in collision_ips})
+
+    return {"too_large": False, "host_count": host_count, "cells": cells}
+
+
+RangeKind = Literal["gateway", "dhcp_pool", "static", "reserved"]
+
+
+class RangeIn(BaseModel):
+    start_ip: str
+    end_ip: str
+    kind: RangeKind
+    label: str | None = None
+
+
+def _range_out(r: SubnetRange) -> dict:
+    return {
+        "id": r.id, "subnet_id": r.subnet_id,
+        "start_ip": r.start_ip, "end_ip": r.end_ip,
+        "kind": r.kind, "label": r.label,
+    }
+
+
+def reserved_ip_set(db: Session, subnet_id: int) -> set[str]:
+    """All host IPs covered by the subnet's reserved ranges."""
+    ips: set[str] = set()
+    for r in db.query(SubnetRange).filter_by(subnet_id=subnet_id).all():
+        start = int(ipaddress.ip_address(r.start_ip))
+        end = int(ipaddress.ip_address(r.end_ip))
+        for n in range(start, end + 1):
+            ips.add(str(ipaddress.ip_address(n)))
+    return ips
+
+
+@router.get("/{subnet_id}/ranges")
+def list_ranges(
+    subnet_id: int,
+    db: Session = Depends(get_db),
+    access: AccessContext = Depends(get_access_context),
+):
+    subnet = db.get(Subnet, subnet_id)
+    if not subnet:
+        raise HTTPException(404, "Subnet not found")
+    access.require_read(subnet_id)
+    rows = db.query(SubnetRange).filter_by(subnet_id=subnet_id).order_by(SubnetRange.start_ip).all()
+    return [_range_out(r) for r in rows]
+
+
+@router.post("/{subnet_id}/ranges", status_code=201)
+def create_range(
+    subnet_id: int,
+    body: RangeIn,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    access: AccessContext = Depends(get_access_context),
+):
+    subnet = db.get(Subnet, subnet_id)
+    if not subnet:
+        raise HTTPException(404, "Subnet not found")
+    access.require_write(subnet_id)
+    network = ipaddress.ip_network(subnet.cidr, strict=False)
+    try:
+        start = ipaddress.ip_address(body.start_ip)
+        end = ipaddress.ip_address(body.end_ip)
+    except ValueError:
+        raise HTTPException(422, "Invalid IP address")
+    if start.version != network.version or end.version != network.version:
+        raise HTTPException(422, "Range IP version does not match subnet")
+    if start not in network or end not in network:
+        raise HTTPException(422, "Range must be inside the subnet CIDR")
+    if int(start) > int(end):
+        raise HTTPException(422, "start_ip must be <= end_ip")
+    for r in db.query(SubnetRange).filter_by(subnet_id=subnet_id).all():
+        es, ee = int(ipaddress.ip_address(r.start_ip)), int(ipaddress.ip_address(r.end_ip))
+        if int(start) <= ee and es <= int(end):
+            raise HTTPException(409, f"Range overlaps existing range {r.start_ip}–{r.end_ip}")
+    row = SubnetRange(
+        subnet_id=subnet_id, start_ip=body.start_ip, end_ip=body.end_ip,
+        kind=body.kind, label=body.label,
+    )
+    db.add(row)
+    db.flush()
+    write_audit(db, current_user.username, "create", "subnet_range", str(row.id),
+                f"{subnet.cidr} {body.start_ip}-{body.end_ip} ({body.kind})")
+    db.commit()
+    db.refresh(row)
+    return _range_out(row)
+
+
+@router.delete("/{subnet_id}/ranges/{range_id}", status_code=204)
+def delete_range(
+    subnet_id: int,
+    range_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    access: AccessContext = Depends(get_access_context),
+):
+    subnet = db.get(Subnet, subnet_id)
+    if not subnet:
+        raise HTTPException(404, "Subnet not found")
+    access.require_write(subnet_id)
+    row = db.query(SubnetRange).filter_by(id=range_id, subnet_id=subnet_id).first()
+    if row is None:
+        raise HTTPException(404, "Range not found")
+    write_audit(db, current_user.username, "delete", "subnet_range", str(row.id),
+                f"{subnet.cidr} {row.start_ip}-{row.end_ip} ({row.kind})")
+    db.delete(row)
+    db.commit()
+    return Response(status_code=204)
 
 
 @router.delete("/{subnet_id}", status_code=204)
