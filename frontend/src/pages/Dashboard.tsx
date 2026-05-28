@@ -66,6 +66,7 @@ export default function Dashboard() {
   })
 
   const { data: subnets }         = useQuery({ queryKey: ['subnets'],         queryFn: subnetsApi.list })
+  const { data: forecasts }       = useQuery({ queryKey: ['forecasts'],       queryFn: () => subnetsApi.forecasts(5) })
   const { data: settingsData }    = useQuery({ queryKey: ['settings'],        queryFn: settingsApi.get })
   const { data: providerConfigs } = useQuery({ queryKey: ['provider-configs'], queryFn: providerConfigsApi.list })
 
@@ -214,6 +215,36 @@ export default function Dashboard() {
             ))}
           </div>
         </div>
+      )}
+
+      {forecasts && forecasts.length > 0 && (
+        <>
+          <p className="section-label">Projected Exhaustion</p>
+          <div className="stat-card" style={{ padding: '0.75rem 1rem' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+              {forecasts.map(f => (
+                <div key={f.subnet_id} style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                  <span style={{ width: '120px', fontSize: '0.78rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: 'var(--text-subtle)' }}>
+                    {f.name}
+                  </span>
+                  <span className="font-mono" style={{ width: '110px', fontSize: '0.72rem', color: 'var(--text-muted)', flexShrink: 0 }}>
+                    {f.cidr}
+                  </span>
+                  <span style={{ fontSize: '0.78rem' }}>
+                    ~<strong>{f.days_to_critical}</strong> days
+                    {f.projected_critical_date && (
+                      <span style={{ color: 'var(--text-muted)' }}> ({f.projected_critical_date})</span>
+                    )}
+                  </span>
+                  <span className={`badge ${
+                    f.confidence === 'high' ? 'badge-green' :
+                    f.confidence === 'medium' ? 'badge-yellow' : 'badge-gray'
+                  }`} style={{ marginLeft: 'auto' }}>{f.confidence}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </>
       )}
 
       {(openPanel === 'dns_zones' || openPanel === 'dns_records') && (

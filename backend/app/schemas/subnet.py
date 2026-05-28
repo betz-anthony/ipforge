@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field
-from datetime import datetime
+from datetime import datetime, date
 
 
 class SubnetCreate(BaseModel):
@@ -53,3 +53,20 @@ class SubnetWithStats(SubnetRead):
     rollup_used_count: int = 0
     rollup_total_count: int = 0
     rollup_utilization_pct: float = 0.0
+
+
+class SubnetForecast(BaseModel):
+    subnet_id: int
+    cidr: str
+    name: str
+    slope_per_day: float
+    current_used: int
+    total_count: int
+    data_points: int
+    warn_pct: float
+    critical_pct: float
+    days_to_warn: int | None
+    days_to_critical: int | None
+    projected_warn_date: date | None
+    projected_critical_date: date | None
+    confidence: str

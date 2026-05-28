@@ -53,6 +53,19 @@ class ScanHistoryDay(Base):
     uptime_pct:     Mapped[float]      = mapped_column(Float, nullable=False, default=0.0)
 
 
+class SubnetUtilizationDay(Base):
+    __tablename__ = "subnet_utilization_history"
+    __table_args__ = (
+        UniqueConstraint("subnet_id", "date", name="uq_subnet_util_date"),
+    )
+
+    id:          Mapped[int]  = mapped_column(Integer, primary_key=True)
+    subnet_id:   Mapped[int]  = mapped_column(Integer, ForeignKey("subnets.id", ondelete="CASCADE"), nullable=False, index=True)
+    date:        Mapped[date] = mapped_column(Date, nullable=False)
+    used_count:  Mapped[int]  = mapped_column(Integer, nullable=False, default=0)
+    total_count: Mapped[int]  = mapped_column(Integer, nullable=False, default=0)
+
+
 class AlertEvent(Base):
     __tablename__ = "alert_events"
 
