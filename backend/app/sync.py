@@ -274,21 +274,25 @@ def sync_all() -> None:
         f2 = ex.submit(sync_dhcp)
         f1.result()
         f2.result()
-    # Recompute drift now that the DNS/DHCP cache reflects current actual state.
+    # Recompute drift now that the cache reflects current actual state. Run it in
+    # a detached daemon thread so a slow drift pass can never delay or wedge the
+    # sync cadence.
     try:
         from app.drift import detect_drift_bg
-        detect_drift_bg()
+        threading.Thread(target=detect_drift_bg, daemon=True, name="ipam-postsync-drift").start()
     except Exception:
-        logger.exception("post-sync drift detection failed")
+        logger.exception("post-sync drift detection failed to start")
 
 
 def start_background_sync(interval: int = 300) -> None:
     def _loop():
         while True:
             try:
+                logger.info("Background sync starting")
                 sync_all()
+                logger.info("Background sync finished")
             except Exception as e:
-                logger.error("Background sync error: %s", e)
+                logger.error("Background sync error: %s", e, exc_info=True)
             time.sleep(interval)
 
     threading.Thread(target=_loop, daemon=True, name="ipam-sync").start()
