@@ -278,6 +278,22 @@ docker compose up -d
 <td><code>pihole</code></td>
 <td>Pi-hole v5/v6. Read-only for zones; record creation supported.</td>
 </tr>
+<tr>
+<td><code>cloudflare</code></td>
+<td>Cloudflare API v4. Auth: API token (Zone:DNS:Edit).</td>
+</tr>
+<tr>
+<td><code>route53</code></td>
+<td>AWS Route 53. Auth: access key + secret (optional region).</td>
+</tr>
+<tr>
+<td><code>azure_dns</code></td>
+<td>Azure DNS. Auth: service principal (tenant/client/secret + subscription + resource group).</td>
+</tr>
+<tr>
+<td><code>gcp_dns</code></td>
+<td>Google Cloud DNS. Auth: service-account JSON + project ID.</td>
+</tr>
 </tbody>
 </table>
 <h3 id="supported-dhcp-providers">Supported DHCP providers</h3>
@@ -294,8 +310,8 @@ docker compose up -d
 <td>Microsoft DHCP via WinRM/PowerShell. Requires MS WinRM variables.</td>
 </tr>
 <tr>
-<td><code>isc_kea</code></td>
-<td>ISC Kea. IPv4 only (IPv6 lease sync not yet implemented).</td>
+<td><code>keadhcp</code></td>
+<td>ISC Kea via Control Agent (dhcp4 + dhcp6; DUID reservations for IPv6).</td>
 </tr>
 <tr>
 <td><code>pihole</code></td>

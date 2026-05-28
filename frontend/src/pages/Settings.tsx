@@ -62,12 +62,35 @@ const PROVIDER_FIELDS: Record<string, FieldDef[]> = {
     { key: 'url',    label: 'Control Agent URL',        placeholder: 'http://kea-host:8000' },
     { key: 'secret', label: 'API Secret (if auth)',     type: 'password', placeholder: 'Leave blank if none' },
   ],
+  cloudflare: [
+    { key: 'api_token', label: 'API Token', type: 'password', placeholder: 'Cloudflare token (Zone:DNS:Edit)' },
+  ],
+  route53: [
+    { key: 'aws_access_key_id',     label: 'AWS Access Key ID' },
+    { key: 'aws_secret_access_key', label: 'AWS Secret Access Key', type: 'password' },
+    { key: 'region',                label: 'Region (optional)', placeholder: 'us-east-1' },
+  ],
+  azure_dns: [
+    { key: 'tenant_id',       label: 'Tenant ID' },
+    { key: 'client_id',       label: 'Client ID' },
+    { key: 'client_secret',   label: 'Client Secret', type: 'password' },
+    { key: 'subscription_id', label: 'Subscription ID' },
+    { key: 'resource_group',  label: 'Resource Group' },
+  ],
+  gcp_dns: [
+    { key: 'project_id',           label: 'Project ID' },
+    { key: 'service_account_json', label: 'Service Account JSON', type: 'textarea', placeholder: 'Paste the service-account key JSON' },
+  ],
 }
 
 const DNS_TYPES  = [
   { value: 'msdns',  label: 'Microsoft DNS' },
   { value: 'pihole', label: 'Pi-hole v6' },
   { value: 'bind',   label: 'BIND (dnspython)' },
+  { value: 'cloudflare', label: 'Cloudflare' },
+  { value: 'route53', label: 'AWS Route 53' },
+  { value: 'azure_dns', label: 'Azure DNS' },
+  { value: 'gcp_dns', label: 'Google Cloud DNS' },
 ]
 const DHCP_TYPES = [
   { value: 'msdhcp',  label: 'Microsoft DHCP' },
