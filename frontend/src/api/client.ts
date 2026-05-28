@@ -189,8 +189,28 @@ export interface StaleAddress {
 
 export type ReclaimAction = 'deprecate' | 'extend' | 'dismiss'
 
+export interface SubnetForecast {
+  subnet_id: number
+  cidr: string
+  name: string
+  slope_per_day: number
+  current_used: number
+  total_count: number
+  data_points: number
+  warn_pct: number
+  critical_pct: number
+  days_to_warn: number | null
+  days_to_critical: number | null
+  projected_warn_date: string | null
+  projected_critical_date: string | null
+  confidence: 'none' | 'low' | 'medium' | 'high'
+}
+
 export const subnetsApi = {
   list: () => api.get<Subnet[]>('/subnets').then(r => r.data),
+  forecast: (id: number) => api.get<SubnetForecast>(`/subnets/${id}/forecast`).then(r => r.data),
+  forecasts: (limit = 5) =>
+    api.get<SubnetForecast[]>('/subnets/forecasts', { params: { limit } }).then(r => r.data),
   create: (data: Omit<Subnet, 'id' | 'created_at' | 'notes' | 'used_count' | 'total_count' | 'utilization_pct' | 'rollup_used_count' | 'rollup_total_count' | 'rollup_utilization_pct' | 'parent_id' | 'scan_interval_minutes'> & { notes?: string | null; parent_id?: number | null; scan_interval_minutes?: number | null }) =>
     api.post<Subnet>('/subnets', data).then(r => r.data),
   update: (id: number, data: Partial<Omit<Subnet, 'id' | 'created_at' | 'used_count' | 'total_count' | 'utilization_pct' | 'rollup_used_count' | 'rollup_total_count' | 'rollup_utilization_pct'>>) =>

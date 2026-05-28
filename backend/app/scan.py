@@ -14,7 +14,7 @@ from sqlalchemy import func
 from app.database import SessionLocal
 from app.models.address import IPAddress, AddressStatus
 from app.models.cache import CachedDHCPLease, CachedDNSRecord, SyncStatus
-from app.models.scan import Collision, CollisionType, ScanResult, ScanHistoryDay, AlertEvent
+from app.models.scan import Collision, CollisionType, ScanResult, ScanHistoryDay, AlertEvent, SubnetUtilizationDay
 from app.models.subnet import Subnet
 from app.core.time import utcnow
 from app.utils import ip_in_cidr
@@ -396,6 +396,35 @@ def scan_all_eligible(_db=None) -> None:
             scan_subnet(s.id)
 
 
+_USED_STATUSES = [AddressStatus.assigned, AddressStatus.reserved, AddressStatus.discovered]
+
+
+def subnet_total_count(cidr: str) -> int:
+    net = ipaddress.ip_network(cidr, strict=False)
+    if net.version == 6 or net.prefixlen >= 31:
+        return net.num_addresses
+    return max(1, net.num_addresses - 2)
+
+
+def _snapshot_utilization(db, now: datetime) -> None:
+    today = now.date()
+    counts = dict(
+        db.query(IPAddress.subnet_id, func.count(IPAddress.id))
+        .filter(IPAddress.status.in_(_USED_STATUSES))
+        .group_by(IPAddress.subnet_id)
+        .all()
+    )
+    for s in db.query(Subnet).all():
+        used = counts.get(s.id, 0)
+        total = subnet_total_count(s.cidr)
+        row = db.query(SubnetUtilizationDay).filter_by(subnet_id=s.id, date=today).first()
+        if row is None:
+            row = SubnetUtilizationDay(subnet_id=s.id, date=today)
+            db.add(row)
+        row.used_count = used
+        row.total_count = total
+
+
 def _get_global_scan_interval(db) -> int:
     from app.config import settings
     return settings.scan_interval_minutes
@@ -414,6 +443,9 @@ def scan_scheduler_loop() -> None:
             deleted = db.query(ScanResult).filter(ScanResult.scanned_at < cutoff).delete(synchronize_session=False)
             if deleted:
                 logger.info("Pruned %d old scan results (older than %d days)", deleted, _SCAN_RESULT_RETENTION_DAYS)
+            db.commit()
+
+            _snapshot_utilization(db, now)
             db.commit()
 
             global_interval = _get_global_scan_interval(db)

@@ -6,10 +6,14 @@ from app.database import get_db
 from app.models.subnet import Subnet
 from app.models.address import IPAddress, AddressStatus
 from app.models.user import User
-from app.schemas.subnet import SubnetCreate, SubnetRead, SubnetUpdate, SubnetWithStats
+from app.schemas.subnet import SubnetCreate, SubnetRead, SubnetUpdate, SubnetWithStats, SubnetForecast
 from app.core.deps import get_current_user
 from app.core.audit import write_audit
 from app.core.access import AccessContext, get_access_context
+from app.core.forecast import compute_forecast
+from app.config import settings
+from app.models.scan import SubnetUtilizationDay
+from app.scan import subnet_total_count
 
 router = APIRouter()
 
@@ -147,6 +151,52 @@ def suggest_parent(
         candidates = [s for s in candidates if s.id in access.viewable]
     rows = _build_stats_rows(candidates, db)
     return [SubnetWithStats(**r) for r in rows]
+
+
+def _forecast_dict(db: Session, subnet: Subnet) -> dict:
+    rows = (
+        db.query(SubnetUtilizationDay.date, SubnetUtilizationDay.used_count)
+        .filter(SubnetUtilizationDay.subnet_id == subnet.id)
+        .order_by(SubnetUtilizationDay.date)
+        .all()
+    )
+    snapshots = [(r.date, r.used_count) for r in rows]
+    f = compute_forecast(
+        snapshots,
+        total_count=subnet_total_count(subnet.cidr),
+        warn_pct=settings.util_warn_threshold,
+        critical_pct=settings.util_critical_threshold,
+    )
+    f.update({"subnet_id": subnet.id, "cidr": subnet.cidr, "name": subnet.name})
+    return f
+
+
+@router.get("/forecasts", response_model=list[SubnetForecast])
+def list_forecasts(
+    limit: int = Query(5, ge=1, le=100),
+    db: Session = Depends(get_db),
+    access: AccessContext = Depends(get_access_context),
+):
+    subnets = db.query(Subnet).all()
+    if not access.global_read:
+        subnets = [s for s in subnets if s.id in access.viewable]
+    forecasts = [_forecast_dict(db, s) for s in subnets]
+    projected = [f for f in forecasts if f["days_to_critical"] is not None]
+    projected.sort(key=lambda f: f["days_to_critical"])
+    return [SubnetForecast(**f) for f in projected[:limit]]
+
+
+@router.get("/{subnet_id}/forecast", response_model=SubnetForecast)
+def get_forecast(
+    subnet_id: int,
+    db: Session = Depends(get_db),
+    access: AccessContext = Depends(get_access_context),
+):
+    subnet = db.get(Subnet, subnet_id)
+    if not subnet:
+        raise HTTPException(404, "Subnet not found")
+    access.require_read(subnet_id)
+    return SubnetForecast(**_forecast_dict(db, subnet))
 
 
 @router.post("", response_model=SubnetRead, status_code=201)

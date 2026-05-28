@@ -180,6 +180,12 @@ export default function Subnets() {
     queryFn: () => scanApi.collisions({ resolved: false }),
   })
 
+  const { data: forecast } = useQuery({
+    queryKey: ['forecast', selectedSubnet?.id],
+    queryFn: () => subnetsApi.forecast(selectedSubnet!.id),
+    enabled: !!selectedSubnet,
+  })
+
   const triggerScanMutation = useMutation({
     mutationFn: (range?: { start_ip: string; end_ip: string }) => {
       if (!selectedSubnet) return Promise.reject(new Error('No subnet selected'))
@@ -346,6 +352,28 @@ export default function Subnets() {
           {selectedSubnet.used_count} / {selectedSubnet.total_count} hosts
         </span>
       </div>
+      {forecast && (
+        <div style={{ marginBottom: '1rem' }}>
+          <div className="detail-section-title">Capacity forecast</div>
+          {forecast.confidence === 'none' || forecast.days_to_critical === null ? (
+            <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', margin: '0.5rem 0' }}>
+              {forecast.data_points < 2
+                ? 'Not enough history yet — collecting daily snapshots.'
+                : 'No exhaustion projected at the current trend.'}
+            </p>
+          ) : (
+            <p style={{ fontSize: '0.82rem', margin: '0.5rem 0' }}>
+              Exhaustion in ~<strong>{forecast.days_to_critical}</strong> days
+              {forecast.projected_critical_date && ` (≈ ${forecast.projected_critical_date})`}
+              {' '}at +{forecast.slope_per_day.toFixed(1)} IP/day.{' '}
+              <span className={`badge ${
+                forecast.confidence === 'high' ? 'badge-green' :
+                forecast.confidence === 'medium' ? 'badge-yellow' : 'badge-gray'
+              }`}>{forecast.confidence} confidence</span>
+            </p>
+          )}
+        </div>
+      )}
       <div style={{ marginTop: '1rem' }}>
         <div className="detail-section-title">IP Addresses</div>
         {!subnetAddresses ? (
