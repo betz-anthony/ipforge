@@ -276,6 +276,51 @@ export const subnetRangesApi = {
     api.get<SubnetMap>(`/subnets/${subnetId}/map`).then(r => r.data),
 }
 
+export interface NetworkDevice {
+  id: number
+  name: string
+  host: string
+  snmp_version: '2c' | '3'
+  v3_user: string | null
+  auth_protocol: string | null
+  priv_protocol: string | null
+  security_level: string | null
+  poll_interval_minutes: number
+  enabled: boolean
+  has_community: boolean
+  has_auth_key: boolean
+  has_priv_key: boolean
+  last_status: string
+  last_synced_at: string | null
+  last_error: string | null
+}
+
+export interface DiscoveredEndpoint {
+  id: number
+  device_id: number
+  ip: string | null
+  mac: string
+  ifindex: number | null
+  port_name: string | null
+  vlan: number | null
+  last_seen: string | null
+  source: string
+}
+
+export const discoveryApi = {
+  listDevices: () => api.get<NetworkDevice[]>('/discovery/devices').then(r => r.data),
+  createDevice: (body: Record<string, unknown>) =>
+    api.post<NetworkDevice>('/discovery/devices', body).then(r => r.data),
+  updateDevice: (id: number, body: Record<string, unknown>) =>
+    api.put<NetworkDevice>(`/discovery/devices/${id}`, body).then(r => r.data),
+  deleteDevice: (id: number) => api.delete(`/discovery/devices/${id}`),
+  poll: (id: number) => api.post<{ status: string }>(`/discovery/devices/${id}/poll`).then(r => r.data),
+  endpoints: (params?: { ip?: string; mac?: string; device_id?: number }) =>
+    api.get<DiscoveredEndpoint[]>('/discovery/endpoints', { params }).then(r => r.data),
+  addressDiscovery: (addressId: number) =>
+    api.get<DiscoveredEndpoint[]>(`/addresses/${addressId}/discovery`).then(r => r.data),
+}
+
 export const customFieldsApi = {
   list: (entity_type?: 'subnet' | 'address') =>
     api.get<CustomFieldDef[]>('/custom-fields', { params: entity_type ? { entity_type } : {} }).then(r => r.data),

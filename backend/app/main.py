@@ -30,6 +30,7 @@ from app.api import vlans as vlans_router
 from app.api import custom_fields as custom_fields_router
 from app.api import tags as tags_router
 from app.api import drift as drift_router
+from app.api import discovery as discovery_router
 from app.alerting import api as alerting_api
 from app.alerting.dispatcher import start as start_alert_dispatcher
 import app.models  # noqa: F401
@@ -118,6 +119,8 @@ async def lifespan(app: FastAPI):
     # but scanning has no CronJob — the scheduler is always needed.
     from app.scan import scan_scheduler_loop
     threading.Thread(target=scan_scheduler_loop, daemon=True, name="ipam-scan-scheduler").start()
+    from app.discovery.runner import discovery_poller_loop
+    threading.Thread(target=discovery_poller_loop, daemon=True, name="ipam-discovery-poller").start()
     # Skip the dispatcher in SQLite environments (unit tests) to avoid thread accumulation.
     if not app_settings.database_url.startswith("sqlite"):
         start_alert_dispatcher()
@@ -162,6 +165,7 @@ _op = [Depends(require_operator)]
 app.include_router(sync_router.router,   prefix="/api/sync",  tags=["sync"],  dependencies=_op)
 app.include_router(scan_router.router,   prefix="/api/scan",  tags=["scan"],  dependencies=_op)
 app.include_router(drift_router.router,  prefix="/api/drift", tags=["drift"], dependencies=_ro)
+app.include_router(discovery_router.router, prefix="/api/discovery", tags=["discovery"], dependencies=_ro)
 app.include_router(reclaim_router.router, prefix="/api/addresses", tags=["reclaim"], dependencies=_op)
 
 # Allocation: scoped users can reach it (later task adds per-subnet check)
