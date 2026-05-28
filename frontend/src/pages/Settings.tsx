@@ -12,6 +12,7 @@ import Collapsible from '../components/Collapsible'
 import { useToast } from '../contexts/ToastContext'
 import AlertChannels from './AlertChannels'
 import AlertRules from './AlertRules'
+import AutomationRules from './AutomationRules'
 
 // ── Provider field definitions ─────────────────────────────────────────────
 
@@ -1034,6 +1035,9 @@ export default function SettingsPage() {
 
       {/* ── Alert Rules ── */}
       <AlertRules />
+
+      {/* ── Automation Rules ── */}
+      <AutomationRules />
     </div>
   )
 }

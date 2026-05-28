@@ -57,6 +57,7 @@ def detect_drift(db, subnet_id: int | None = None) -> None:
         detected.add((ip, cat))
         details_str = json.dumps(details)
         existing = db.query(DriftItem).filter_by(ip_address=ip, category=cat).first()
+        is_new_or_reopened = False
         if existing:
             existing.detected_at = now
             existing.details = details_str
@@ -65,15 +66,20 @@ def detect_drift(db, subnet_id: int | None = None) -> None:
             if existing.resolved:
                 existing.resolved = False
                 existing.resolved_at = None
-                if category in _CONFLICT_CATEGORIES:
-                    emit("collision", f"ip:{ip}:{cat}", {"ip": ip, "type": cat, "subnet_id": sid})
+                is_new_or_reopened = True
         else:
             db.add(DriftItem(
                 ip_address=ip, category=cat, severity=DRIFT_SEVERITY[category],
                 subnet_id=sid, details=details_str, detected_at=now, resolved=False,
             ))
+            is_new_or_reopened = True
+
+        if is_new_or_reopened:
+            # "collision" kept for alerting back-compat (3 conflict categories);
+            # "drift" fires for every category and drives automation rules.
             if category in _CONFLICT_CATEGORIES:
                 emit("collision", f"ip:{ip}:{cat}", {"ip": ip, "type": cat, "subnet_id": sid})
+            emit("drift", f"ip:{ip}:{cat}", {"ip": ip, "category": cat, "subnet_id": sid})
 
     # ── address-keyed data ──────────────────────────────────────────────────
     addr_q = db.query(IPAddress)

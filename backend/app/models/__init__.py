@@ -20,6 +20,7 @@ from app.models.custom_field import CustomFieldDef, CustomFieldValue, Tag, TagAs
 from app.models.subnet_range import SubnetRange  # noqa: F401
 from app.models.network_device import NetworkDevice, DiscoveredEndpoint  # noqa: F401
 from app.models.gitops import GitopsManaged  # noqa: F401
+from app.models.automation import AutomationRule  # noqa: F401
 
 __all__ = [
     "Subnet", "IPAddress", "AppSetting",
@@ -38,4 +39,5 @@ __all__ = [
     "SubnetRange",
     "NetworkDevice", "DiscoveredEndpoint",
     "GitopsManaged",
+    "AutomationRule",
 ]

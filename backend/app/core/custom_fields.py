@@ -119,6 +119,25 @@ def set_custom_fields(db: Session, entity_type: str, entity_id: int, values: dic
             db.add(CustomFieldValue(field_id=d.id, entity_id=entity_id, value=value))
 
 
+def add_tags(db: Session, entity_type: str, entity_id: int, names: list[str]) -> None:
+    """Add tags to an entity without removing existing ones (creates tags as needed)."""
+    by_lower = {t.name.lower(): t for t in db.query(Tag).all()}
+    have = {
+        a.tag_id for a in
+        db.query(TagAssignment).filter_by(entity_type=entity_type, entity_id=entity_id).all()
+    }
+    for n in {x.strip() for x in names if x.strip()}:
+        t = by_lower.get(n.lower())
+        if t is None:
+            t = Tag(name=n)
+            db.add(t)
+            db.flush()
+            by_lower[n.lower()] = t
+        if t.id not in have:
+            db.add(TagAssignment(tag_id=t.id, entity_type=entity_type, entity_id=entity_id))
+            have.add(t.id)
+
+
 def set_tags(db: Session, entity_type: str, entity_id: int, names: list[str]) -> None:
     """Replace the entity's tag set with the given names, creating tags as needed."""
     wanted = {n.strip() for n in names if n.strip()}
