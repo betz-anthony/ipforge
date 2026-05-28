@@ -1,8 +1,10 @@
 import { useState, useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
+import { ClipboardList } from 'lucide-react'
 import { auditApi, type AuditEntry } from '../api/client'
 import SearchInput from '../components/SearchInput'
 import { Skeleton } from '../components/Skeleton'
+import EmptyState from '../components/EmptyState'
 
 const RESOURCE_TYPES = ['subnet', 'address', 'dns_record', 'dhcp_reservation']
 
@@ -120,9 +122,15 @@ export default function AuditPage() {
       {isError   && <p className="feedback-error">Failed to load audit log.</p>}
 
       {!isLoading && visibleEntries.length === 0 && (
-        <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>
-          {entries.length === 0 ? 'No entries found.' : 'No entries match search.'}
-        </p>
+        <EmptyState
+          icon={ClipboardList}
+          title={entries.length === 0 ? 'No audit entries' : 'No entries match'}
+          description={
+            entries.length === 0
+              ? 'Activity will appear here once users start creating, updating, or deleting resources.'
+              : 'Try clearing the filters or search to widen the result set.'
+          }
+        />
       )}
 
       {visibleEntries.map((e: AuditEntry) => (
