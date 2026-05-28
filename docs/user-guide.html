@@ -88,6 +88,7 @@ ul, ol { padding-left: 1.5rem; }
 <li><a href="#subnet-scanning">Subnet Scanning</a></li>
 <li><a href="#drift--reconciliation">Drift / Reconciliation</a></li>
 <li><a href="#snmp-discovery">SNMP Discovery</a></li>
+<li><a href="#gitops-declarative-config">GitOps (Declarative Config)</a></li>
 <li><a href="#stale-ip-reclamation">Stale IP Reclamation</a></li>
 <li><a href="#alerting">Alerting</a></li>
 <li><a href="#search">Search</a></li>
@@ -819,6 +820,50 @@ discovered endpoints.</p>
 <p>Roadmap: SSH/CLI collection, CDP/LLDP topology, and drift categories for
 mac-on-unexpected-port / rogue devices are planned follow-ups.</p>
 </blockquote>
+<hr>
+<h2 id="gitops-declarative-config">GitOps (Declarative Config)</h2>
+<p>Declare VLANs, subnets, reserved ranges, and allocations as YAML and have IPForge
+reconcile its state to match. One-way (declared → IPForge); your CI/CD posts the
+document. IPForge stores no git credentials — git history is the record of truth.</p>
+<h3 id="document">Document</h3>
+<pre><code class="language-yaml">source: prod-net            # required; namespaces what this doc manages
+vlans:
+  - { vlan_id: 10, name: servers }
+subnets:
+  - cidr: 10.0.0.0/24
+    name: servers
+    vlan_id: 10
+    parent: 10.0.0.0/16      # optional, by CIDR
+    reserved_ranges:
+      - { start: 10.0.0.1, kind: gateway, label: gw }
+allocations:
+  - { subnet: 10.0.0.0/24, hostname: web-01, register_dns: false }
+</code></pre>
+<h3 id="plan-apply">Plan &amp; apply</h3>
+<ul>
+<li><strong>Plan</strong> (<code>POST /api/gitops/plan</code>) — dry-run; returns a per-resource diff of
+  what would be created / updated / pruned. No changes made.</li>
+<li><strong>Apply</strong> (<code>POST /api/gitops/apply</code>) — reconciles: VLANs, then subnets
+  (parents first), reserved ranges, then allocations (via the
+  <a href="#allocation-api">Allocation API</a>, honoring <code>register_dns/dhcp</code>).</li>
+</ul>
+<p>Both accept the YAML document as the request body (<code>Content-Type: text/yaml</code>;
+JSON also works) and require operator+. The <strong>GitOps</strong> page in the UI provides a
+YAML editor with Plan and Apply buttons.</p>
+<pre><code class="language-bash">curl -X POST https://ipforge.example.com/api/gitops/apply \
+  -H &quot;Authorization: Bearer ipfg_&lt;token&gt;&quot; \
+  -H &quot;Content-Type: text/yaml&quot; \
+  --data-binary @network.yaml
+</code></pre>
+<h3 id="managed-resources-prune">Managed resources &amp; prune</h3>
+<p>Every resource IPForge creates or updates from a document is tagged with that
+document's <code>source</code>. On apply, resources of the <strong>same source</strong> that have
+disappeared from the document are <strong>pruned</strong>. Resources created manually,
+discovered/synced from providers, or owned by a different <code>source</code> are never
+touched. Re-applying an unchanged document is a no-op (idempotent).</p>
+<p>Providers (DNS/DHCP) are <strong>never pruned</strong> by GitOps — if an allocation is removed
+from the document, at most the IPForge IPAM row is pruned; any DNS/DHCP record
+left behind surfaces as <a href="#drift--reconciliation">drift</a>, not a silent delete.</p>
 <hr>
 <h2 id="stale-ip-reclamation">Stale IP Reclamation</h2>
 <p>Addresses that haven't responded to a scan for a configurable number of days are flagged <strong>stale</strong>. The Dashboard shows a count; the <strong>Reclaim</strong> page lists them grouped by subnet.</p>

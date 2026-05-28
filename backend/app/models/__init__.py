@@ -19,6 +19,7 @@ from app.models.vlan import Vlan  # noqa: F401
 from app.models.custom_field import CustomFieldDef, CustomFieldValue, Tag, TagAssignment  # noqa: F401
 from app.models.subnet_range import SubnetRange  # noqa: F401
 from app.models.network_device import NetworkDevice, DiscoveredEndpoint  # noqa: F401
+from app.models.gitops import GitopsManaged  # noqa: F401
 
 __all__ = [
     "Subnet", "IPAddress", "AppSetting",
@@ -36,4 +37,5 @@ __all__ = [
     "CustomFieldDef", "CustomFieldValue", "Tag", "TagAssignment",
     "SubnetRange",
     "NetworkDevice", "DiscoveredEndpoint",
+    "GitopsManaged",
 ]

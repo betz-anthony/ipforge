@@ -321,6 +321,24 @@ export const discoveryApi = {
     api.get<DiscoveredEndpoint[]>(`/addresses/${addressId}/discovery`).then(r => r.data),
 }
 
+export interface GitopsDiff { create: string[]; update: string[]; prune: string[] }
+export interface GitopsPlan {
+  vlans: GitopsDiff; subnets: GitopsDiff; reserved_ranges: GitopsDiff; allocations: GitopsDiff
+}
+export interface GitopsApplyResult {
+  plan: GitopsPlan
+  applied: Record<string, number>
+  pruned: Record<string, number>
+  errors: string[]
+}
+
+export const gitopsApi = {
+  plan: (yamlText: string) =>
+    api.post<{ source: string; plan: GitopsPlan }>('/gitops/plan', yamlText, { headers: { 'Content-Type': 'text/yaml' } }).then(r => r.data),
+  apply: (yamlText: string) =>
+    api.post<GitopsApplyResult>('/gitops/apply', yamlText, { headers: { 'Content-Type': 'text/yaml' } }).then(r => r.data),
+}
+
 export const customFieldsApi = {
   list: (entity_type?: 'subnet' | 'address') =>
     api.get<CustomFieldDef[]>('/custom-fields', { params: entity_type ? { entity_type } : {} }).then(r => r.data),
