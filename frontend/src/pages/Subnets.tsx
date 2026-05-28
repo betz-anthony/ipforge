@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect, useRef } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Plus, X, Scan, AlertTriangle, GitBranch, Download, Upload, Network } from 'lucide-react'
-import { subnetsApi, dhcpApi, addressesApi, scanApi, settingsApi, importExportApi, grantsApi, groupsApi, usersApi, vlansApi, customFieldsApi, type Subnet, type DHCPScope, type Collision, type ImportResult } from '../api/client'
+import { subnetsApi, dhcpApi, addressesApi, scanApi, settingsApi, importExportApi, grantsApi, groupsApi, usersApi, vlansApi, customFieldsApi, providersApi, type Subnet, type DHCPScope, type Collision, type ImportResult } from '../api/client'
 import { ipInCidr, ipCompare, isValidCidr } from '../utils/ip'
 import DetailDrawer from '../components/DetailDrawer'
 import EmptyState from '../components/EmptyState'
@@ -212,6 +212,14 @@ export default function Subnets() {
     queryKey: ['custom-fields', 'subnet'],
     queryFn: () => customFieldsApi.list('subnet'),
   })
+  const { data: providerNames } = useQuery({ queryKey: ['providers'], queryFn: providersApi.get })
+  // Include the current value as an option even if its provider was removed/renamed,
+  // so editing a subnet never silently drops an existing assignment.
+  const provOptions = (list: string[] | undefined, current: string): string[] => {
+    const arr = [...(list ?? [])]
+    if (current && !arr.includes(current)) arr.unshift(current)
+    return arr
+  }
 
   const [treeView, setTreeView]           = useState(false)
   const [treeSelectedId, setTreeSelectedId] = useState<number | null>(null)
@@ -724,11 +732,23 @@ export default function Subnets() {
             </div>
             <div className="form-field">
               <label>DNS Provider</label>
-              <input placeholder="Optional provider name" value={form.dns_provider_name} onChange={set('dns_provider_name')} />
+              <select value={form.dns_provider_name} onChange={e => setForm(f => ({ ...f, dns_provider_name: e.target.value }))}>
+                <option value="">— auto (first enabled) —</option>
+                {provOptions(providerNames?.dns, form.dns_provider_name).map(n => <option key={n} value={n}>{n}</option>)}
+              </select>
+              {(providerNames?.dns ?? []).length === 0 && (
+                <span className="text-muted" style={{ fontSize: '0.7rem' }}>No DNS providers — add one in Settings → Providers</span>
+              )}
             </div>
             <div className="form-field">
               <label>DHCP Provider</label>
-              <input placeholder="Optional provider name" value={form.dhcp_provider_name} onChange={set('dhcp_provider_name')} />
+              <select value={form.dhcp_provider_name} onChange={e => setForm(f => ({ ...f, dhcp_provider_name: e.target.value }))}>
+                <option value="">— auto (first enabled) —</option>
+                {provOptions(providerNames?.dhcp, form.dhcp_provider_name).map(n => <option key={n} value={n}>{n}</option>)}
+              </select>
+              {(providerNames?.dhcp ?? []).length === 0 && (
+                <span className="text-muted" style={{ fontSize: '0.7rem' }}>No DHCP providers — add one in Settings → Providers</span>
+              )}
             </div>
             <div className="form-field" style={{ gridColumn: '1 / -1' }}>
               <label>Parent Subnet</label>
@@ -940,11 +960,17 @@ export default function Subnets() {
           </div>
           <div className="form-field">
             <label>DNS Provider</label>
-            <input value={editForm.dns_provider_name} onChange={setEdit('dns_provider_name')} />
+            <select value={editForm.dns_provider_name} onChange={e => setEditForm(f => ({ ...f, dns_provider_name: e.target.value }))}>
+              <option value="">— auto (first enabled) —</option>
+              {provOptions(providerNames?.dns, editForm.dns_provider_name).map(n => <option key={n} value={n}>{n}</option>)}
+            </select>
           </div>
           <div className="form-field">
             <label>DHCP Provider</label>
-            <input value={editForm.dhcp_provider_name} onChange={setEdit('dhcp_provider_name')} />
+            <select value={editForm.dhcp_provider_name} onChange={e => setEditForm(f => ({ ...f, dhcp_provider_name: e.target.value }))}>
+              <option value="">— auto (first enabled) —</option>
+              {provOptions(providerNames?.dhcp, editForm.dhcp_provider_name).map(n => <option key={n} value={n}>{n}</option>)}
+            </select>
           </div>
           {isAdmin && (
             <div className="form-field" style={{ gridColumn: '1 / -1' }}>
