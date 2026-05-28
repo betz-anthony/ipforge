@@ -60,6 +60,7 @@ class AllocateRequest(BaseModel):
 
 
 def _find_candidate(db: Session, subnet_id: int, cidr: str) -> str | None:
+    from app.api.subnets import reserved_ip_set
     taken = {
         row.address
         for row in db.query(IPAddress.address).filter(
@@ -67,11 +68,12 @@ def _find_candidate(db: Session, subnet_id: int, cidr: str) -> str | None:
             IPAddress.status.in_(_INELIGIBLE),
         )
     }
+    reserved = reserved_ip_set(db, subnet_id)
     for ip in ipaddress.ip_network(cidr, strict=False).hosts():
         s = str(ip)
         if s.endswith(".1") or s.endswith(".255"):  # skip gateway and broadcast-like addresses
             continue
-        if s in taken:
+        if s in taken or s in reserved:
             continue
         return s
     return None

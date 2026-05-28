@@ -17,6 +17,7 @@ from app.alerting import models as _alerting_models  # noqa: F401  registers ale
 from app.models.ip_request import IPRequest  # noqa: F401
 from app.models.vlan import Vlan  # noqa: F401
 from app.models.custom_field import CustomFieldDef, CustomFieldValue, Tag, TagAssignment  # noqa: F401
+from app.models.subnet_range import SubnetRange  # noqa: F401
 
 __all__ = [
     "Subnet", "IPAddress", "AppSetting",
@@ -32,4 +33,5 @@ __all__ = [
     "IPRequest",
     "Vlan",
     "CustomFieldDef", "CustomFieldValue", "Tag", "TagAssignment",
+    "SubnetRange",
 ]
