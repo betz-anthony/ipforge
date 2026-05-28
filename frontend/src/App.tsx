@@ -1,10 +1,13 @@
-import { Routes, Route, NavLink } from 'react-router-dom'
+import { Fragment, useEffect, useState } from 'react'
+import { Routes, Route, NavLink, useLocation } from 'react-router-dom'
 import {
   LayoutDashboard, Network, List, Server, Globe, Search, Settings, LogOut, ClipboardList,
-  ArchiveRestore, KeyRound, Users, Bell, Tag,
+  ArchiveRestore, KeyRound, Users, Bell, Tag, Menu, Sun, Moon, Keyboard,
 } from 'lucide-react'
 import { useQuery } from '@tanstack/react-query'
 import { useAuth } from './contexts/AuthContext'
+import { useTheme } from './contexts/ThemeContext'
+import { useGlobalShortcuts, SHORTCUT_LIST } from './hooks/useGlobalShortcuts'
 import { reclaimApi } from './api/client'
 import Dashboard from './pages/Dashboard'
 import Subnets from './pages/Subnets'
@@ -33,6 +36,19 @@ const NAV = [
 
 export default function App() {
   const { user, loading, logout } = useAuth()
+  const { theme, toggle: toggleTheme } = useTheme()
+  const { cheatsheetOpen, closeCheatsheet } = useGlobalShortcuts()
+  const [mobileNavOpen, setMobileNavOpen] = useState(false)
+  const location = useLocation()
+
+  // Apply mobile-nav state to <body> so the CSS @media rule can react.
+  useEffect(() => {
+    if (mobileNavOpen) document.body.setAttribute('data-mobile-nav', 'open')
+    else document.body.removeAttribute('data-mobile-nav')
+  }, [mobileNavOpen])
+
+  // Close mobile nav on every route change.
+  useEffect(() => { setMobileNavOpen(false) }, [location.pathname])
 
   const { data: staleCount } = useQuery({
     queryKey: ['stale-count'],
@@ -50,6 +66,24 @@ export default function App() {
 
   return (
     <div className="app-shell">
+      <div className="mobile-topbar">
+        <button
+          className="mobile-topbar-burger"
+          aria-label="Open navigation"
+          onClick={() => setMobileNavOpen(o => !o)}
+        >
+          <Menu size={22} />
+        </button>
+        <span className="mobile-topbar-title">IPForge</span>
+      </div>
+      {mobileNavOpen && (
+        <div
+          className="mobile-nav-backdrop"
+          onClick={() => setMobileNavOpen(false)}
+          aria-hidden="true"
+        />
+      )}
+
       <aside className="sidebar">
         <div className="sidebar-logo">
           <Network size={18} />
@@ -153,6 +187,15 @@ export default function App() {
           </div>
           <button
             className="btn-ghost btn-sm"
+            onClick={toggleTheme}
+            title={`Switch to ${theme === 'dark' ? 'light' : 'dark'} theme`}
+            aria-label="Toggle theme"
+            style={{ padding: '0.25rem', flexShrink: 0 }}
+          >
+            {theme === 'dark' ? <Sun size={14} /> : <Moon size={14} />}
+          </button>
+          <button
+            className="btn-ghost btn-sm"
             onClick={logout}
             title="Sign out"
             style={{ padding: '0.25rem', flexShrink: 0 }}
@@ -180,6 +223,34 @@ export default function App() {
           {isAdmin && <Route path="/settings" element={<SettingsPage />} />}
         </Routes>
       </main>
+
+      {cheatsheetOpen && (
+        <div className="modal-backdrop" onClick={closeCheatsheet}>
+          <div className="modal" onClick={e => e.stopPropagation()}>
+            <h2 className="modal-title" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <Keyboard size={16} /> Keyboard Shortcuts
+            </h2>
+            <div className="shortcut-cheatsheet">
+              {SHORTCUT_LIST.map(([key, desc]) => (
+                <Fragment key={key}>
+                  <span>
+                    {key.split(' ').map((part, i, arr) => (
+                      <Fragment key={i}>
+                        <kbd>{part}</kbd>
+                        {i < arr.length - 1 && <span style={{ margin: '0 0.25rem', color: 'var(--text-muted)' }}>then</span>}
+                      </Fragment>
+                    ))}
+                  </span>
+                  <span style={{ color: 'var(--text-muted)' }}>{desc}</span>
+                </Fragment>
+              ))}
+            </div>
+            <div className="modal-actions">
+              <button className="btn btn-ghost" onClick={closeCheatsheet}>Close</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

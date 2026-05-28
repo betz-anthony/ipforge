@@ -10,6 +10,16 @@
 @import '@fontsource/fira-code/700.css';
 
 :root {
+  --radius:       8px;
+  --radius-sm:    5px;
+  --sidebar-w:    220px;
+  --font-mono:    'Fira Code', monospace;
+  --font-sans:    'Fira Sans', system-ui, sans-serif;
+}
+
+/* Dark theme (default + applied for users with no explicit choice + dark OS pref) */
+:root,
+[data-theme="dark"] {
   --bg:           #020617;
   --surface:      #0f172a;
   --surface-2:    #1e293b;
@@ -22,11 +32,26 @@
   --accent-dim:   rgba(34, 197, 94, 0.12);
   --danger:       #ef4444;
   --danger-dim:   rgba(239, 68, 68, 0.12);
-  --radius:       8px;
-  --radius-sm:    5px;
-  --sidebar-w:    220px;
-  --font-mono:    'Fira Code', monospace;
-  --font-sans:    'Fira Sans', system-ui, sans-serif;
+  --warning:      #f59e0b;
+  --success:      #4ade80;
+}
+
+/* Light theme — applied when [data-theme="light"] OR (OS prefers light AND no explicit dark choice). */
+[data-theme="light"] {
+  --bg:           #f8fafc;
+  --surface:      #ffffff;
+  --surface-2:    #f1f5f9;
+  --border:       #e2e8f0;
+  --border-2:     #cbd5e1;
+  --text:         #0f172a;
+  --text-muted:   #64748b;
+  --text-subtle:  #475569;
+  --accent:       #16a34a;
+  --accent-dim:   rgba(22, 163, 74, 0.10);
+  --danger:       #dc2626;
+  --danger-dim:   rgba(220, 38, 38, 0.10);
+  --warning:      #d97706;
+  --success:      #16a34a;
 }
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -197,7 +222,7 @@ tbody td {
   border-bottom: 1px solid var(--border);
 }
 tbody tr:last-child td { border-bottom: none; }
-tbody tr:hover td { background: rgba(30, 41, 59, 0.5); }
+tbody tr:hover td { background: var(--surface-2); }
 tbody tr.row-selected td {
   background: var(--accent-dim);
   box-shadow: inset 2px 0 0 var(--accent);
@@ -750,3 +775,109 @@ tbody tr.clickable { cursor: pointer; }
 .form-field-error-msg {
   font-size: 0.7rem; color: var(--danger, #f87171); margin-top: 0.25rem;
 }
+
+/* ── Theme toggle button in sidebar footer ───────────── */
+.theme-toggle {
+  display: inline-flex; align-items: center; gap: 0.4rem;
+  background: transparent; border: 1px solid var(--border);
+  color: var(--text-muted); padding: 0.3rem 0.55rem;
+  border-radius: var(--radius-sm); cursor: pointer;
+  font-size: 0.7rem;
+}
+.theme-toggle:hover { color: var(--text); border-color: var(--border-2); }
+
+/* ── Mobile top bar (hidden on desktop) ──────────────── */
+.mobile-topbar { display: none; }
+.mobile-nav-backdrop { display: none; }
+
+/* ── Responsive: tablet / mobile ─────────────────────── */
+@media (max-width: 768px) {
+  body { overflow-x: hidden; }
+
+  /* Top bar replaces sidebar header on mobile */
+  .mobile-topbar {
+    display: flex; align-items: center; gap: 0.75rem;
+    position: sticky; top: 0; left: 0; right: 0;
+    padding: 0.625rem 0.875rem;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    z-index: 90;
+    font-family: var(--font-mono);
+    font-weight: 700; color: var(--accent);
+  }
+  .mobile-topbar-burger {
+    background: none; border: none; cursor: pointer;
+    color: var(--text); padding: 4px;
+    display: flex; align-items: center;
+  }
+  .mobile-topbar-title { font-size: 0.95rem; }
+
+  /* Sidebar slides off-screen by default */
+  .sidebar {
+    transform: translateX(-100%);
+    transition: transform 0.2s ease;
+    box-shadow: 0 0 24px rgba(0,0,0,0.4);
+  }
+  body[data-mobile-nav="open"] .sidebar {
+    transform: translateX(0);
+  }
+  body[data-mobile-nav="open"] .mobile-nav-backdrop {
+    display: block; position: fixed; inset: 0;
+    background: rgba(0,0,0,0.55); z-index: 80;
+  }
+
+  /* Main is full-width on mobile, no sidebar offset */
+  .main {
+    margin-left: 0;
+    padding: 1rem 1rem 2rem;
+  }
+
+  /* Page header stacks on very narrow screens */
+  .page-header {
+    flex-wrap: wrap; gap: 0.5rem;
+  }
+  .page-header-actions {
+    flex-wrap: wrap; gap: 0.4rem;
+  }
+
+  /* Tables overflow horizontally instead of breaking layout */
+  .table-wrap { overflow-x: auto; }
+  table { min-width: 560px; }
+
+  /* Form grid collapses to single column */
+  .form-grid { grid-template-columns: 1fr; }
+
+  /* Nav tiles smaller */
+  .nav-tiles { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); }
+
+  /* Stats grid wraps tighter */
+  .stats-grid > * { min-width: 110px; }
+
+  /* Settings page fills width */
+  .main > div[style*="maxWidth"] { max-width: 100% !important; }
+}
+
+/* ── Keyboard shortcut cheatsheet modal ──────────────── */
+.shortcut-cheatsheet {
+  display: grid; grid-template-columns: auto 1fr; gap: 0.5rem 1rem;
+  font-size: 0.82rem;
+}
+.shortcut-cheatsheet kbd {
+  background: var(--surface-2); border: 1px solid var(--border-2);
+  border-radius: 4px; padding: 0.1rem 0.4rem;
+  font-family: var(--font-mono); font-size: 0.72rem;
+  color: var(--text);
+}
+
+/* ── Empty state ─────────────────────────────────────── */
+.empty-state-block {
+  display: flex; flex-direction: column; align-items: center;
+  gap: 0.5rem; padding: 2rem 1rem; text-align: center;
+  color: var(--text-muted);
+}
+.empty-state-block .empty-state-icon { color: var(--text-muted); opacity: 0.6; }
+.empty-state-block .empty-state-title {
+  font-size: 0.95rem; color: var(--text); font-weight: 600;
+}
+.empty-state-block .empty-state-desc { font-size: 0.82rem; }
+.empty-state-block .empty-state-action { margin-top: 0.4rem; }
