@@ -3,9 +3,9 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Eye, EyeOff, Save, Plus, Pencil, Trash2, Check, X } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import {
-  settingsApi, providerConfigsApi, cacheApi, usersApi, ldapApi, customFieldsApi,
+  settingsApi, providerConfigsApi, cacheApi, usersApi, ldapApi, customFieldsApi, discoveryApi,
   type AppSettingsUpdate, type ProviderConfig, type ProviderConfigCreate, type UserRecord,
-  type LdapSettings, type CustomFieldDef,
+  type LdapSettings, type CustomFieldDef, type NetworkDevice,
 } from '../api/client'
 import ConfirmModal from '../components/ConfirmModal'
 import Collapsible from '../components/Collapsible'
@@ -817,6 +817,114 @@ function CustomFieldsSection() {
 }
 
 
+// ── Discovery devices section ──────────────────────────────────────────────
+
+function DiscoveryDevicesSection() {
+  const qc = useQueryClient()
+  const { showToast } = useToast()
+  const { data: devices = [] } = useQuery({ queryKey: ['network-devices'], queryFn: discoveryApi.listDevices })
+
+  const [adding, setAdding] = useState(false)
+  const [form, setForm] = useState<Record<string, string>>({ name: '', host: '', snmp_version: '2c', community: '' })
+  const [confirmDelete, setConfirmDelete] = useState<{ id: number; name: string } | null>(null)
+
+  const reset = () => { setForm({ name: '', host: '', snmp_version: '2c', community: '' }); setAdding(false) }
+  const invalidate = () => qc.invalidateQueries({ queryKey: ['network-devices'] })
+
+  const createMut = useMutation({
+    mutationFn: () => discoveryApi.createDevice(form),
+    onSuccess: () => { invalidate(); reset(); showToast('Device added', 'success') },
+    onError: (e: any) => showToast(e?.response?.data?.detail ?? 'Add failed', 'error'),
+  })
+  const deleteMut = useMutation({
+    mutationFn: (id: number) => discoveryApi.deleteDevice(id),
+    onSuccess: () => { invalidate(); setConfirmDelete(null); showToast('Device deleted', 'success') },
+  })
+  const pollMut = useMutation({
+    mutationFn: (id: number) => discoveryApi.poll(id),
+    onSuccess: () => showToast('Poll started', 'success'),
+  })
+
+  const s = (k: string) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
+    setForm(f => ({ ...f, [k]: e.target.value }))
+  const isV3 = form.snmp_version === '3'
+  const canAdd = form.name.trim() && form.host.trim() && (isV3 ? form.v3_user : form.community)
+
+  return (
+    <Collapsible title="Discovery Devices (SNMP)" storageKey="discovery-devices">
+      <div className="table-wrap">
+        <table>
+          <thead>
+            <tr><th>Name</th><th>Host</th><th>Ver</th><th>Status</th><th>Interval</th><th></th></tr>
+          </thead>
+          <tbody>
+            {devices.length === 0 && <tr><td colSpan={6} className="empty-state">No devices configured.</td></tr>}
+            {devices.map((d: NetworkDevice) => (
+              <tr key={d.id}>
+                <td>{d.name}</td>
+                <td><span className="font-mono">{d.host}</span></td>
+                <td>{d.snmp_version}</td>
+                <td>
+                  <span className={`badge ${d.last_status === 'ok' ? 'badge-green' : d.last_status === 'error' ? 'badge-red' : 'badge-gray'}`}>
+                    {d.last_status}
+                  </span>
+                  {d.last_error && <span className="text-muted" style={{ fontSize: '0.7rem', marginLeft: '0.3rem' }}>{d.last_error}</span>}
+                </td>
+                <td>{d.poll_interval_minutes}m</td>
+                <td style={{ display: 'flex', gap: '0.3rem' }}>
+                  <button className="btn-ghost btn-sm" onClick={() => pollMut.mutate(d.id)}>Poll</button>
+                  <button className="btn-ghost btn-sm" onClick={() => setConfirmDelete({ id: d.id, name: d.name })}><Trash2 size={13} /></button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      {adding ? (
+        <form onSubmit={e => { e.preventDefault(); if (canAdd) createMut.mutate() }} style={{ marginTop: '0.75rem' }}>
+          <div className="form-grid">
+            <Field label="Name"><input value={form.name} onChange={s('name')} /></Field>
+            <Field label="Host"><input value={form.host} onChange={s('host')} placeholder="10.0.0.1" /></Field>
+            <Field label="SNMP version">
+              <select value={form.snmp_version} onChange={s('snmp_version')}>
+                <option value="2c">v2c</option><option value="3">v3</option>
+              </select>
+            </Field>
+            {!isV3 && <Field label="Community"><input type="password" value={form.community ?? ''} onChange={s('community')} /></Field>}
+            {isV3 && <>
+              <Field label="v3 User"><input value={form.v3_user ?? ''} onChange={s('v3_user')} /></Field>
+              <Field label="Auth protocol"><select value={form.auth_protocol ?? ''} onChange={s('auth_protocol')}><option value="">none</option><option>SHA</option><option>MD5</option></select></Field>
+              <Field label="Auth key"><input type="password" value={form.auth_key ?? ''} onChange={s('auth_key')} /></Field>
+              <Field label="Priv protocol"><select value={form.priv_protocol ?? ''} onChange={s('priv_protocol')}><option value="">none</option><option>AES</option><option>DES</option></select></Field>
+              <Field label="Priv key"><input type="password" value={form.priv_key ?? ''} onChange={s('priv_key')} /></Field>
+            </>}
+            <Field label="Poll interval (min)"><input type="number" min={1} value={form.poll_interval_minutes ?? '60'} onChange={s('poll_interval_minutes')} /></Field>
+          </div>
+          <div className="form-actions">
+            <button type="submit" className="btn-primary" disabled={!canAdd || createMut.isPending}>Add Device</button>
+            <button type="button" className="btn-ghost" onClick={reset}>Cancel</button>
+          </div>
+        </form>
+      ) : (
+        <button className="btn-ghost btn-sm" style={{ marginTop: '0.5rem' }} onClick={() => setAdding(true)}>
+          <Plus size={13} /> Add Device
+        </button>
+      )}
+
+      {confirmDelete && (
+        <ConfirmModal
+          title="Delete Device"
+          message={`Delete "${confirmDelete.name}" and its discovered endpoints?`}
+          onConfirm={() => deleteMut.mutate(confirmDelete.id)}
+          onCancel={() => setConfirmDelete(null)}
+        />
+      )}
+    </Collapsible>
+  )
+}
+
+
 export default function SettingsPage() {
   const qc = useQueryClient()
   const { user } = useAuth()
@@ -914,6 +1022,9 @@ export default function SettingsPage() {
 
       {/* ── Custom Fields ── */}
       <CustomFieldsSection />
+
+      {/* ── Discovery Devices ── */}
+      <DiscoveryDevicesSection />
 
       {/* ── Users ── */}
       {user && <UsersSection currentUsername={user.username} />}

@@ -1,7 +1,7 @@
 import { useState, useRef, useMemo } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Plus, X, Download, Upload, Server } from 'lucide-react'
-import { addressesApi, subnetsApi, dnsApi, dhcpApi, scanHistoryApi, importExportApi, customFieldsApi, type IPAddress, type ImportResult, type DeletePreview } from '../api/client'
+import { addressesApi, subnetsApi, dnsApi, dhcpApi, scanHistoryApi, importExportApi, customFieldsApi, discoveryApi, type IPAddress, type ImportResult, type DeletePreview } from '../api/client'
 import { formatRelative } from '../utils/time'
 import { ipCompare, isValidIPv4, isValidIPv6, isValidEUI48 } from '../utils/ip'
 import DetailDrawer from '../components/DetailDrawer'
@@ -66,6 +66,13 @@ export default function Addresses() {
   const { data: ipDhcpLeases } = useQuery({
     queryKey: ['dhcp-by-ip', selectedAddress?.address],
     queryFn: () => dhcpApi.byIp(selectedAddress!.address),
+    enabled: !!selectedAddress,
+    retry: false,
+  })
+
+  const { data: discoveryEndpoints } = useQuery({
+    queryKey: ['discovery-by-address', selectedAddress?.id],
+    queryFn: () => discoveryApi.addressDiscovery(selectedAddress!.id),
     enabled: !!selectedAddress,
     retry: false,
   })
@@ -204,6 +211,20 @@ export default function Addresses() {
 
   const addressViewExtra = selectedAddress ? (
     <>
+      {discoveryEndpoints && discoveryEndpoints.length > 0 && (
+        <div style={{ marginBottom: '1rem' }}>
+          <div className="detail-section-title">Network location</div>
+          {discoveryEndpoints.map(e => (
+            <div key={e.id} style={{ fontSize: '0.8rem', padding: '0.2rem 0' }}>
+              <span className="font-mono">{e.port_name ?? `if${e.ifindex ?? '?'}`}</span>
+              {e.vlan != null && <span className="badge badge-blue" style={{ marginLeft: '0.4rem' }}>VLAN {e.vlan}</span>}
+              <span style={{ color: 'var(--text-muted)', marginLeft: '0.4rem' }}>
+                on {e.source}{e.mac ? ` · ${e.mac}` : ''}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
       {scanHistory && scanHistory.length > 0 && (() => {
         const last30 = scanHistory.slice(0, 30)
         const totalUp = last30.reduce((s, r) => s + r.up_count, 0)

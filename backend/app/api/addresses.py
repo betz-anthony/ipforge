@@ -135,6 +135,33 @@ def get_address_by_ip(
     return record
 
 
+@router.get("/{address_id}/discovery")
+def get_address_discovery(
+    address_id: int,
+    db: Session = Depends(get_db),
+    access: AccessContext = Depends(get_access_context),
+):
+    from app.models.network_device import DiscoveredEndpoint
+    address = db.get(IPAddress, address_id)
+    if not address:
+        raise HTTPException(404, "Address not found")
+    access.require_read(address.subnet_id)
+    q = db.query(DiscoveredEndpoint).filter(
+        or_(
+            DiscoveredEndpoint.ip == address.address,
+            DiscoveredEndpoint.mac == (address.mac_address or "\0"),
+        )
+    )
+    return [
+        {
+            "id": e.id, "device_id": e.device_id, "ip": e.ip, "mac": e.mac,
+            "ifindex": e.ifindex, "port_name": e.port_name, "vlan": e.vlan,
+            "last_seen": e.last_seen.isoformat() + "Z" if e.last_seen else None, "source": e.source,
+        }
+        for e in q.order_by(DiscoveredEndpoint.last_seen.desc()).all()
+    ]
+
+
 @router.get("/{address_id}", response_model=AddressRead)
 def get_address(
     address_id: int,
