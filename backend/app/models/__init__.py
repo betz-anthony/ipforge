@@ -6,7 +6,7 @@ from app.models.cache import (
     CachedDHCPScope, CachedDHCPLease,
     SyncStatus,
 )
-from app.models.scan import ScanResult, DriftItem, DriftCategory, Collision, CollisionType, ScanHistoryDay, AlertEvent, SubnetUtilizationDay
+from app.models.scan import ScanResult, DriftItem, DriftCategory, DriftPolicy, Collision, CollisionType, ScanHistoryDay, AlertEvent, SubnetUtilizationDay
 from app.models.provider_config import ProviderConfig
 from app.models.user import User
 from app.models.audit_log import AuditLog
@@ -27,7 +27,7 @@ __all__ = [
     "CachedDNSZone", "CachedDNSRecord",
     "CachedDHCPScope", "CachedDHCPLease",
     "SyncStatus",
-    "ScanResult", "DriftItem", "DriftCategory", "Collision", "CollisionType", "ScanHistoryDay", "AlertEvent", "SubnetUtilizationDay",
+    "ScanResult", "DriftItem", "DriftCategory", "DriftPolicy", "Collision", "CollisionType", "ScanHistoryDay", "AlertEvent", "SubnetUtilizationDay",
     "ProviderConfig",
     "User",
     "AuditLog",

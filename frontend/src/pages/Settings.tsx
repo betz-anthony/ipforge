@@ -13,6 +13,7 @@ import { useToast } from '../contexts/ToastContext'
 import AlertChannels from './AlertChannels'
 import AlertRules from './AlertRules'
 import AutomationRules from './AutomationRules'
+import DriftRemediation from './DriftRemediation'
 
 // ── Provider field definitions ─────────────────────────────────────────────
 
@@ -1038,6 +1039,9 @@ export default function SettingsPage() {
 
       {/* ── Automation Rules ── */}
       <AutomationRules />
+
+      {/* ── Drift Auto-Remediation ── */}
+      <DriftRemediation />
     </div>
   )
 }

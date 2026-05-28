@@ -195,6 +195,8 @@ def detect_drift_bg() -> None:
     db = SessionLocal()
     try:
         detect_drift(db)
+        from app.drift_remediation import remediate_drift
+        remediate_drift(db)
     except Exception:
         logger.exception("detect_drift_bg failed")
     finally:

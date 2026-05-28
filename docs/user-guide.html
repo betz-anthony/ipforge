@@ -787,10 +787,28 @@ failure):</p>
 </ul>
 <p>Select multiple rows of the same kind for <strong>bulk dismiss</strong>. Filter by category;
 the stats header shows counts by category and severity.</p>
+<h3 id="auto-remediation-settings-drift-auto-remediation">Auto-remediation (Settings → Drift Auto-Remediation)</h3>
+<p>IPForge can fix open drift automatically, per category, with conservative
+guardrails. In <strong>Settings → Drift Auto-Remediation</strong> (admin) set each category's
+mode:</p>
+<ul>
+<li><strong>auto</strong> (safe, IPAM-only categories only — orphan_dns / orphan_dhcp → import,
+  mac_mismatch → copy DHCP MAC, active_but_available → set a status): the action
+  is applied automatically each sweep.</li>
+<li><strong>review</strong>: matching items are flagged <strong>needs review</strong> (a badge + filter on the
+  Drift page) for a human — used for destructive / provider-writing categories
+  (deletes, hostname push, missing-DNS create), which are never automated.</li>
+<li><strong>off</strong>: no policy.</li>
+</ul>
+<p>Guardrails: new auto policies default to <strong>dry-run</strong> (they log what they <em>would</em>
+do until you turn it off); every action is audited; actions are reversible and
+IPAM-only; and <strong>gitops-managed resources are skipped</strong> — the declared document is
+authoritative for those. The sweep runs right after each drift detection pass.</p>
 <h3 id="api">API</h3>
-<p><code>GET /api/drift</code> (filters: <code>category</code>, <code>severity</code>, <code>subnet_id</code>, <code>resolved</code>),
-<code>GET /api/drift/stats</code>, <code>POST /api/drift/scan</code>, <code>POST /api/drift/{id}/resolve</code>,
-<code>POST /api/drift/resolve-bulk</code>.</p>
+<p><code>GET /api/drift</code> (filters: <code>category</code>, <code>severity</code>, <code>subnet_id</code>, <code>resolved</code>,
+<code>needs_review</code>), <code>GET /api/drift/stats</code>, <code>POST /api/drift/scan</code>,
+<code>POST /api/drift/{id}/resolve</code>, <code>POST /api/drift/resolve-bulk</code>,
+<code>GET/PUT/DELETE /api/drift/policies[/{category}]</code>.</p>
 <hr>
 <h2 id="snmp-discovery">SNMP Discovery</h2>
 <p>Poll network devices over SNMP to learn where each host actually lives —

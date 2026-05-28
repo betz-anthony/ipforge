@@ -253,6 +253,8 @@ def scan_subnet(
         db.commit()
         from app.drift import detect_drift
         detect_drift(db, subnet_id)
+        from app.drift_remediation import remediate_drift
+        remediate_drift(db, subnet_id)
         _set_scan_status(db, subnet_id, "ok")
 
     except Exception as e:

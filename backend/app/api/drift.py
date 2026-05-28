@@ -1,19 +1,22 @@
 """DRIFT-001 — reconciliation API: list, stats, scan, resolve, bulk-resolve."""
 import logging
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from typing import Literal
+
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from pydantic import BaseModel
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.core.audit import write_audit
-from app.core.deps import get_current_user, require_operator
+from app.core.deps import get_current_user, require_operator, require_admin
 from app.core.time import utcnow
 from app.database import get_db
 from app.drift import detect_drift
+from app.drift_remediation import SAFE_CATEGORIES
 from app.models.address import IPAddress, AddressStatus
 from app.models.cache import CachedDHCPLease, CachedDNSRecord
-from app.models.scan import DriftItem
+from app.models.scan import DriftItem, DriftPolicy
 from app.models.subnet import Subnet
 from app.models.user import User
 from app.providers.dhcp.base import DHCPReservation
@@ -35,6 +38,7 @@ class DriftResponse(BaseModel):
     detected_at: str | None
     resolved: bool
     resolved_at: str | None
+    needs_review: bool = False
 
 
 class ResolveRequest(BaseModel):
@@ -63,15 +67,17 @@ def _out(d: DriftItem) -> DriftResponse:
         detected_at=d.detected_at.isoformat() + "Z" if d.detected_at else None,
         resolved=d.resolved,
         resolved_at=d.resolved_at.isoformat() + "Z" if d.resolved_at else None,
+        needs_review=d.needs_review,
     )
 
 
 @router.get("", response_model=list[DriftResponse])
 def list_drift(
-    resolved:  bool = Query(False),
-    category:  str | None = Query(None),
-    severity:  str | None = Query(None),
-    subnet_id: int | None = Query(None),
+    resolved:     bool = Query(False),
+    category:     str | None = Query(None),
+    severity:     str | None = Query(None),
+    subnet_id:    int | None = Query(None),
+    needs_review: bool | None = Query(None),
     db: Session = Depends(get_db),
 ):
     q = db.query(DriftItem).filter(DriftItem.resolved == resolved)
@@ -81,6 +87,8 @@ def list_drift(
         q = q.filter(DriftItem.severity == severity)
     if subnet_id is not None:
         q = q.filter(DriftItem.subnet_id == subnet_id)
+    if needs_review is not None:
+        q = q.filter(DriftItem.needs_review == needs_review)
     return [_out(d) for d in q.order_by(DriftItem.detected_at.desc()).all()]
 
 
@@ -331,3 +339,56 @@ def resolve_bulk(
             failed.append({"id": did, "error": str(exc.detail)})
     db.commit()
     return {"resolved": resolved, "failed": failed}
+
+
+# ── auto-remediation policies (DRIFT-001 v2) ──────────────────────────────────
+
+class PolicyIn(BaseModel):
+    mode: Literal["auto", "review"]
+    dry_run: bool = True
+    params: dict = {}
+    enabled: bool = True
+
+
+def _policy_out(p: DriftPolicy) -> dict:
+    return {"id": p.id, "category": p.category, "mode": p.mode, "dry_run": p.dry_run,
+            "params": p.params, "enabled": p.enabled}
+
+
+@router.get("/policies")
+def list_policies(_: User = Depends(require_admin), db: Session = Depends(get_db)):
+    return [_policy_out(p) for p in db.query(DriftPolicy).order_by(DriftPolicy.category).all()]
+
+
+@router.put("/policies/{category}")
+def upsert_policy(category: str, body: PolicyIn,
+                  current_user: User = Depends(require_admin), db: Session = Depends(get_db)):
+    if body.mode == "auto" and category not in SAFE_CATEGORIES:
+        raise HTTPException(400, f"category {category!r} is not auto-eligible; use mode 'review'")
+    target = (body.params or {}).get("target_status")
+    if target is not None:
+        try:
+            AddressStatus(target)
+        except ValueError:
+            raise HTTPException(400, f"Invalid target_status: {target}")
+    p = db.query(DriftPolicy).filter_by(category=category).first()
+    if p is None:
+        p = DriftPolicy(category=category)
+        db.add(p)
+    p.mode, p.dry_run, p.params, p.enabled = body.mode, body.dry_run, body.params, body.enabled
+    db.flush()
+    write_audit(db, current_user.username, "upsert", "drift_policy", str(p.id), category)
+    db.commit()
+    db.refresh(p)
+    return _policy_out(p)
+
+
+@router.delete("/policies/{category}", status_code=204)
+def delete_policy(category: str, current_user: User = Depends(require_admin), db: Session = Depends(get_db)):
+    p = db.query(DriftPolicy).filter_by(category=category).first()
+    if p is None:
+        raise HTTPException(404, "Policy not found")
+    write_audit(db, current_user.username, "delete", "drift_policy", str(p.id), category)
+    db.delete(p)
+    db.commit()
+    return Response(status_code=204)
