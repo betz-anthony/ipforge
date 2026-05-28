@@ -1,5 +1,5 @@
 import ipaddress
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 from app.database import get_db
@@ -14,6 +14,14 @@ from app.core.forecast import compute_forecast
 from app.config import settings
 from app.models.scan import SubnetUtilizationDay
 from app.scan import subnet_total_count
+from app.core.custom_fields import (
+    load_custom_fields, load_tags, load_custom_fields_bulk, load_tags_bulk,
+    set_custom_fields, set_tags, filter_entity_ids,
+)
+
+
+def _cf_filters(request: Request) -> dict[str, str]:
+    return {k[3:]: v for k, v in request.query_params.items() if k.startswith("cf_")}
 
 router = APIRouter()
 
@@ -114,7 +122,9 @@ def _is_ancestor(db: Session, potential_ancestor_id: int, node_id: int) -> bool:
 
 @router.get("", response_model=list[SubnetWithStats])
 def list_subnets(
+    request: Request,
     ip_version: int | None = Query(None, description="Filter by IP version (4 or 6)"),
+    tag: str | None = Query(None, description="Filter by tag name"),
     db: Session = Depends(get_db),
     access: AccessContext = Depends(get_access_context),
 ):
@@ -124,8 +134,17 @@ def list_subnets(
     subnets = q.all()
     if not access.global_read:
         subnets = [s for s in subnets if s.id in access.viewable]
+    match = filter_entity_ids(db, "subnet", tag=tag, cf_filters=_cf_filters(request))
+    if match is not None:
+        subnets = [s for s in subnets if s.id in match]
     rows = _build_stats_rows(subnets, db)
     _compute_rollup(rows)
+    ids = [r["id"] for r in rows]
+    cf = load_custom_fields_bulk(db, "subnet", ids)
+    tg = load_tags_bulk(db, "subnet", ids)
+    for r in rows:
+        r["custom_fields"] = cf.get(r["id"], {})
+        r["tags"] = tg.get(r["id"], [])
     return [SubnetWithStats(**r) for r in rows]
 
 
@@ -251,6 +270,8 @@ def get_subnet(
     if not subnet:
         raise HTTPException(404, "Subnet not found")
     access.require_read(subnet_id)
+    subnet.custom_fields = load_custom_fields(db, "subnet", subnet.id)
+    subnet.tags = load_tags(db, "subnet", subnet.id)
     return subnet
 
 
@@ -268,9 +289,13 @@ def update_subnet(
     access.require_write(subnet_id)
     before = _subnet_state(subnet)
     for key, value in data.model_dump(exclude_unset=True).items():
-        if key == "parent_id":
+        if key in ("parent_id", "custom_fields", "tags"):
             continue  # handled separately below
         setattr(subnet, key, value)
+    if data.custom_fields is not None:
+        set_custom_fields(db, "subnet", subnet.id, data.custom_fields)
+    if data.tags is not None:
+        set_tags(db, "subnet", subnet.id, data.tags)
     if "parent_id" in data.model_fields_set:
         new_parent_id = data.parent_id
         if new_parent_id is not None:
@@ -294,6 +319,8 @@ def update_subnet(
                 f"{subnet.cidr} ({subnet.name})", before=before, after=_subnet_state(subnet))
     db.commit()
     db.refresh(subnet)
+    subnet.custom_fields = load_custom_fields(db, "subnet", subnet.id)
+    subnet.tags = load_tags(db, "subnet", subnet.id)
     return subnet
 
 

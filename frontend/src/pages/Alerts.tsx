@@ -1,9 +1,10 @@
 import { useState, useMemo } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { CheckCircle2 } from 'lucide-react'
+import { CheckCircle2, Bell } from 'lucide-react'
 import { alertEventsApi, alertChannelsApi } from '../api/client'
 import { useToast } from '../contexts/ToastContext'
 import SearchInput from '../components/SearchInput'
+import EmptyState from '../components/EmptyState'
 import { TableSkeleton } from '../components/Skeleton'
 import { useTableSort } from '../hooks/useTableSort'
 
@@ -127,8 +128,16 @@ export default function Alerts() {
             </tr>
           ))}
           {visibleEvents.length === 0 && (
-            <tr><td colSpan={6} style={{ textAlign: 'center', color: 'var(--text-muted)' }}>
-              {events.length === 0 ? 'No alerts.' : 'No alerts match search.'}
+            <tr><td colSpan={6}>
+              {events.length === 0 ? (
+                <EmptyState icon={Bell} title="No alerts" description="Reachability and trigger events will show up here." />
+              ) : (
+                <EmptyState
+                  icon={Bell}
+                  title="No alerts match search"
+                  action={<button className="btn-ghost btn-sm" onClick={() => setSearchTerm('')}>Clear search</button>}
+                />
+              )}
             </td></tr>
           )}
         </tbody>

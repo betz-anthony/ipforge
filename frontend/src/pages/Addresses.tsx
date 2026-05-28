@@ -1,10 +1,12 @@
 import { useState, useRef, useMemo } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Plus, X, Download, Upload } from 'lucide-react'
-import { addressesApi, subnetsApi, dnsApi, dhcpApi, scanHistoryApi, importExportApi, type IPAddress, type ImportResult, type DeletePreview } from '../api/client'
+import { Plus, X, Download, Upload, Server } from 'lucide-react'
+import { addressesApi, subnetsApi, dnsApi, dhcpApi, scanHistoryApi, importExportApi, customFieldsApi, type IPAddress, type ImportResult, type DeletePreview } from '../api/client'
 import { formatRelative } from '../utils/time'
 import { ipCompare, isValidIPv4, isValidIPv6, isValidEUI48 } from '../utils/ip'
 import DetailDrawer from '../components/DetailDrawer'
+import EmptyState from '../components/EmptyState'
+import CustomFieldsEditor, { parseTags } from '../components/CustomFieldsEditor'
 import SearchInput from '../components/SearchInput'
 import { TableSkeleton } from '../components/Skeleton'
 import { useTableSort } from '../hooks/useTableSort'
@@ -36,6 +38,12 @@ export default function Addresses() {
   const [filterSubnet, setFilterSubnet]       = useState<number | ''>('')
   const [selectedAddress, setSelectedAddress] = useState<IPAddress | null>(null)
   const [editForm, setEditForm]               = useState(emptyEditForm)
+  const [cfValues, setCfValues]               = useState<Record<string, string>>({})
+  const [tagsText, setTagsText]               = useState('')
+  const { data: fieldDefs } = useQuery({
+    queryKey: ['custom-fields', 'address'],
+    queryFn: () => customFieldsApi.list('address'),
+  })
   const qc = useQueryClient()
   const { showToast } = useToast()
   const [deletingId, setDeletingId]         = useState<number | null>(null)
@@ -103,6 +111,8 @@ export default function Addresses() {
       mac_address: editForm.mac_address || null,
       description: editForm.description || null,
       notes:       editForm.notes       || null,
+      custom_fields: cfValues,
+      tags:          parseTags(tagsText),
     }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['addresses'] }),
   })
@@ -147,6 +157,8 @@ export default function Addresses() {
       description: a.description ?? '',
       notes:       a.notes       ?? '',
     })
+    setCfValues(a.custom_fields ?? {})
+    setTagsText((a.tags ?? []).join(', '))
   }
 
   const [searchTerm, setSearchTerm] = useState('')
@@ -513,8 +525,26 @@ export default function Addresses() {
             </thead>
             <tbody>
               {visibleAddresses.length === 0 && (
-                <tr><td colSpan={7} className="empty-state">
-                  {data?.length === 0 ? 'No addresses tracked. Add one above.' : 'No addresses match filters.'}
+                <tr><td colSpan={7}>
+                  {data?.length === 0 ? (
+                    <EmptyState
+                      icon={Server}
+                      title="No addresses tracked"
+                      description="Add an address manually or run a subnet scan to discover hosts."
+                      action={!showForm && (
+                        <button className="btn-primary btn-sm" onClick={() => setShowForm(true)}>
+                          <Plus size={13} /> Add Address
+                        </button>
+                      )}
+                    />
+                  ) : (
+                    <EmptyState
+                      icon={Server}
+                      title="No addresses match filters"
+                      description="Try a different term or clear the search."
+                      action={<button className="btn-ghost btn-sm" onClick={() => setSearchTerm('')}>Clear search</button>}
+                    />
+                  )}
                 </td></tr>
               )}
               {visibleAddresses.map((a: IPAddress) => (
@@ -657,6 +687,13 @@ export default function Addresses() {
               style={{ resize: 'vertical', width: '100%' }}
             />
           </div>
+          <CustomFieldsEditor
+            defs={fieldDefs ?? []}
+            values={cfValues}
+            tagsText={tagsText}
+            onValueChange={(name, value) => setCfValues(v => ({ ...v, [name]: value }))}
+            onTagsChange={setTagsText}
+          />
         </DetailDrawer>
       )}
     </div>

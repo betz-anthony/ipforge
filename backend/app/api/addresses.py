@@ -1,6 +1,6 @@
 import logging
 
-from fastapi import APIRouter, Body, Depends, HTTPException, Query
+from fastapi import APIRouter, Body, Depends, HTTPException, Query, Request
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
 from datetime import date, timedelta
@@ -13,6 +13,10 @@ from app.schemas.address import AddressCreate, AddressRead, AddressUpdate
 from app.core.deps import get_current_user
 from app.core.audit import write_audit
 from app.core.access import AccessContext, get_access_context
+from app.core.custom_fields import (
+    load_custom_fields, load_tags, load_custom_fields_bulk, load_tags_bulk,
+    set_custom_fields, set_tags, filter_entity_ids,
+)
 from app.core.ptr import build_ptr_record
 from app.providers.registry import get_dns_providers, get_dhcp_providers
 from app.providers.dns.base import DNSRecord
@@ -45,8 +49,10 @@ def _address_state(a: IPAddress) -> dict:
 
 @router.get("", response_model=list[AddressRead])
 def list_addresses(
+    request: Request,
     subnet_id: int | None = Query(None),
     status: AddressStatus | None = Query(None),
+    tag: str | None = Query(None, description="Filter by tag name"),
     db: Session = Depends(get_db),
     access: AccessContext = Depends(get_access_context),
 ):
@@ -58,6 +64,16 @@ def list_addresses(
     rows = q.all()
     if not access.global_read:
         rows = [r for r in rows if r.subnet_id in access.viewable]
+    cf_filters = {k[3:]: v for k, v in request.query_params.items() if k.startswith("cf_")}
+    match = filter_entity_ids(db, "address", tag=tag, cf_filters=cf_filters)
+    if match is not None:
+        rows = [r for r in rows if r.id in match]
+    ids = [r.id for r in rows]
+    cf = load_custom_fields_bulk(db, "address", ids)
+    tg = load_tags_bulk(db, "address", ids)
+    for r in rows:
+        r.custom_fields = cf.get(r.id, {})
+        r.tags = tg.get(r.id, [])
     return rows
 
 
@@ -114,6 +130,8 @@ def get_address_by_ip(
     if not record:
         raise HTTPException(404, "Address not found")
     access.require_read(record.subnet_id)
+    record.custom_fields = load_custom_fields(db, "address", record.id)
+    record.tags = load_tags(db, "address", record.id)
     return record
 
 
@@ -127,6 +145,8 @@ def get_address(
     if not address:
         raise HTTPException(404, "Address not found")
     access.require_read(address.subnet_id)
+    address.custom_fields = load_custom_fields(db, "address", address.id)
+    address.tags = load_tags(db, "address", address.id)
     return address
 
 
@@ -144,12 +164,20 @@ def update_address(
     access.require_write(address.subnet_id)
     before = _address_state(address)
     for key, value in data.model_dump(exclude_unset=True).items():
+        if key in ("custom_fields", "tags"):
+            continue
         setattr(address, key, value)
+    if data.custom_fields is not None:
+        set_custom_fields(db, "address", address.id, data.custom_fields)
+    if data.tags is not None:
+        set_tags(db, "address", address.id, data.tags)
     db.flush()
     write_audit(db, current_user.username, "update", "address", str(address.id),
                 address.address, before=before, after=_address_state(address))
     db.commit()
     db.refresh(address)
+    address.custom_fields = load_custom_fields(db, "address", address.id)
+    address.tags = load_tags(db, "address", address.id)
     return address
 
 

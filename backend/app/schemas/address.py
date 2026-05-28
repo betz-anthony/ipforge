@@ -35,6 +35,8 @@ class AddressUpdate(BaseModel):
     mac_address: str | None = None
     description: str | None = None
     notes: str | None = None
+    custom_fields: dict[str, str] | None = None
+    tags: list[str] | None = None
 
     @field_validator("mac_address")
     @classmethod
@@ -52,5 +54,7 @@ class AddressRead(AddressCreate):
     dhcp_provider: str | None = None
     dhcp_scope_id: str | None = None
     ptr_zone:      str | None = None
+    custom_fields: dict[str, str] = {}
+    tags: list[str] = []
 
     model_config = {"from_attributes": True}

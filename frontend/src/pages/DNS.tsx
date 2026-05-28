@@ -1,9 +1,10 @@
 import { useState, useMemo, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { SlidersHorizontal, Plus, X, Trash2 } from 'lucide-react'
+import { SlidersHorizontal, Plus, X, Trash2, Globe } from 'lucide-react'
 import { dnsApi, providersApi, addressesApi, subnetsApi, type DNSRecord, type DNSZone } from '../api/client'
-import { ipInCidr } from '../utils/ip'
+import { ipInCidr, isValidIPv4, isValidIPv6, isValidHostname } from '../utils/ip'
 import SyncBar from '../components/SyncBar'
+import EmptyState from '../components/EmptyState'
 import DetailPanel from '../components/DetailPanel'
 import ConfirmModal from '../components/ConfirmModal'
 import { useToast } from '../contexts/ToastContext'
@@ -76,6 +77,13 @@ type ViewMode = 'combined' | 'by-server'
 
 const emptyForm = { name: '', record_type: 'A', value: '', ttl: 3600, source: '' }
 
+function dnsValueError(recordType: string, value: string): string {
+  if (!value) return ''
+  if (recordType === 'A' && !isValidIPv4(value)) return 'Invalid IPv4 address'
+  if (recordType === 'AAAA' && !isValidIPv6(value)) return 'Invalid IPv6 address'
+  return ''
+}
+
 function SortArrow({ col, sortCol, sortDir }: { col: SortCol; sortCol: SortCol | null; sortDir: SortDir }) {
   const active = col === sortCol
   return (
@@ -119,6 +127,8 @@ export default function DNS() {
   const [sortDir, setSortDir]               = useState<SortDir>('asc')
   const [showForm, setShowForm]             = useState(false)
   const [form, setForm]                     = useState(emptyForm)
+  const [nameError, setNameError]           = useState('')
+  const [valueError, setValueError]         = useState('')
   const [viewMode, setViewMode]             = useState<ViewMode>('combined')
   const [selectedRecord, setSelectedRecord] = useState<DNSRecord | null>(null)
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set())
@@ -353,8 +363,16 @@ export default function DNS() {
         <tbody>
           {recs.length === 0 && (
             <tr>
-              <td colSpan={multiProvider ? 6 : 5} className="empty-state">
-                No records{filter || typeFilter ? ' matching filters' : ''}.
+              <td colSpan={multiProvider ? 6 : 5}>
+                {filter || typeFilter ? (
+                  <EmptyState
+                    icon={Globe}
+                    title="No records match filters"
+                    action={<button className="btn-ghost btn-sm" onClick={() => { setFilter(''); setTypeFilter('') }}>Clear filters</button>}
+                  />
+                ) : (
+                  <EmptyState icon={Globe} title="No records in this zone" description="Add a record using the form above." />
+                )}
               </td>
             </tr>
           )}
@@ -547,19 +565,31 @@ export default function DNS() {
               {showForm && (
                 <div className="inline-form">
                   <div className="form-grid">
-                    <div className="form-field">
+                    <div className={`form-field${nameError ? ' form-field-error' : ''}`}>
                       <label>Name</label>
-                      <input placeholder="server01" value={form.name} onChange={set('name')} />
+                      <input
+                        placeholder="server01"
+                        value={form.name}
+                        onChange={e => { set('name')(e); if (nameError) setNameError('') }}
+                        onBlur={() => setNameError(form.name && !isValidHostname(form.name) ? 'Invalid hostname' : '')}
+                      />
+                      {nameError && <span className="form-field-error-msg">{nameError}</span>}
                     </div>
                     <div className="form-field">
                       <label>Type</label>
-                      <select value={form.record_type} onChange={set('record_type')}>
+                      <select value={form.record_type} onChange={e => { set('record_type')(e); setValueError('') }}>
                         {RECORD_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
                       </select>
                     </div>
-                    <div className="form-field">
+                    <div className={`form-field${valueError ? ' form-field-error' : ''}`}>
                       <label>Value</label>
-                      <input placeholder="10.0.0.1" value={form.value} onChange={set('value')} />
+                      <input
+                        placeholder="10.0.0.1"
+                        value={form.value}
+                        onChange={e => { set('value')(e); if (valueError) setValueError('') }}
+                        onBlur={() => setValueError(dnsValueError(form.record_type, form.value))}
+                      />
+                      {valueError && <span className="form-field-error-msg">{valueError}</span>}
                     </div>
                     <div className="form-field">
                       <label>TTL (seconds)</label>
@@ -591,7 +621,11 @@ export default function DNS() {
                     <button
                       className="btn-primary btn-sm"
                       onClick={() => createMutation.mutate()}
-                      disabled={createMutation.isPending || !form.name || !form.value}
+                      disabled={
+                        createMutation.isPending || !form.name || !form.value ||
+                        !!dnsValueError(form.record_type, form.value) ||
+                        (!!form.name && !isValidHostname(form.name))
+                      }
                     >
                       {createMutation.isPending ? 'Adding…' : 'Add'}
                     </button>

@@ -1,9 +1,11 @@
 import { useState, useMemo, useEffect, useRef } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Plus, X, Scan, AlertTriangle, GitBranch, Download, Upload } from 'lucide-react'
-import { subnetsApi, dhcpApi, addressesApi, scanApi, settingsApi, importExportApi, grantsApi, groupsApi, usersApi, vlansApi, type Subnet, type DHCPScope, type Collision, type ImportResult } from '../api/client'
+import { Plus, X, Scan, AlertTriangle, GitBranch, Download, Upload, Network } from 'lucide-react'
+import { subnetsApi, dhcpApi, addressesApi, scanApi, settingsApi, importExportApi, grantsApi, groupsApi, usersApi, vlansApi, customFieldsApi, type Subnet, type DHCPScope, type Collision, type ImportResult } from '../api/client'
 import { ipInCidr, ipCompare, isValidCidr } from '../utils/ip'
 import DetailDrawer from '../components/DetailDrawer'
+import EmptyState from '../components/EmptyState'
+import CustomFieldsEditor, { parseTags } from '../components/CustomFieldsEditor'
 import UtilBar from '../components/UtilBar'
 import CollisionResolveDialog from './CollisionResolveDialog'
 import SubnetTree from './SubnetTree'
@@ -88,6 +90,8 @@ export default function Subnets() {
   const [form, setForm]                     = useState(emptyForm)
   const [selectedSubnet, setSelectedSubnet] = useState<Subnet | null>(null)
   const [editForm, setEditForm]             = useState(emptyEditForm)
+  const [cfValues, setCfValues]             = useState<Record<string, string>>({})
+  const [tagsText, setTagsText]             = useState('')
   const qc = useQueryClient()
   const [showRangePicker, setShowRangePicker] = useState(false)
   const [rangeForm, setRangeForm]             = useState({ start_ip: '', end_ip: '' })
@@ -203,6 +207,10 @@ export default function Subnets() {
   const { showToast } = useToast()
   const { user } = useAuth()
   const isAdmin = user?.role === 'admin'
+  const { data: fieldDefs } = useQuery({
+    queryKey: ['custom-fields', 'subnet'],
+    queryFn: () => customFieldsApi.list('subnet'),
+  })
 
   const [treeView, setTreeView]           = useState(false)
   const [treeSelectedId, setTreeSelectedId] = useState<number | null>(null)
@@ -283,6 +291,8 @@ export default function Subnets() {
       dns_provider_name:  editForm.dns_provider_name || null,
       dhcp_provider_name: editForm.dhcp_provider_name || null,
       request_eligible:   editForm.request_eligible,
+      custom_fields:      cfValues,
+      tags:               parseTags(tagsText),
       ...(editParentId !== undefined ? { parent_id: editParentId } : {}),
     }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['subnets'] }),
@@ -321,6 +331,8 @@ export default function Subnets() {
       dhcp_provider_name: s.dhcp_provider_name ?? '',
       request_eligible:   s.request_eligible ?? false,
     })
+    setCfValues(s.custom_fields ?? {})
+    setTagsText((s.tags ?? []).join(', '))
     setEditParentId(s.parent_id ?? null)
     setShowRangePicker(false)
     setRangeForm({ start_ip: '', end_ip: '' })
@@ -372,6 +384,23 @@ export default function Subnets() {
               }`}>{forecast.confidence} confidence</span>
             </p>
           )}
+        </div>
+      )}
+      {((selectedSubnet.tags && selectedSubnet.tags.length > 0) ||
+        (selectedSubnet.custom_fields && Object.keys(selectedSubnet.custom_fields).length > 0)) && (
+        <div style={{ marginBottom: '1rem' }}>
+          {selectedSubnet.tags && selectedSubnet.tags.length > 0 && (
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.35rem', marginBottom: '0.5rem' }}>
+              {selectedSubnet.tags.map(t => (
+                <span key={t} className="badge badge-blue">{t}</span>
+              ))}
+            </div>
+          )}
+          {selectedSubnet.custom_fields && Object.entries(selectedSubnet.custom_fields).map(([k, v]) => (
+            <div key={k} style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+              <strong>{k}:</strong> {v}
+            </div>
+          ))}
         </div>
       )}
       <div style={{ marginTop: '1rem' }}>
@@ -760,8 +789,26 @@ export default function Subnets() {
             </thead>
             <tbody>
               {visibleSubnets.length === 0 && (
-                <tr><td colSpan={7} className="empty-state">
-                  {data.length === 0 ? 'No subnets defined. Add one above.' : 'No subnets match search.'}
+                <tr><td colSpan={7}>
+                  {data.length === 0 ? (
+                    <EmptyState
+                      icon={Network}
+                      title="No subnets defined"
+                      description="Create your first subnet to start tracking address space."
+                      action={!showForm && (
+                        <button className="btn-primary btn-sm" onClick={() => setShowForm(true)}>
+                          <Plus size={13} /> Add Subnet
+                        </button>
+                      )}
+                    />
+                  ) : (
+                    <EmptyState
+                      icon={Network}
+                      title="No subnets match search"
+                      description="Try a different term or clear the search."
+                      action={<button className="btn-ghost btn-sm" onClick={() => setSearchTerm('')}>Clear search</button>}
+                    />
+                  )}
                 </td></tr>
               )}
               {visibleSubnets.map((s: Subnet) => {
@@ -927,6 +974,13 @@ export default function Subnets() {
               style={{ resize: 'vertical', width: '100%' }}
             />
           </div>
+          <CustomFieldsEditor
+            defs={fieldDefs ?? []}
+            values={cfValues}
+            tagsText={tagsText}
+            onValueChange={(name, value) => setCfValues(v => ({ ...v, [name]: value }))}
+            onTagsChange={setTagsText}
+          />
         </DetailDrawer>
       )}
     </div>

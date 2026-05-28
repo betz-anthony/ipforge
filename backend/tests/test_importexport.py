@@ -41,7 +41,7 @@ def test_export_subnets_empty(client):
     r = client.get("/api/importexport/subnets.csv")
     assert r.status_code == 200
     lines = r.text.strip().splitlines()
-    assert lines[0] == ",".join(SUBNET_COLS)
+    assert lines[0] == ",".join(SUBNET_COLS + ["tags"])
     assert len(lines) == 1
 
 
@@ -64,7 +64,7 @@ def test_export_addresses_empty(client):
     r = client.get("/api/importexport/addresses.csv")
     assert r.status_code == 200
     lines = r.text.strip().splitlines()
-    assert lines[0] == ",".join(ADDRESS_COLS)
+    assert lines[0] == ",".join(ADDRESS_COLS + ["tags"])
 
 
 def test_export_addresses_content(client, db):
