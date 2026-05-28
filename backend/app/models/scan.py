@@ -1,6 +1,6 @@
 import enum
 from datetime import datetime, date
-from sqlalchemy import String, Integer, Float, Boolean, DateTime, Date, Text, ForeignKey, UniqueConstraint
+from sqlalchemy import String, Integer, Float, Boolean, DateTime, Date, Text, ForeignKey, UniqueConstraint, JSON
 from sqlalchemy.orm import Mapped, mapped_column
 from app.database import Base
 
@@ -60,14 +60,28 @@ class DriftItem(Base):
     severity:    Mapped[str]          = mapped_column(String(20), nullable=False, default="warning")
     subnet_id:   Mapped[int|None]     = mapped_column(Integer, ForeignKey("subnets.id", ondelete="SET NULL"), nullable=True, index=True)
     details:     Mapped[str|None]     = mapped_column(Text, nullable=True)
-    detected_at: Mapped[datetime]     = mapped_column(DateTime, nullable=False)
-    resolved:    Mapped[bool]         = mapped_column(Boolean, nullable=False, default=False)
-    resolved_at: Mapped[datetime|None]= mapped_column(DateTime, nullable=True)
+    detected_at:  Mapped[datetime]     = mapped_column(DateTime, nullable=False)
+    resolved:     Mapped[bool]         = mapped_column(Boolean, nullable=False, default=False)
+    resolved_at:  Mapped[datetime|None]= mapped_column(DateTime, nullable=True)
+    needs_review: Mapped[bool]         = mapped_column(Boolean, nullable=False, default=False)
 
     # Back-compat property: old code referenced `.collision_type`.
     @property
     def collision_type(self) -> str:
         return self.category
+
+
+class DriftPolicy(Base):
+    __tablename__ = "drift_policies"
+
+    id:         Mapped[int]      = mapped_column(Integer, primary_key=True)
+    category:   Mapped[str]      = mapped_column(String(50), nullable=False, unique=True)
+    mode:       Mapped[str]      = mapped_column(String(10), nullable=False)  # auto | review
+    dry_run:    Mapped[bool]     = mapped_column(Boolean, nullable=False, default=True)
+    params:     Mapped[dict]     = mapped_column(JSON, nullable=False, default=dict)
+    enabled:    Mapped[bool]     = mapped_column(Boolean, nullable=False, default=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
 
 # Alias so lingering imports of `Collision` keep working during the migration.

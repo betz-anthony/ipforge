@@ -617,6 +617,16 @@ export interface DriftItem {
   detected_at: string | null
   resolved: boolean
   resolved_at: string | null
+  needs_review?: boolean
+}
+
+export interface DriftPolicy {
+  id: number
+  category: string
+  mode: 'auto' | 'review'
+  dry_run: boolean
+  params: Record<string, unknown>
+  enabled: boolean
 }
 
 export interface DriftStats {
@@ -635,7 +645,7 @@ export interface DriftResolveRequest {
 const CONFLICT_CATEGORIES = new Set(['active_but_available', 'multi_dhcp_scope', 'hostname_mismatch'])
 
 export const driftApi = {
-  list: (params?: { resolved?: boolean; category?: string; severity?: string; subnet_id?: number }) =>
+  list: (params?: { resolved?: boolean; category?: string; severity?: string; subnet_id?: number; needs_review?: boolean }) =>
     api.get<DriftItem[]>('/drift', { params }).then(r => r.data),
   stats: () => api.get<DriftStats>('/drift/stats').then(r => r.data),
   scan: (subnet_id?: number) =>
@@ -644,6 +654,10 @@ export const driftApi = {
     api.post<{ id: number; resolved: boolean }>(`/drift/${id}/resolve`, body ?? {}).then(r => r.data),
   resolveBulk: (ids: number[], action?: string) =>
     api.post<{ resolved: number[]; failed: { id: number; error: string }[] }>('/drift/resolve-bulk', { ids, action }).then(r => r.data),
+  listPolicies: () => api.get<DriftPolicy[]>('/drift/policies').then(r => r.data),
+  upsertPolicy: (category: string, body: { mode: string; dry_run: boolean; params?: Record<string, unknown>; enabled: boolean }) =>
+    api.put<DriftPolicy>(`/drift/policies/${category}`, body).then(r => r.data),
+  deletePolicy: (category: string) => api.delete(`/drift/policies/${category}`),
 }
 
 export const scanApi = {

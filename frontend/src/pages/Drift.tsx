@@ -24,13 +24,14 @@ export default function DriftPage() {
   const qc = useQueryClient()
   const { showToast } = useToast()
   const [category, setCategory] = useState('')
+  const [reviewOnly, setReviewOnly] = useState(false)
   const [selected, setSelected] = useState<Set<number>>(new Set())
   const [resolveTarget, setResolveTarget] = useState<Collision | null>(null)
 
   const { data: stats } = useQuery({ queryKey: ['drift-stats'], queryFn: driftApi.stats })
   const { data: items, isLoading } = useQuery({
-    queryKey: ['drift', category],
-    queryFn: () => driftApi.list(category ? { category } : {}),
+    queryKey: ['drift', category, reviewOnly],
+    queryFn: () => driftApi.list({ ...(category ? { category } : {}), ...(reviewOnly ? { needs_review: true } : {}) }),
   })
 
   const invalidate = () => {
@@ -109,6 +110,10 @@ export default function DriftPage() {
           <option value="">All categories</option>
           {categories.map(c => <option key={c} value={c}>{CATEGORY_LABEL[c] ?? c} ({stats?.by_category[c]})</option>)}
         </select>
+        <label style={{ fontSize: '0.8rem', display: 'inline-flex', alignItems: 'center', gap: '0.3rem' }}>
+          <input type="checkbox" checked={reviewOnly} onChange={e => setReviewOnly(e.target.checked)} />
+          Needs review only
+        </label>
         {selected.size > 0 && (
           <button className="btn-ghost btn-sm" onClick={() => bulkMut.mutate()} disabled={bulkMut.isPending}>
             Dismiss {selected.size} selected
@@ -145,7 +150,10 @@ export default function DriftPage() {
                       }} />
                   </td>
                   <td><span className="font-mono">{d.ip_address}</span></td>
-                  <td>{CATEGORY_LABEL[d.category] ?? d.category}</td>
+                  <td>
+                    {CATEGORY_LABEL[d.category] ?? d.category}
+                    {d.needs_review && <span className="badge badge-yellow" style={{ marginLeft: '0.4rem' }}>review</span>}
+                  </td>
                   <td><span className={`badge ${SEV_BADGE[d.severity] ?? 'badge-gray'}`}>{d.severity}</span></td>
                   <td style={{ fontSize: '0.72rem', color: 'var(--text-muted)', maxWidth: 320, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                     {d.details}
