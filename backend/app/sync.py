@@ -274,6 +274,12 @@ def sync_all() -> None:
         f2 = ex.submit(sync_dhcp)
         f1.result()
         f2.result()
+    # Recompute drift now that the DNS/DHCP cache reflects current actual state.
+    try:
+        from app.drift import detect_drift_bg
+        detect_drift_bg()
+    except Exception:
+        logger.exception("post-sync drift detection failed")
 
 
 def start_background_sync(interval: int = 300) -> None:

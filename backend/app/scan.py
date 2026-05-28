@@ -192,120 +192,6 @@ def _detect_reachability_changes(db, subnet_id: int, now: datetime) -> None:
             ))
 
 
-def _detect_collisions(db, subnet_id: int) -> None:
-    subnet = db.get(Subnet, subnet_id)
-    if subnet is None:
-        return
-
-    now = utcnow()
-    detected: set[tuple] = set()
-
-    latest_scan = (
-        db.query(ScanResult)
-        .filter_by(subnet_id=subnet_id)
-        .order_by(ScanResult.scanned_at.desc())
-        .first()
-    )
-    if latest_scan is None:
-        return
-    scan_time = latest_scan.scanned_at
-
-    def _upsert(ip: str, ctype: str, details: dict) -> None:
-        detected.add((ip, ctype))
-        details_str = json.dumps(details)
-        existing = db.query(Collision).filter_by(ip_address=ip, collision_type=ctype).first()
-        if existing:
-            existing.detected_at = now
-            existing.details = details_str
-            if existing.resolved:
-                existing.resolved = False
-                existing.resolved_at = None
-                emit("collision", f"ip:{ip}:{ctype}",
-                     {"ip": ip, "type": str(ctype), "subnet_id": subnet_id})
-        else:
-            db.add(Collision(
-                ip_address=ip,
-                collision_type=ctype,
-                details=details_str,
-                detected_at=now,
-                resolved=False,
-            ))
-            emit("collision", f"ip:{ip}:{ctype}",
-                 {"ip": ip, "type": str(ctype), "subnet_id": subnet_id})
-
-    # Pass 1: active_but_available
-    reachable_ips = {
-        r.ip_address
-        for r in db.query(ScanResult)
-        .filter_by(subnet_id=subnet_id, reachable=True)
-        .filter(ScanResult.scanned_at == scan_time)
-        .all()
-    }
-    for ip in reachable_ips:
-        addr = db.query(IPAddress).filter_by(address=ip, status=AddressStatus.available).first()
-        if addr:
-            latency = (
-                db.query(ScanResult.latency_ms)
-                .filter_by(subnet_id=subnet_id, ip_address=ip)
-                .filter(ScanResult.scanned_at == scan_time)
-                .scalar()
-            )
-            _upsert(ip, CollisionType.active_but_available, {
-                "ipam_status": "available", "latency_ms": latency,
-            })
-
-    # Pass 2: multi_dhcp_scope
-    rows = (
-        db.query(CachedDHCPLease.ip_address,
-                 func.count(CachedDHCPLease.source.distinct()).label("cnt"))
-        .group_by(CachedDHCPLease.ip_address)
-        .having(func.count(CachedDHCPLease.source.distinct()) > 1)
-        .all()
-    )
-    for row in rows:
-        if not ip_in_cidr(row.ip_address, subnet.cidr):
-            continue
-        sources = list({l.source for l in
-                        db.query(CachedDHCPLease).filter_by(ip_address=row.ip_address).all()})
-        _upsert(row.ip_address, CollisionType.multi_dhcp_scope, {"sources": sources})
-
-    # Pass 3: hostname_mismatch
-    for addr in db.query(IPAddress).all():
-        if not addr.hostname or not ip_in_cidr(addr.address, subnet.cidr):
-            continue
-        ipam_name = addr.hostname.lower()
-
-        lease = db.query(CachedDHCPLease).filter_by(ip_address=addr.address).first()
-        dhcp_name = lease.name.lower() if (lease and lease.name) else None
-
-        dns_rec = (
-            db.query(CachedDNSRecord)
-            .filter(
-                CachedDNSRecord.record_type.in_(["A", "AAAA"]),
-                CachedDNSRecord.value == addr.address,
-            )
-            .first()
-        )
-        dns_name = dns_rec.name.lower() if (dns_rec and dns_rec.name) else None
-
-        if (dhcp_name and dhcp_name != ipam_name) or (dns_name and dns_name != ipam_name):
-            _upsert(addr.address, CollisionType.hostname_mismatch, {
-                "ipam": addr.hostname,
-                "dhcp": lease.name if (lease and lease.name) else None,
-                "dns":  dns_rec.name if (dns_rec and dns_rec.name) else None,
-            })
-
-    # Auto-resolve collisions whose condition no longer holds: an unresolved
-    # collision for an IP in this subnet that was not re-detected this scan
-    # is considered cleared.
-    for c in db.query(Collision).filter(Collision.resolved.is_(False)).all():
-        if (c.ip_address, c.collision_type) not in detected and ip_in_cidr(c.ip_address, subnet.cidr):
-            c.resolved = True
-            c.resolved_at = now
-
-    db.commit()
-
-
 def scan_subnet(
     subnet_id: int,
     start_ip: str | None = None,
@@ -365,7 +251,8 @@ def scan_subnet(
         db.commit()
         _detect_reachability_changes(db, subnet_id, now)
         db.commit()
-        _detect_collisions(db, subnet_id)
+        from app.drift import detect_drift
+        detect_drift(db, subnet_id)
         _set_scan_status(db, subnet_id, "ok")
 
     except Exception as e:
@@ -433,9 +320,14 @@ def _get_global_scan_interval(db) -> int:
 _SCAN_RESULT_RETENTION_DAYS = 7
 
 
+_DRIFT_EVERY_TICKS = 5  # global drift pass cadence (~5 min at the 60s tick)
+
+
 def scan_scheduler_loop() -> None:
+    tick = 0
     while True:
         time.sleep(60)
+        tick += 1
         db = SessionLocal()
         try:
             now = utcnow()
@@ -464,6 +356,10 @@ def scan_scheduler_loop() -> None:
                         target=scan_subnet, args=(s.id,), daemon=True,
                         name=f"ipam-scan-{s.id}",
                     ).start()
+
+            if tick % _DRIFT_EVERY_TICKS == 0:
+                from app.drift import detect_drift
+                detect_drift(db)
         except Exception:
             logger.exception("scan_scheduler_loop error")
         finally:

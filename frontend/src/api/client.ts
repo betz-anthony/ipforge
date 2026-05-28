@@ -522,15 +522,62 @@ export interface CollisionResolveRequest {
   sources_to_remove?:  string[]
 }
 
+export type DriftCategory =
+  | 'active_but_available' | 'multi_dhcp_scope' | 'hostname_mismatch'
+  | 'missing_dns' | 'orphan_dns' | 'orphan_dhcp' | 'mac_mismatch'
+
+export interface DriftItem {
+  id: number
+  ip_address: string
+  category: DriftCategory
+  severity: 'error' | 'warning' | 'info'
+  subnet_id: number | null
+  details: string | null
+  detected_at: string | null
+  resolved: boolean
+  resolved_at: string | null
+}
+
+export interface DriftStats {
+  total: number
+  by_category: Record<string, number>
+  by_severity: Record<string, number>
+}
+
+export interface DriftResolveRequest {
+  new_status?:         string
+  canonical_hostname?: string
+  sources_to_remove?:  string[]
+  action?:             string
+}
+
+const CONFLICT_CATEGORIES = new Set(['active_but_available', 'multi_dhcp_scope', 'hostname_mismatch'])
+
+export const driftApi = {
+  list: (params?: { resolved?: boolean; category?: string; severity?: string; subnet_id?: number }) =>
+    api.get<DriftItem[]>('/drift', { params }).then(r => r.data),
+  stats: () => api.get<DriftStats>('/drift/stats').then(r => r.data),
+  scan: (subnet_id?: number) =>
+    api.post<{ status: string }>('/drift/scan', null, { params: subnet_id ? { subnet_id } : {} }).then(r => r.data),
+  resolve: (id: number, body?: DriftResolveRequest) =>
+    api.post<{ id: number; resolved: boolean }>(`/drift/${id}/resolve`, body ?? {}).then(r => r.data),
+  resolveBulk: (ids: number[], action?: string) =>
+    api.post<{ resolved: number[]; failed: { id: number; error: string }[] }>('/drift/resolve-bulk', { ids, action }).then(r => r.data),
+}
+
 export const scanApi = {
   trigger: (subnet_id: number, body?: { start_ip?: string; end_ip?: string }) =>
     api.post<{ status: string }>(`/scan/subnets/${subnet_id}`, body ?? {}).then(r => r.data),
   status: (subnet_id: number) =>
     api.get<ScanStatus>(`/scan/subnets/${subnet_id}`).then(r => r.data),
+  // Back-compat: the collision UI consumes conflict-category drift items.
   collisions: (params?: { resolved?: boolean; subnet_id?: number }) =>
-    api.get<Collision[]>('/scan/collisions', { params }).then(r => r.data),
+    api.get<DriftItem[]>('/drift', { params }).then(r =>
+      r.data
+        .filter(d => CONFLICT_CATEGORIES.has(d.category))
+        .map(d => ({ ...d, collision_type: d.category }) as unknown as Collision)),
   resolveCollision: (id: number, body?: CollisionResolveRequest) =>
-    api.put<{ id: number; resolved: boolean }>(`/scan/collisions/${id}/resolve`, body ?? {}).then(r => r.data),
+    api.post<{ id: number; resolved: boolean }>(`/drift/${id}/resolve`, body ?? {}).then(r => r.data),
 }
 
 export interface SearchResults {

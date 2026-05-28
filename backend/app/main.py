@@ -29,6 +29,7 @@ from app.api import ip_requests as ip_requests_router
 from app.api import vlans as vlans_router
 from app.api import custom_fields as custom_fields_router
 from app.api import tags as tags_router
+from app.api import drift as drift_router
 from app.alerting import api as alerting_api
 from app.alerting.dispatcher import start as start_alert_dispatcher
 import app.models  # noqa: F401
@@ -160,6 +161,7 @@ app.include_router(importexport_router.router, prefix="/api/importexport", tags=
 _op = [Depends(require_operator)]
 app.include_router(sync_router.router,   prefix="/api/sync",  tags=["sync"],  dependencies=_op)
 app.include_router(scan_router.router,   prefix="/api/scan",  tags=["scan"],  dependencies=_op)
+app.include_router(drift_router.router,  prefix="/api/drift", tags=["drift"], dependencies=_ro)
 app.include_router(reclaim_router.router, prefix="/api/addresses", tags=["reclaim"], dependencies=_op)
 
 # Allocation: scoped users can reach it (later task adds per-subnet check)
