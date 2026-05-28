@@ -1,7 +1,7 @@
 from app.models.subnet import Subnet
 from app.models.address import IPAddress, AddressStatus
 from app.models.subnet_range import SubnetRange
-from app.models.scan import Collision, CollisionType
+from app.models.scan import DriftItem, DriftCategory
 from app.core.time import utcnow
 
 
@@ -35,7 +35,7 @@ def test_map_status_precedence(client, db):
 def test_map_collision_overlay(client, db):
     s = _subnet(db)
     db.add(IPAddress(address="10.0.5.10", subnet_id=s.id, status=AddressStatus.assigned))
-    db.add(Collision(ip_address="10.0.5.10", collision_type=CollisionType.hostname_mismatch,
+    db.add(DriftItem(ip_address="10.0.5.10", category=DriftCategory.hostname_mismatch.value,
                      detected_at=utcnow(), resolved=False))
     db.commit()
     body = client.get(f"/api/subnets/{s.id}/map").json()
@@ -47,7 +47,7 @@ def test_map_collision_overlay(client, db):
 def test_map_excludes_resolved_collision(client, db):
     s = _subnet(db)
     db.add(IPAddress(address="10.0.5.10", subnet_id=s.id, status=AddressStatus.assigned))
-    db.add(Collision(ip_address="10.0.5.10", collision_type=CollisionType.hostname_mismatch,
+    db.add(DriftItem(ip_address="10.0.5.10", category=DriftCategory.hostname_mismatch.value,
                      detected_at=utcnow(), resolved=True))
     db.commit()
     body = client.get(f"/api/subnets/{s.id}/map").json()

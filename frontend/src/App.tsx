@@ -2,7 +2,7 @@ import { Fragment, useEffect, useState } from 'react'
 import { Routes, Route, NavLink, useLocation } from 'react-router-dom'
 import {
   LayoutDashboard, Network, List, Server, Globe, Search, Settings, LogOut, ClipboardList,
-  ArchiveRestore, KeyRound, Users, Bell, Tag, Menu, Sun, Moon, Keyboard,
+  ArchiveRestore, KeyRound, Users, Bell, Tag, Menu, Sun, Moon, Keyboard, GitCompareArrows,
 } from 'lucide-react'
 import { useQuery } from '@tanstack/react-query'
 import { useAuth } from './contexts/AuthContext'
@@ -24,6 +24,7 @@ import Groups from './pages/Groups'
 import Login from './pages/Login'
 import Requests from './pages/Requests'
 import Vlans from './pages/Vlans'
+import DriftPage from './pages/Drift'
 
 const NAV = [
   { to: '/',          label: 'Dashboard', icon: LayoutDashboard, end: true },
@@ -128,6 +129,13 @@ export default function App() {
           )}
 
           {!isScoped && (
+            <NavLink to="/drift" className={({ isActive }) => 'nav-link' + (isActive ? ' active' : '')}>
+              <GitCompareArrows size={15} strokeWidth={1.75} />
+              Drift
+            </NavLink>
+          )}
+
+          {!isScoped && (
             <NavLink to="/requests" className={({ isActive }) => 'nav-link' + (isActive ? ' active' : '')}>
               <ClipboardList size={15} strokeWidth={1.75} />
               Requests
@@ -213,6 +221,7 @@ export default function App() {
           <Route path="/addresses" element={<Addresses />} />
           <Route path="/dhcp"      element={<DHCP />} />
           <Route path="/dns"       element={<DNS />} />
+          <Route path="/drift"     element={<DriftPage />} />
           <Route path="/search"    element={<SearchPage />} />
           <Route path="/audit"     element={<AuditPage />} />
           {!isScoped && <Route path="/alerts" element={<AlertsPage />} />}

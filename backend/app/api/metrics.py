@@ -26,7 +26,7 @@ from app.core.time import utcnow
 from app.database import get_db
 from app.models.address import IPAddress, AddressStatus
 from app.models.cache import SyncStatus
-from app.models.scan import Collision
+from app.models.scan import DriftItem, _CONFLICT_CATEGORIES
 from app.models.subnet import Subnet
 from app.models.user import User
 
@@ -116,13 +116,21 @@ class _IpamCollector:
         yield age_fam
         yield ok_fam
 
+        conflict_values = [c.value for c in _CONFLICT_CATEGORIES]
         open_collisions = (
-            db.query(func.count(Collision.id))
-            .filter(Collision.resolved.is_(False))
+            db.query(func.count(DriftItem.id))
+            .filter(DriftItem.resolved.is_(False))
+            .filter(DriftItem.category.in_(conflict_values))
             .scalar()
         ) or 0
         yield GaugeMetricFamily(
             "ipam_open_collisions", "Number of unresolved collisions", value=open_collisions
+        )
+        open_drift = (
+            db.query(func.count(DriftItem.id)).filter(DriftItem.resolved.is_(False)).scalar()
+        ) or 0
+        yield GaugeMetricFamily(
+            "ipam_open_drift", "Number of unresolved drift items", value=open_drift
         )
 
         stale = 0
