@@ -17,6 +17,18 @@ def _make_dns(provider_type: str, cfg: dict, name: str) -> DNSProvider:
     if provider_type == "bind":
         from app.providers.dns.bind import BINDDNSProvider
         return BINDDNSProvider(cfg, name)
+    if provider_type == "cloudflare":
+        from app.providers.dns.cloudflare import CloudflareDNSProvider
+        return CloudflareDNSProvider(cfg, name)
+    if provider_type == "route53":
+        from app.providers.dns.route53 import Route53DNSProvider
+        return Route53DNSProvider(cfg, name)
+    if provider_type == "azure_dns":
+        from app.providers.dns.azuredns import AzureDNSProvider
+        return AzureDNSProvider(cfg, name)
+    if provider_type == "gcp_dns":
+        from app.providers.dns.gcpdns import GCPDNSProvider
+        return GCPDNSProvider(cfg, name)
     raise ValueError(f"Unknown DNS provider type: {provider_type}")
 
 

@@ -8,6 +8,10 @@ SECRET_FIELDS: dict[str, list[str]] = {
     "bind":     ["tsig_key_secret"],
     "pihole":   ["password"],
     "keadhcp":  ["secret"],
+    "cloudflare": ["api_token"],
+    "route53":    ["aws_secret_access_key"],
+    "azure_dns":  ["client_secret"],
+    "gcp_dns":    ["service_account_json"],
 }
 
 
