@@ -8,7 +8,9 @@ from app.database import get_db
 from app.models.address import IPAddress, AddressStatus
 from app.models.cache import CachedDNSRecord, CachedDHCPLease
 from app.models.scan import ScanHistoryDay
+from app.models.subnet import Subnet
 from app.models.user import User
+from app.utils import ip_in_cidr
 from app.schemas.address import AddressCreate, AddressRead, AddressUpdate
 from app.core.deps import get_current_user
 from app.core.audit import write_audit
@@ -133,6 +135,60 @@ def get_address_by_ip(
     record.custom_fields = load_custom_fields(db, "address", record.id)
     record.tags = load_tags(db, "address", record.id)
     return record
+
+
+def _serialize_event(e: dict) -> dict:
+    out = dict(e)
+    for k in ("ts", "resolved_at"):
+        if out.get(k) is not None:
+            out[k] = out[k].isoformat() + "Z"
+    return out
+
+
+def _subnet_for_ip(db: Session, ip: str):
+    for s in db.query(Subnet).all():
+        if ip_in_cidr(ip, s.cidr):
+            return s
+    return None
+
+
+@router.get("/{address_id}/history")
+def get_address_history(
+    address_id: int,
+    db: Session = Depends(get_db),
+    access: AccessContext = Depends(get_access_context),
+):
+    from app.core.lifecycle import ip_timeline
+    address = db.get(IPAddress, address_id)
+    if not address:
+        raise HTTPException(404, "Address not found")
+    access.require_read(address.subnet_id)
+    return {"ip": address.address, "timeline": [_serialize_event(e) for e in ip_timeline(db, address.address)]}
+
+
+@router.get("/by-ip/{address}/history")
+def get_address_history_by_ip(
+    address: str,
+    as_of: str | None = Query(None),
+    db: Session = Depends(get_db),
+    access: AccessContext = Depends(get_access_context),
+):
+    from app.core.lifecycle import ip_timeline, ip_point_in_time
+    from datetime import datetime as _dt
+    subnet = _subnet_for_ip(db, address)
+    if subnet is not None:
+        access.require_read(subnet.id)
+    result = {"ip": address, "timeline": [_serialize_event(e) for e in ip_timeline(db, address)]}
+    if as_of:
+        try:
+            parsed = _dt.fromisoformat(as_of.replace("Z", ""))
+        except ValueError:
+            raise HTTPException(422, "as_of must be ISO date/datetime")
+        snap = ip_point_in_time(db, address, parsed)
+        if snap and snap.get("as_of"):
+            snap = {**snap, "as_of": snap["as_of"].isoformat() + "Z"}
+        result["point_in_time"] = snap
+    return result
 
 
 @router.get("/{address_id}/discovery")

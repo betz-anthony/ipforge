@@ -544,7 +544,8 @@ when there is not yet enough history (snapshots accrue once per day).</p>
 - DNS records matching this IP (from cache)
 - DHCP reservations matching this IP (from cache)
 - <strong>Network location</strong> — discovered switchport / VLAN / device, if <a href="#snmp-discovery">SNMP Discovery</a> is configured
-- Custom field values and tags (<a href="#custom-fields--tags">Custom Fields &amp; Tags</a>)</p>
+- Custom field values and tags (<a href="#custom-fields--tags">Custom Fields &amp; Tags</a>)
+- <strong>History</strong> — a merged lifecycle timeline (changes from the audit log, drift events, reachability up/down) plus an <strong>as-of date</strong> picker that reconstructs what the address looked like on any past date ("on 2026-01-01: assigned to web-01"). Works even for IPs no longer tracked, via <code>GET /api/addresses/by-ip/{ip}/history</code>.</p>
 <h3 id="creating-an-address">Creating an address</h3>
 <p>Click <strong>Add Address</strong>. Manually specify the IP and status. For automated allocation use the <a href="#allocation-api">Allocation API</a> instead.</p>
 <h3 id="collision-detection">Collision detection</h3>
