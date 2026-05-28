@@ -76,13 +76,18 @@ ul, ol { padding-left: 1.5rem; }
 <li><a href="#roles">Roles</a></li>
 <li><a href="#provider-configuration">Provider Configuration</a></li>
 <li><a href="#subnets">Subnets</a></li>
+<li><a href="#reserved-ranges--subnet-map">Reserved Ranges &amp; Subnet Map</a></li>
+<li><a href="#capacity-forecasting">Capacity Forecasting</a></li>
 <li><a href="#vlans">VLANs</a></li>
 <li><a href="#ip-addresses">IP Addresses</a></li>
+<li><a href="#custom-fields--tags">Custom Fields &amp; Tags</a></li>
 <li><a href="#ip-requests">IP Requests</a></li>
 <li><a href="#allocation-api">Allocation API</a></li>
 <li><a href="#dns">DNS</a></li>
 <li><a href="#dhcp">DHCP</a></li>
 <li><a href="#subnet-scanning">Subnet Scanning</a></li>
+<li><a href="#drift--reconciliation">Drift / Reconciliation</a></li>
+<li><a href="#snmp-discovery">SNMP Discovery</a></li>
 <li><a href="#stale-ip-reclamation">Stale IP Reclamation</a></li>
 <li><a href="#alerting">Alerting</a></li>
 <li><a href="#search">Search</a></li>
@@ -379,6 +384,67 @@ docker compose up -d
 <p>From the subnet detail drawer or the Subnets page, click <strong>Scan</strong>. This triggers an ICMP ping sweep of all host IPs in the subnet. Results update <code>last_seen</code> on each address and feed the 7-day availability history.</p>
 <p>Large subnets: the UI warns if the subnet is too large for a quick scan (<code>/24</code> max for IPv4, <code>/120</code> for IPv6). You can still scan — it just takes longer.</p>
 <hr>
+<h2 id="reserved-ranges-subnet-map">Reserved Ranges &amp; Subnet Map</h2>
+<p>Each subnet's detail drawer has a <strong>Reserved Ranges</strong> editor and an <strong>Address Map</strong>.</p>
+<h3 id="reserved-ranges">Reserved ranges</h3>
+<p>Define named, typed ranges inside a subnet so allocation skips them and operators
+can see committed space:</p>
+<table>
+<thead>
+<tr>
+<th>Kind</th>
+<th>Typical use</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>gateway</code></td>
+<td>router / first-hop addresses</td>
+</tr>
+<tr>
+<td><code>dhcp_pool</code></td>
+<td>the dynamic DHCP pool</td>
+</tr>
+<tr>
+<td><code>static</code></td>
+<td>a block held for manual static assignment</td>
+</tr>
+<tr>
+<td><code>reserved</code></td>
+<td>anything else held out of allocation</td>
+</tr>
+</tbody>
+</table>
+<p>Add a range with a start IP, optional end IP (defaults to start = a single IP),
+kind, and label. The <a href="#allocation-api">Allocation API</a> never hands out an IP inside
+a reserved range. Reserved IPs are counted as a separate bucket in the subnet's
+utilization (shown as a hatched segment on the utilization bar), distinct from
+<em>used</em>. Writing ranges requires operator+. Validation rejects ranges outside the
+subnet CIDR, reversed start/end, or overlaps with an existing range.</p>
+<h3 id="address-map">Address map</h3>
+<p>A grid of every host IP in the subnet, colored by status (free / assigned /
+reserved / discovered / deprecated) with a red outline on any IP that has open
+drift. Click a cell to inspect it; a free cell offers <strong>Create address here</strong>.
+Subnets larger than 1024 hosts show a "drill into a child subnet" message instead
+of a giant grid.</p>
+<hr>
+<h2 id="capacity-forecasting">Capacity Forecasting</h2>
+<p>IPForge records a daily snapshot of each subnet's used/total counts and projects
+when the subnet will fill.</p>
+<ul>
+<li><strong>Per-subnet</strong> — the subnet drawer shows "exhaustion in ~N days" with a projected
+  date and a confidence level, computed by least-squares regression over the daily
+  history.</li>
+<li><strong>Dashboard</strong> — a <strong>Projected Exhaustion</strong> widget lists the subnets with the
+  soonest projected critical-threshold breach.</li>
+<li><strong>API</strong> — <code>GET /api/subnets/{id}/forecast</code> returns slope (IPs/day), current/total,
+  days-to-warn, days-to-critical, projected dates, and confidence
+  (<code>none</code>/<code>low</code>/<code>medium</code>/<code>high</code>). <code>GET /api/subnets/forecasts?limit=N</code> returns the
+  top-N soonest-exhaustion subnets.</li>
+</ul>
+<p>Confidence is <code>none</code> when usage is flat or declining (no exhaustion projected) or
+when there is not yet enough history (snapshots accrue once per day).</p>
+<hr>
 <h2 id="vlans">VLANs</h2>
 <p>The <strong>VLANs</strong> page is a lightweight catalog of 802.1Q VLAN IDs with human-readable names. It's decoupled from the subnet table — a subnet's <code>vlan_id</code> is still a plain integer, but when a VLAN entry exists for that ID the Subnets page shows it as <code>100 (Production)</code> instead of just <code>100</code>.</p>
 <h3 id="creating-a-vlan">Creating a VLAN</h3>
@@ -459,38 +525,38 @@ docker compose up -d
 - <code>last_seen</code> timestamp (last successful ping)
 - 7-day reachability dot row (filled = reachable that day)
 - DNS records matching this IP (from cache)
-- DHCP reservations matching this IP (from cache)</p>
+- DHCP reservations matching this IP (from cache)
+- <strong>Network location</strong> — discovered switchport / VLAN / device, if <a href="#snmp-discovery">SNMP Discovery</a> is configured
+- Custom field values and tags (<a href="#custom-fields--tags">Custom Fields &amp; Tags</a>)</p>
 <h3 id="creating-an-address">Creating an address</h3>
 <p>Click <strong>Add Address</strong>. Manually specify the IP and status. For automated allocation use the <a href="#allocation-api">Allocation API</a> instead.</p>
 <h3 id="collision-detection">Collision detection</h3>
-<p>Three collision types are detected automatically during scans:</p>
-<table>
-<thead>
-<tr>
-<th>Type</th>
-<th>Meaning</th>
-<th>Resolution</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>active_but_available</code></td>
-<td>IP responds to ping but is marked <code>available</code></td>
-<td>Update status to <code>reserved</code> or <code>assigned</code></td>
-</tr>
-<tr>
-<td><code>hostname_mismatch</code></td>
-<td>IPAM hostname differs from DHCP/DNS hostname</td>
-<td>Choose canonical hostname, push to DNS+DHCP</td>
-</tr>
-<tr>
-<td><code>multi_dhcp_scope</code></td>
-<td>Same IP has reservations in multiple DHCP scopes</td>
-<td>Delete the duplicate reservation(s)</td>
-</tr>
-</tbody>
-</table>
-<p>Collisions appear as badges on subnet rows and a card on the Dashboard. Click the badge or card to open the <strong>Guided Resolve</strong> dialog — it walks through the correct action for each type.</p>
+<p>The three classic collision types (<code>active_but_available</code>, <code>hostname_mismatch</code>,
+<code>multi_dhcp_scope</code>) are now part of the broader <a href="#drift--reconciliation">Drift / Reconciliation</a>
+engine, alongside DNS/DHCP reconciliation categories. Collisions still appear as
+badges on subnet rows and a Dashboard card with the <strong>Guided Resolve</strong> dialog; the
+full picture lives on the <strong>Drift</strong> page.</p>
+<hr>
+<h2 id="custom-fields-tags">Custom Fields &amp; Tags</h2>
+<p>Attach your own metadata to subnets and addresses.</p>
+<h3 id="custom-fields-admin-defined">Custom fields (admin-defined)</h3>
+<p>In <strong>Settings → Custom Fields</strong>, an admin defines fields per entity type
+(<code>subnet</code> or <code>address</code>):</p>
+<ul>
+<li><strong>name</strong> — machine key (lowercase, digits, underscore), unique per entity type.</li>
+<li><strong>label</strong> — display name.</li>
+<li><strong>type</strong> — <code>text</code>, <code>select</code> (with a fixed option list), or <code>date</code>.</li>
+</ul>
+<p>Defined fields then appear in the subnet/address drawers as inputs. <code>select</code> values
+are validated against the option list; an empty value clears the field. Deleting a
+field definition removes all its stored values.</p>
+<h3 id="tags">Tags</h3>
+<p>Free-form tags (many-to-many) on subnets and addresses — type comma-separated tags
+in the drawer; new tags are created automatically. Creating tags requires operator+.</p>
+<h3 id="filtering-export">Filtering &amp; export</h3>
+<p>List endpoints support server-side filtering: <code>GET /api/subnets?tag=prod&amp;cf_env=production</code>
+(and the same on <code>/api/addresses</code>). CSV export adds a <code>tags</code> column plus a
+<code>cf_&lt;name&gt;</code> column per defined field.</p>
 <hr>
 <h2 id="ip-requests">IP Requests</h2>
 <p>Non-operators (the <code>requester</code> role) can ask for an IP without touching the allocation API directly. Operators review and approve from a queue.</p>
@@ -651,6 +717,108 @@ docker compose up -d
 <h3 id="scan-alerts">Scan alerts</h3>
 <p>Alerts appear on the Dashboard. Each alert shows the IP, event type, and timestamp. Acknowledge individually or bulk-acknowledge all (with optional subnet filter).</p>
 <p>For routed notifications (email/Slack/Teams/PagerDuty), configure an alert channel + rule — see <a href="#alerting">Alerting</a>.</p>
+<hr>
+<h2 id="drift-reconciliation">Drift / Reconciliation</h2>
+<p>Drift is the gap between IPAM's <em>intended</em> state and the <em>actual</em> state seen in
+DNS, DHCP, and live scans. The <strong>Drift</strong> page surfaces all discrepancies in one
+place and lets you remediate them.</p>
+<h3 id="categories">Categories</h3>
+<table>
+<thead>
+<tr>
+<th>Category</th>
+<th>Severity</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>active_but_available</code></td>
+<td>warning</td>
+<td>IP responds to ping but is marked <code>available</code></td>
+</tr>
+<tr>
+<td><code>hostname_mismatch</code></td>
+<td>warning</td>
+<td>IPAM hostname differs from DHCP/DNS</td>
+</tr>
+<tr>
+<td><code>multi_dhcp_scope</code></td>
+<td>warning</td>
+<td>same IP reserved in multiple DHCP scopes</td>
+</tr>
+<tr>
+<td><code>missing_dns</code></td>
+<td>warning</td>
+<td>assigned/reserved IPAM address has no DNS A/AAAA record</td>
+</tr>
+<tr>
+<td><code>orphan_dns</code></td>
+<td>info</td>
+<td>DNS A/AAAA record with no IPAM address</td>
+</tr>
+<tr>
+<td><code>orphan_dhcp</code></td>
+<td>info</td>
+<td>DHCP lease/reservation with no IPAM address</td>
+</tr>
+<tr>
+<td><code>mac_mismatch</code></td>
+<td>warning</td>
+<td>IPAM MAC differs from the DHCP reservation MAC</td>
+</tr>
+</tbody>
+</table>
+<h3 id="detection">Detection</h3>
+<p>Drift is recomputed automatically at the end of each subnet scan, after every
+DNS/DHCP sync, on a periodic background pass, and on demand via <strong>Scan for drift</strong>
+(or <code>POST /api/drift/scan</code>). An item that no longer holds is auto-resolved.</p>
+<h3 id="remediation">Remediation</h3>
+<p>Each row offers the right action for its category (provider changes roll back on
+failure):</p>
+<ul>
+<li>conflict types → <strong>Guided Resolve</strong> (status update / push canonical hostname /
+  remove duplicate reservation).</li>
+<li><code>orphan_dns</code> / <code>orphan_dhcp</code> → <strong>Import</strong> (create the IPAM address) or <strong>Delete</strong>
+  (remove the record/reservation).</li>
+<li><code>mac_mismatch</code> → <strong>Use DHCP MAC</strong> (copy into IPAM).</li>
+<li>any → <strong>Dismiss</strong>.</li>
+</ul>
+<p>Select multiple rows of the same kind for <strong>bulk dismiss</strong>. Filter by category;
+the stats header shows counts by category and severity.</p>
+<h3 id="api">API</h3>
+<p><code>GET /api/drift</code> (filters: <code>category</code>, <code>severity</code>, <code>subnet_id</code>, <code>resolved</code>),
+<code>GET /api/drift/stats</code>, <code>POST /api/drift/scan</code>, <code>POST /api/drift/{id}/resolve</code>,
+<code>POST /api/drift/resolve-bulk</code>.</p>
+<hr>
+<h2 id="snmp-discovery">SNMP Discovery</h2>
+<p>Poll network devices over SNMP to learn where each host actually lives —
+IP ↔ MAC ↔ switchport ↔ VLAN — and enrich IPAM addresses with that ground truth.</p>
+<h3 id="configuring-devices">Configuring devices</h3>
+<p>In <strong>Settings → Discovery Devices (SNMP)</strong> (admin), add a device:</p>
+<ul>
+<li><strong>host</strong>, <strong>SNMP version</strong> (<code>v2c</code> or <code>v3</code>).</li>
+<li>v2c: <strong>community</strong> string.</li>
+<li>v3: <strong>user</strong>, optional <strong>auth</strong> (SHA/MD5 + key) and <strong>priv</strong> (AES/DES + key).</li>
+<li><strong>poll interval</strong> (minutes).</li>
+</ul>
+<p>Credentials are stored encrypted (when <code>SECRET_KEY</code> is set) and never returned by
+the API. Devices are polled on their interval, or on demand with <strong>Poll</strong>. Each
+device shows its last run status.</p>
+<h3 id="what-it-collects-p1">What it collects (P1)</h3>
+<p>Per poll, IPForge walks standard MIBs: ARP (<code>ipNetToMediaPhysAddress</code>), the bridge
+forwarding table with VLAN (<code>dot1qTpFdbPort</code>), bridge-port→ifIndex, and <code>ifName</code>.
+It merges these into endpoints (IP, MAC, switchport name, VLAN).</p>
+<h3 id="enrich-only">Enrich-only</h3>
+<p>Discovery does <strong>not</strong> create IPAM addresses. For addresses already tracked, the
+detail drawer's <strong>Network location</strong> block shows the discovered switchport, VLAN,
+and device (matched by IP or MAC). Unknown IPs/MACs surface through
+<a href="#drift--reconciliation">Drift</a> instead. <code>GET /api/discovery/endpoints</code> lists raw
+discovered endpoints.</p>
+<blockquote>
+<p>Roadmap: SSH/CLI collection, CDP/LLDP topology, and drift categories for
+mac-on-unexpected-port / rogue devices are planned follow-ups.</p>
+</blockquote>
 <hr>
 <h2 id="stale-ip-reclamation">Stale IP Reclamation</h2>
 <p>Addresses that haven't responded to a scan for a configurable number of days are flagged <strong>stale</strong>. The Dashboard shows a count; the <strong>Reclaim</strong> page lists them grouped by subnet.</p>
@@ -844,6 +1012,11 @@ docker compose up -d
 <td>—</td>
 </tr>
 <tr>
+<td><code>ipam_open_drift</code></td>
+<td>gauge</td>
+<td>—</td>
+</tr>
+<tr>
 <td><code>ipam_stale_addresses</code></td>
 <td>gauge</td>
 <td>—</td>
@@ -877,6 +1050,10 @@ docker compose up -d
 <p>The default <code>admin</code> account cannot be deleted.</p>
 <h3 id="groups">Groups</h3>
 <p>Create groups and assign users to them. Combined with per-subnet grants on individual subnets, groups let you express "the DBAs can manage the database subnets" without per-user maintenance. See <a href="#per-subnet-grants">Per-Subnet Grants</a>.</p>
+<h3 id="custom-fields">Custom Fields</h3>
+<p>Define custom fields for subnets and addresses. See <a href="#custom-fields--tags">Custom Fields &amp; Tags</a>.</p>
+<h3 id="discovery-devices-snmp">Discovery Devices (SNMP)</h3>
+<p>Add/poll SNMP devices for network discovery. See <a href="#snmp-discovery">SNMP Discovery</a>.</p>
 <h3 id="alert-channels-alert-rules">Alert Channels / Alert Rules</h3>
 <p>See <a href="#alerting">Alerting</a>.</p>
 <h3 id="ldap-active-directory">LDAP / Active Directory</h3>
