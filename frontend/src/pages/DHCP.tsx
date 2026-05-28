@@ -1,9 +1,10 @@
 import { useMemo, useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Plus, X, Search, ArrowUp, ArrowDown, ArrowUpDown } from 'lucide-react'
+import { Plus, X, Search, ArrowUp, ArrowDown, ArrowUpDown, Network } from 'lucide-react'
 import { dhcpApi, providersApi, addressesApi, subnetsApi, type DHCPReservation, type DHCPScope } from '../api/client'
 import { rangeSize, ipInCidr, ipToNum, ipCompare, isValidIPv4, isValidIPv6, isValidEUI48, isValidEUI64 } from '../utils/ip'
 import SyncBar from '../components/SyncBar'
+import EmptyState from '../components/EmptyState'
 import DetailPanel from '../components/DetailPanel'
 import ConfirmModal from '../components/ConfirmModal'
 import { useToast } from '../contexts/ToastContext'
@@ -491,8 +492,16 @@ export default function DHCP() {
                     <tbody>
                       {visibleLeases.length === 0 && (
                         <tr>
-                          <td colSpan={isV6(selectedScope) ? 6 : 5} className="empty-state">
-                            {leases && leases.length > 0 ? 'No leases match search.' : 'No leases in this scope.'}
+                          <td colSpan={isV6(selectedScope) ? 6 : 5}>
+                            {leases && leases.length > 0 ? (
+                              <EmptyState
+                                icon={Network}
+                                title="No leases match search"
+                                action={<button className="btn-ghost btn-sm" onClick={() => setSearchTerm('')}>Clear search</button>}
+                              />
+                            ) : (
+                              <EmptyState icon={Network} title="No leases in this scope" description="Reservations and active leases will appear here." />
+                            )}
                           </td>
                         </tr>
                       )}

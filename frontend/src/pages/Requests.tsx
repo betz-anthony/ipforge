@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Plus, Check, X, Trash2 } from 'lucide-react'
+import { Plus, Check, X, Trash2, Inbox } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import { useToast } from '../contexts/ToastContext'
 import {
@@ -8,6 +8,7 @@ import {
 } from '../api/client'
 import { ipCompare } from '../utils/ip'
 import SearchInput from '../components/SearchInput'
+import EmptyState from '../components/EmptyState'
 import { TableSkeleton } from '../components/Skeleton'
 import { useTableSort } from '../hooks/useTableSort'
 
@@ -113,8 +114,16 @@ export default function Requests() {
           </thead>
           <tbody>
             {visibleRequests.length === 0 && (
-              <tr><td colSpan={9} className="empty-state">
-                {requests.length === 0 ? 'No requests.' : 'No requests match search.'}
+              <tr><td colSpan={9}>
+                {requests.length === 0 ? (
+                  <EmptyState icon={Inbox} title="No requests" description="IP requests submitted for review will appear here." />
+                ) : (
+                  <EmptyState
+                    icon={Inbox}
+                    title="No requests match search"
+                    action={<button className="btn-ghost btn-sm" onClick={() => setSearchTerm('')}>Clear search</button>}
+                  />
+                )}
               </td></tr>
             )}
             {visibleRequests.map(r => (

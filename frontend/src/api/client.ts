@@ -136,6 +136,8 @@ export interface Subnet {
   dns_provider_name: string | null
   dhcp_provider_name: string | null
   request_eligible?: boolean
+  custom_fields?: Record<string, string>
+  tags?: string[]
 }
 
 export interface IPAddress {
@@ -154,6 +156,23 @@ export interface IPAddress {
   dns_zone?: string | null
   dhcp_provider?: string | null
   dhcp_scope_id?: string | null
+  custom_fields?: Record<string, string>
+  tags?: string[]
+}
+
+export interface CustomFieldDef {
+  id: number
+  entity_type: 'subnet' | 'address'
+  name: string
+  label: string
+  field_type: 'text' | 'select' | 'date'
+  options: string[] | null
+}
+
+export interface TagRecord {
+  id: number
+  name: string
+  usage_count: number
 }
 
 export interface DeletePreviewItem {
@@ -218,10 +237,26 @@ export const subnetsApi = {
   delete: (id: number) => api.delete(`/subnets/${id}`),
   suggestParent: (cidr: string) =>
     api.get<Subnet[]>('/subnets/suggest-parent', { params: { cidr } }).then(r => r.data),
+  listFiltered: (params: Record<string, string>) =>
+    api.get<Subnet[]>('/subnets', { params }).then(r => r.data),
+}
+
+export const customFieldsApi = {
+  list: (entity_type?: 'subnet' | 'address') =>
+    api.get<CustomFieldDef[]>('/custom-fields', { params: entity_type ? { entity_type } : {} }).then(r => r.data),
+  create: (body: Omit<CustomFieldDef, 'id'>) =>
+    api.post<CustomFieldDef>('/custom-fields', body).then(r => r.data),
+  remove: (id: number) => api.delete(`/custom-fields/${id}`),
+}
+
+export const tagsApi = {
+  list: () => api.get<TagRecord[]>('/tags').then(r => r.data),
+  create: (name: string) => api.post<TagRecord>('/tags', { name }).then(r => r.data),
+  remove: (id: number) => api.delete(`/tags/${id}`),
 }
 
 export const addressesApi = {
-  list: (params?: { subnet_id?: number; status?: string }) =>
+  list: (params?: { subnet_id?: number; status?: string; tag?: string }) =>
     api.get<IPAddress[]>('/addresses', { params }).then(r => r.data),
   create: (data: Omit<IPAddress, 'id' | 'created_at' | 'updated_at' | 'notes' | 'last_seen'> & { notes?: string | null }) =>
     api.post<IPAddress>('/addresses', data).then(r => r.data),

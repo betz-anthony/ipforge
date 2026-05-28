@@ -26,6 +26,8 @@ class SubnetUpdate(BaseModel):
     dns_provider_name: str | None = None
     dhcp_provider_name: str | None = None
     request_eligible: bool | None = None
+    custom_fields: dict[str, str] | None = None
+    tags: list[str] | None = None
 
 
 class SubnetRead(BaseModel):
@@ -42,6 +44,8 @@ class SubnetRead(BaseModel):
     dns_provider_name: str | None
     dhcp_provider_name: str | None
     request_eligible: bool
+    custom_fields: dict[str, str] = {}
+    tags: list[str] = []
 
     model_config = {"from_attributes": True}
 

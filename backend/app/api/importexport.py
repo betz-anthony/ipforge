@@ -13,6 +13,8 @@ from app.database import get_db
 from app.models.address import IPAddress, AddressStatus
 from app.models.subnet import Subnet
 from app.models.user import User
+from app.models.custom_field import CustomFieldDef
+from app.core.custom_fields import load_custom_fields_bulk, load_tags_bulk
 
 router = APIRouter()
 
@@ -39,16 +41,27 @@ def _csv_safe(value: str) -> str:
 
 # ── Export ────────────────────────────────────────────────────────────────────
 
+def _cf_names(db: Session, entity_type: str) -> list[str]:
+    return [d.name for d in db.query(CustomFieldDef)
+            .filter_by(entity_type=entity_type)
+            .order_by(CustomFieldDef.name).all()]
+
+
 @router.get("/subnets.csv")
 def export_subnets(db: Session = Depends(get_db)):
     subnets = db.query(Subnet).order_by(Subnet.id).all()
     cidr_map = {s.id: s.cidr for s in subnets}
+    ids = [s.id for s in subnets]
+    cf_names = _cf_names(db, "subnet")
+    cf = load_custom_fields_bulk(db, "subnet", ids)
+    tags = load_tags_bulk(db, "subnet", ids)
 
     buf = io.StringIO()
-    w = csv.DictWriter(buf, fieldnames=_SUBNET_COLS)
+    fieldnames = _SUBNET_COLS + ["tags"] + [f"cf_{n}" for n in cf_names]
+    w = csv.DictWriter(buf, fieldnames=fieldnames)
     w.writeheader()
     for s in subnets:
-        w.writerow({
+        row = {
             "name":                  _csv_safe(s.name),
             "cidr":                  s.cidr,
             "ip_version":            s.ip_version,
@@ -57,7 +70,11 @@ def export_subnets(db: Session = Depends(get_db)):
             "notes":                 _csv_safe(s.notes or ""),
             "parent_cidr":           cidr_map.get(s.parent_id, "") if s.parent_id else "",
             "scan_interval_minutes": s.scan_interval_minutes if s.scan_interval_minutes is not None else "",
-        })
+            "tags":                  ";".join(tags.get(s.id, [])),
+        }
+        for n in cf_names:
+            row[f"cf_{n}"] = _csv_safe(cf.get(s.id, {}).get(n, ""))
+        w.writerow(row)
     buf.seek(0)
     return StreamingResponse(
         buf,
@@ -70,12 +87,17 @@ def export_subnets(db: Session = Depends(get_db)):
 def export_addresses(db: Session = Depends(get_db)):
     addresses = db.query(IPAddress).order_by(IPAddress.id).all()
     subnet_map = {s.id: s.cidr for s in db.query(Subnet).all()}
+    ids = [a.id for a in addresses]
+    cf_names = _cf_names(db, "address")
+    cf = load_custom_fields_bulk(db, "address", ids)
+    tags = load_tags_bulk(db, "address", ids)
 
     buf = io.StringIO()
-    w = csv.DictWriter(buf, fieldnames=_ADDRESS_COLS)
+    fieldnames = _ADDRESS_COLS + ["tags"] + [f"cf_{n}" for n in cf_names]
+    w = csv.DictWriter(buf, fieldnames=fieldnames)
     w.writeheader()
     for a in addresses:
-        w.writerow({
+        row = {
             "address":     a.address,
             "subnet_cidr": subnet_map.get(a.subnet_id, ""),
             "hostname":    _csv_safe(a.hostname or ""),
@@ -83,7 +105,11 @@ def export_addresses(db: Session = Depends(get_db)):
             "mac_address": a.mac_address or "",
             "description": _csv_safe(a.description or ""),
             "notes":       _csv_safe(a.notes or ""),
-        })
+            "tags":        ";".join(tags.get(a.id, [])),
+        }
+        for n in cf_names:
+            row[f"cf_{n}"] = _csv_safe(cf.get(a.id, {}).get(n, ""))
+        w.writerow(row)
     buf.seek(0)
     return StreamingResponse(
         buf,

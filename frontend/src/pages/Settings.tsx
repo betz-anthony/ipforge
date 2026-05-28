@@ -3,9 +3,9 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Eye, EyeOff, Save, Plus, Pencil, Trash2, Check, X } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import {
-  settingsApi, providerConfigsApi, cacheApi, usersApi, ldapApi,
+  settingsApi, providerConfigsApi, cacheApi, usersApi, ldapApi, customFieldsApi,
   type AppSettingsUpdate, type ProviderConfig, type ProviderConfigCreate, type UserRecord,
-  type LdapSettings,
+  type LdapSettings, type CustomFieldDef,
 } from '../api/client'
 import ConfirmModal from '../components/ConfirmModal'
 import Collapsible from '../components/Collapsible'
@@ -703,6 +703,120 @@ function LdapSection() {
 
 // ── Main settings page ─────────────────────────────────────────────────────
 
+// ── Custom fields section ──────────────────────────────────────────────────
+
+function CustomFieldsSection() {
+  const qc = useQueryClient()
+  const { data: defs = [] } = useQuery({ queryKey: ['custom-fields'], queryFn: () => customFieldsApi.list() })
+  const { showToast } = useToast()
+
+  const [entityType, setEntityType] = useState<'subnet' | 'address'>('subnet')
+  const [name, setName]   = useState('')
+  const [label, setLabel] = useState('')
+  const [ftype, setFtype] = useState<'text' | 'select' | 'date'>('text')
+  const [optionsText, setOptionsText] = useState('')
+  const [confirmDelete, setConfirmDelete] = useState<{ id: number; label: string } | null>(null)
+
+  const reset = () => { setName(''); setLabel(''); setFtype('text'); setOptionsText('') }
+
+  const createMut = useMutation({
+    mutationFn: () => customFieldsApi.create({
+      entity_type: entityType,
+      name: name.trim(),
+      label: label.trim(),
+      field_type: ftype,
+      options: ftype === 'select'
+        ? optionsText.split(',').map(o => o.trim()).filter(Boolean)
+        : null,
+    }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['custom-fields'] }); reset(); showToast('Field created', 'success') },
+    onError: (err: any) => showToast(err?.response?.data?.detail ?? 'Create failed', 'error'),
+  })
+
+  const deleteMut = useMutation({
+    mutationFn: (id: number) => customFieldsApi.remove(id),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['custom-fields'] }); setConfirmDelete(null); showToast('Field deleted', 'success') },
+    onError: (err: any) => { showToast(err?.response?.data?.detail ?? 'Delete failed', 'error'); setConfirmDelete(null) },
+  })
+
+  const nameValid = /^[a-z0-9_]+$/.test(name.trim())
+  const canSubmit = nameValid && label.trim() && (ftype !== 'select' || optionsText.trim())
+
+  return (
+    <Collapsible title="Custom Fields" storageKey="custom-fields">
+      <form onSubmit={e => { e.preventDefault(); if (canSubmit) createMut.mutate() }}>
+        <div className="form-grid">
+          <Field label="Entity">
+            <select value={entityType} onChange={e => setEntityType(e.target.value as 'subnet' | 'address')}>
+              <option value="subnet">Subnet</option>
+              <option value="address">Address</option>
+            </select>
+          </Field>
+          <Field label="Name (key)" hint="lowercase, digits, underscore">
+            <input value={name} onChange={e => setName(e.target.value)} placeholder="owner" />
+          </Field>
+          <Field label="Label">
+            <input value={label} onChange={e => setLabel(e.target.value)} placeholder="Owner" />
+          </Field>
+          <Field label="Type">
+            <select value={ftype} onChange={e => setFtype(e.target.value as 'text' | 'select' | 'date')}>
+              <option value="text">Text</option>
+              <option value="select">Select</option>
+              <option value="date">Date</option>
+            </select>
+          </Field>
+          {ftype === 'select' && (
+            <Field label="Options (comma-separated)">
+              <input value={optionsText} onChange={e => setOptionsText(e.target.value)} placeholder="prod, dev, staging" />
+            </Field>
+          )}
+        </div>
+        <div className="form-actions">
+          <button type="submit" className="btn-primary" disabled={!canSubmit || createMut.isPending}>
+            <Plus size={13} /> Add Field
+          </button>
+        </div>
+      </form>
+
+      {defs.length > 0 && (
+        <div className="table-wrap" style={{ marginTop: '1rem' }}>
+          <table>
+            <thead>
+              <tr><th>Entity</th><th>Name</th><th>Label</th><th>Type</th><th>Options</th><th></th></tr>
+            </thead>
+            <tbody>
+              {defs.map((d: CustomFieldDef) => (
+                <tr key={d.id}>
+                  <td>{d.entity_type}</td>
+                  <td><span className="font-mono">{d.name}</span></td>
+                  <td>{d.label}</td>
+                  <td>{d.field_type}</td>
+                  <td>{d.options?.join(', ') ?? <span className="text-muted">—</span>}</td>
+                  <td>
+                    <button className="btn-ghost btn-sm" onClick={() => setConfirmDelete({ id: d.id, label: `${d.entity_type}.${d.name}` })}>
+                      <Trash2 size={13} />
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {confirmDelete && (
+        <ConfirmModal
+          title="Delete Custom Field"
+          message={`Delete field "${confirmDelete.label}" and all its values?`}
+          onConfirm={() => deleteMut.mutate(confirmDelete.id)}
+          onCancel={() => setConfirmDelete(null)}
+        />
+      )}
+    </Collapsible>
+  )
+}
+
+
 export default function SettingsPage() {
   const qc = useQueryClient()
   const { user } = useAuth()
@@ -797,6 +911,9 @@ export default function SettingsPage() {
           </div>
         </form>
       </Collapsible>
+
+      {/* ── Custom Fields ── */}
+      <CustomFieldsSection />
 
       {/* ── Users ── */}
       {user && <UsersSection currentUsername={user.username} />}
