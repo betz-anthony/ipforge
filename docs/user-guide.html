@@ -957,6 +957,15 @@ left behind surfaces as <a href="#drift--reconciliation">drift</a>, not a silent
 <p><strong>Re-notify</strong> — minutes between re-sends while an event remains in <code>firing</code> state. Empty = notify once per state change.</p>
 <h3 id="events-alerts-page">Events (Alerts page)</h3>
 <p>Lists every alert event with deliveries (✅ sent / ❌ failed per channel). Filter by state (<code>firing</code> / <code>resolved</code>) and trigger. Operators can acknowledge a firing event to stop re-notifications.</p>
+<h3 id="automation-rules-settings-automation-rules">Automation rules (Settings → Automation Rules)</h3>
+<p>Beyond notifying, IPForge can <strong>act</strong> on a trigger. In <strong>Settings → Automation
+Rules</strong> (admin) define rules that, on a <code>rogue</code> (newly-discovered device) or
+<code>drift</code> event, <strong>tag and/or set the status</strong> of the matching address — e.g. tag
+every newly-discovered device <code>unverified</code>, or set <code>orphan_dhcp</code> drift IPs to
+<code>reserved</code>. Drift rules can be scoped to a single drift category.</p>
+<p>Actions are reversible and IPAM-only (no provider writes, no deletes), each is
+audit-logged, and rules have a per-rule enable toggle. Rules run from the same
+background dispatcher that delivers alerts.</p>
 <hr>
 <h2 id="search">Search</h2>
 <p>The global search bar (top of every page) searches across subnets, addresses, DNS records, and DHCP leases simultaneously.</p>

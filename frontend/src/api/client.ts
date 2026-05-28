@@ -339,6 +339,24 @@ export const gitopsApi = {
     api.post<GitopsApplyResult>('/gitops/apply', yamlText, { headers: { 'Content-Type': 'text/yaml' } }).then(r => r.data),
 }
 
+export interface AutomationRule {
+  id: number
+  name: string
+  trigger_type: 'rogue' | 'drift'
+  condition: Record<string, unknown>
+  action: { set_status?: string; add_tags?: string[] }
+  enabled: boolean
+}
+
+export const automationApi = {
+  list: () => api.get<AutomationRule[]>('/automation/rules').then(r => r.data),
+  create: (body: Record<string, unknown>) =>
+    api.post<AutomationRule>('/automation/rules', body).then(r => r.data),
+  update: (id: number, body: Record<string, unknown>) =>
+    api.put<AutomationRule>(`/automation/rules/${id}`, body).then(r => r.data),
+  remove: (id: number) => api.delete(`/automation/rules/${id}`),
+}
+
 export const customFieldsApi = {
   list: (entity_type?: 'subnet' | 'address') =>
     api.get<CustomFieldDef[]>('/custom-fields', { params: entity_type ? { entity_type } : {} }).then(r => r.data),

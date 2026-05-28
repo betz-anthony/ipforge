@@ -32,6 +32,7 @@ from app.api import tags as tags_router
 from app.api import drift as drift_router
 from app.api import discovery as discovery_router
 from app.api import gitops as gitops_router
+from app.api import automation as automation_router
 from app.alerting import api as alerting_api
 from app.alerting.dispatcher import start as start_alert_dispatcher
 import app.models  # noqa: F401
@@ -181,6 +182,7 @@ app.include_router(cache_router.router,            prefix="/api/cache",         
 app.include_router(users_router.router,            prefix="/api/users",            tags=["users"],            dependencies=_adm)
 app.include_router(groups_router.router,           prefix="/api/groups",           tags=["groups"],           dependencies=_adm)
 app.include_router(subnet_grants_router.router,    prefix="/api/subnet-grants",    tags=["grants"],           dependencies=_adm)
+app.include_router(automation_router.router,       prefix="/api/automation",       tags=["automation"],       dependencies=_adm)
 
 # IP requests (requester+ role; scoped blocked per-endpoint)
 app.include_router(ip_requests_router.router, prefix="/api/requests", tags=["ip-requests"])

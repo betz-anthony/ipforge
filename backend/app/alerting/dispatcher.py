@@ -117,12 +117,17 @@ def _resolve_stale_firing(db: Session) -> None:
 
 
 def process_tick(db: Session) -> None:
-    # 1. Drain queue and process new triggers
+    # 1. Drain queue once; feed both notification and automation from the same events.
+    from app.automation import run_automation
     for te in drain_queue():
         try:
             _process_trigger(db, te)
         except Exception:
             logger.exception("dispatcher: error processing trigger %s", te.resource_key)
+        try:
+            run_automation(db, te)
+        except Exception:
+            logger.exception("dispatcher: automation error for %s", te.resource_key)
 
     # 2. Periodic threshold evaluation
     rules = db.query(AlertRule).filter(AlertRule.enabled == True).all()  # noqa: E712
