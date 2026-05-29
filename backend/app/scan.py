@@ -244,6 +244,9 @@ def scan_subnet(
                     existing_ips.add(ip)
                     emit("rogue", f"ip:{ip}",
                          {"ip": ip, "subnet_id": subnet_id})
+                    from app.security import emit_security_event
+                    emit_security_event(db, "rogue_device", mac=None, ip=ip,
+                                        details={"source": "scan", "subnet_id": subnet_id})
 
         db.commit()
         _update_last_seen(db, reachable_ips, now)

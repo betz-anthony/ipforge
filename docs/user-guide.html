@@ -88,6 +88,7 @@ ul, ol { padding-left: 1.5rem; }
 <li><a href="#subnet-scanning">Subnet Scanning</a></li>
 <li><a href="#drift--reconciliation">Drift / Reconciliation</a></li>
 <li><a href="#snmp-discovery">SNMP Discovery</a></li>
+<li><a href="#security-events">Security Events</a></li>
 <li><a href="#gitops-declarative-config">GitOps (Declarative Config)</a></li>
 <li><a href="#stale-ip-reclamation">Stale IP Reclamation</a></li>
 <li><a href="#alerting">Alerting</a></li>
@@ -855,6 +856,43 @@ discovered endpoints.</p>
 <p>Roadmap: SSH/CLI collection, CDP/LLDP topology, and drift categories for
 mac-on-unexpected-port / rogue devices are planned follow-ups.</p>
 </blockquote>
+<hr>
+<h2 id="security-events">Security Events</h2>
+<p>The <strong>Security</strong> page surfaces network-security signals derived from scans and
+SNMP discovery:</p>
+<table>
+<thead>
+<tr>
+<th>Event</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>rogue_device</code></td>
+<td>A device (IP/MAC) seen on the network with no IPAM record.</td>
+</tr>
+<tr>
+<td><code>mac_move</code></td>
+<td>A MAC moved to a different switchport/device since the last SNMP poll.</td>
+</tr>
+<tr>
+<td><code>ip_conflict</code></td>
+<td>One IP claimed by two or more different MACs (possible spoof).</td>
+</tr>
+<tr>
+<td><code>new_mac</code></td>
+<td>A previously-unseen MAC appeared.</td>
+</tr>
+</tbody>
+</table>
+<p>Detection runs after each SNMP poll (and scan rogue detection); duplicate events
+are de-duplicated rather than re-created. Each event has a severity
+(<code>error</code>/<code>warning</code>/<code>info</code>).</p>
+<p><strong>Acknowledge</strong> clears an event from the default view. <strong>Quarantine</strong> (operator+)
+ensures an IPAM address exists for the offending IP, tags it <code>quarantined</code>, and
+sets its status to <code>deprecated</code> — reversible and audited. (SNMP port-shutdown
+enforcement is a future addition.)</p>
 <hr>
 <h2 id="gitops-declarative-config">GitOps (Declarative Config)</h2>
 <p>Declare VLANs, subnets, reserved ranges, and allocations as YAML and have IPForge

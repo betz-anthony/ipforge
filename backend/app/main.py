@@ -33,6 +33,7 @@ from app.api import drift as drift_router
 from app.api import discovery as discovery_router
 from app.api import gitops as gitops_router
 from app.api import automation as automation_router
+from app.api import security as security_router
 from app.alerting import api as alerting_api
 from app.alerting.dispatcher import start as start_alert_dispatcher
 import app.models  # noqa: F401
@@ -168,6 +169,7 @@ app.include_router(sync_router.router,   prefix="/api/sync",  tags=["sync"],  de
 app.include_router(scan_router.router,   prefix="/api/scan",  tags=["scan"],  dependencies=_op)
 app.include_router(drift_router.router,  prefix="/api/drift", tags=["drift"], dependencies=_ro)
 app.include_router(discovery_router.router, prefix="/api/discovery", tags=["discovery"], dependencies=_ro)
+app.include_router(security_router.router, prefix="/api/security", tags=["security"], dependencies=_ro)
 app.include_router(gitops_router.router, prefix="/api/gitops", tags=["gitops"], dependencies=_op)
 app.include_router(reclaim_router.router, prefix="/api/addresses", tags=["reclaim"], dependencies=_op)
 

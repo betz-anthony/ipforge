@@ -2,7 +2,7 @@ import { Fragment, useEffect, useState } from 'react'
 import { Routes, Route, NavLink, useLocation } from 'react-router-dom'
 import {
   LayoutDashboard, Network, List, Server, Globe, Search, Settings, LogOut, ClipboardList,
-  ArchiveRestore, KeyRound, Users, Bell, Tag, Menu, Sun, Moon, Keyboard, GitCompareArrows, GitBranch,
+  ArchiveRestore, KeyRound, Users, Bell, Tag, Menu, Sun, Moon, Keyboard, GitCompareArrows, GitBranch, ShieldAlert,
 } from 'lucide-react'
 import { useQuery } from '@tanstack/react-query'
 import { useAuth } from './contexts/AuthContext'
@@ -26,6 +26,7 @@ import Requests from './pages/Requests'
 import Vlans from './pages/Vlans'
 import DriftPage from './pages/Drift'
 import GitOpsPage from './pages/GitOps'
+import SecurityPage from './pages/Security'
 
 const NAV = [
   { to: '/',          label: 'Dashboard', icon: LayoutDashboard, end: true },
@@ -136,6 +137,13 @@ export default function App() {
             </NavLink>
           )}
 
+          {!isScoped && (
+            <NavLink to="/security" className={({ isActive }) => 'nav-link' + (isActive ? ' active' : '')}>
+              <ShieldAlert size={15} strokeWidth={1.75} />
+              Security
+            </NavLink>
+          )}
+
           {isOperator && !isScoped && (
             <NavLink to="/gitops" className={({ isActive }) => 'nav-link' + (isActive ? ' active' : '')}>
               <GitBranch size={15} strokeWidth={1.75} />
@@ -230,6 +238,7 @@ export default function App() {
           <Route path="/dhcp"      element={<DHCP />} />
           <Route path="/dns"       element={<DNS />} />
           <Route path="/drift"     element={<DriftPage />} />
+          <Route path="/security"  element={<SecurityPage />} />
           <Route path="/gitops"    element={<GitOpsPage />} />
           <Route path="/search"    element={<SearchPage />} />
           <Route path="/audit"     element={<AuditPage />} />
