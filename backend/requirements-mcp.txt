@@ -1,0 +1,6 @@
+# MCP server (MCP-001) — runs as a SEPARATE process from the web app.
+# Kept out of requirements.txt because `mcp` pins a newer starlette than the
+# FastAPI web app uses; install this only in the environment that runs
+# `python -m app.mcp_server`.
+mcp==1.2.0
+requests==2.32.3
