@@ -357,6 +357,26 @@ export const automationApi = {
   remove: (id: number) => api.delete(`/automation/rules/${id}`),
 }
 
+export interface SecurityEvent {
+  id: number
+  event_type: 'rogue_device' | 'mac_move' | 'ip_conflict' | 'new_mac'
+  severity: 'error' | 'warning' | 'info'
+  mac: string | null
+  ip: string | null
+  details: string | null
+  detected_at: string | null
+  acknowledged: boolean
+  acknowledged_at: string | null
+  quarantined: boolean
+}
+
+export const securityApi = {
+  list: (params?: { event_type?: string; severity?: string; acknowledged?: boolean }) =>
+    api.get<SecurityEvent[]>('/security/events', { params }).then(r => r.data),
+  ack: (id: number) => api.post<SecurityEvent>(`/security/events/${id}/ack`).then(r => r.data),
+  quarantine: (id: number) => api.post<SecurityEvent>(`/security/events/${id}/quarantine`).then(r => r.data),
+}
+
 export const customFieldsApi = {
   list: (entity_type?: 'subnet' | 'address') =>
     api.get<CustomFieldDef[]>('/custom-fields', { params: entity_type ? { entity_type } : {} }).then(r => r.data),

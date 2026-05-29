@@ -59,6 +59,8 @@ def poll_device(device_id: int, _db=None) -> None:
                 port_name=e.port_name, vlan=e.vlan, last_seen=now, source=device.name,
             ))
         db.commit()
+        from app.security import detect_security
+        detect_security(db)
         _set_status(db, device_id, "ok")
     except Exception as exc:
         logger.error("Discovery poll failed for device %d: %s", device_id, exc, exc_info=True)
