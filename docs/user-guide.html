@@ -1255,9 +1255,10 @@ username=...&amp;password=...
 <p>Returns <code>{ "access_token": "...", "token_type": "bearer" }</code>. Token lifetime is 8 hours by default.</p>
 <hr>
 <h2 id="mcp-server-ai-agents">MCP Server (AI agents)</h2>
-<p>IPForge ships an MCP (Model Context Protocol) server so AI agents — 
-Desktop, Cursor, the Agent SDK — can operate IPAM directly: "find a free IP in
-10.0.0.0/24", "allocate web-07 in the DB subnet", "what's drifting in DC1".</p>
+<p>IPForge ships an MCP (Model Context Protocol) server so AI agents — Cursor,
+Continue, or any MCP-compatible client — can operate IPAM directly: "find a
+free IP in 10.0.0.0/24", "allocate web-07 in the DB subnet", "what's drifting
+in DC1".</p>
 <p>It runs as a <strong>separate stdio process</strong> that talks to IPForge over the HTTP API
 with an <a href="#api-tokens">API token</a>. The token's role is the authorization boundary —
 a read-only token can list/search but the write tools return 403.</p>
@@ -1267,7 +1268,7 @@ app, so keep it separate):</p>
 IPFORGE_URL=https://ipforge.example.com IPFORGE_TOKEN=ipfg_xxx \
   python -m app.mcp_server
 </code></pre>
-<p><strong> Desktop</strong> (<code>_desktop_config.json</code>):</p>
+<p><strong>MCP client config</strong> (most stdio-MCP clients accept this shape):</p>
 <pre><code class="language-json">{
   &quot;mcpServers&quot;: {
     &quot;ipforge&quot;: {
