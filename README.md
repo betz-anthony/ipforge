@@ -4,6 +4,31 @@ Self-hosted IP Address Management with integrated DNS and DHCP control.
 
 Tracks subnets, IP allocations, DNS zones/records, and DHCP scopes/reservations across pluggable providers — Microsoft DNS/DHCP (WinRM), BIND (dnspython/TSIG), Pi-hole v6, ISC Kea. Includes request/approval workflow, live availability scanning, collision detection, alerting (email/webhook/Slack/Teams/PagerDuty), audit log, LDAP/AD auth, and a Prometheus metrics endpoint.
 
+Unlike inventory-only IPAMs, IPForge **pushes** changes to your DNS and DHCP — and continuously reconciles drift between intended state and what's live.
+
+![IPForge dashboard](docs/screenshots/01-dashboard.png)
+
+## Screenshots
+
+<table>
+  <tr>
+    <td width="50%"><img src="docs/screenshots/03-subnet-map.png" alt="Subnet map with address-space heatmap"><br><sub><b>Subnet map</b> — per-address heatmap, reserved ranges, capacity forecast</sub></td>
+    <td width="50%"><img src="docs/screenshots/05-drift.png" alt="Drift reconciliation"><br><sub><b>Drift</b> — IPAM ↔ DNS ↔ DHCP ↔ live reconciliation</sub></td>
+  </tr>
+  <tr>
+    <td width="50%"><img src="docs/screenshots/02-subnets.png" alt="Subnets"><br><sub><b>Subnets</b> — hierarchy, VLANs, utilization</sub></td>
+    <td width="50%"><img src="docs/screenshots/04-addresses.png" alt="Addresses"><br><sub><b>Addresses</b> — status, tags, custom fields</sub></td>
+  </tr>
+  <tr>
+    <td width="50%"><img src="docs/screenshots/06-settings-providers.png" alt="Providers and policies"><br><sub><b>Settings</b> — DNS/DHCP providers + drift auto-remediation policies</sub></td>
+    <td width="50%"><img src="docs/screenshots/07-security.png" alt="Security events"><br><sub><b>Security</b> — rogue device, MAC move, quarantine</sub></td>
+  </tr>
+  <tr>
+    <td width="50%"><img src="docs/screenshots/08-gitops.png" alt="GitOps apply"><br><sub><b>GitOps</b> — declarative YAML apply with prune</sub></td>
+    <td width="50%"></td>
+  </tr>
+</table>
+
 ## Stack
 
 - **Backend:** FastAPI, SQLAlchemy 2.0, PostgreSQL, Alembic
