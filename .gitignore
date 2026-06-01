@@ -48,5 +48,8 @@ k8s/secret.yaml        # contains base64 secrets — use Sealed Secrets or ESO i
 Thumbs.db
 .worktrees/
 
+# Local demo DB (built by scripts/seed_demo.py)
+demo.db
+
 # Superpowers plugin working state
 .superpowers/
