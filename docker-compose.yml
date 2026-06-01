@@ -19,12 +19,6 @@ services:
       DATABASE_URL: postgresql://ipam:${DB_PASSWORD:-ipam}@db:5432/ipam
       JWT_SECRET_KEY: ${JWT_SECRET_KEY:-}
       SECRET_KEY: ${SECRET_KEY:-}
-      MS_WINRM_HOST: ${MS_WINRM_HOST:-}
-      MS_WINRM_USER: ${MS_WINRM_USER:-}
-      MS_WINRM_PASSWORD: ${MS_WINRM_PASSWORD:-}
-      MS_WINRM_TRANSPORT: ${MS_WINRM_TRANSPORT:-ntlm}
-      MS_DNS_SERVER: ${MS_DNS_SERVER:-}
-      MS_DHCP_SERVER: ${MS_DHCP_SERVER:-}
     depends_on:
       db:
         condition: service_healthy
