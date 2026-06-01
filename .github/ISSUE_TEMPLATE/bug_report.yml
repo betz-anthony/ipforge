@@ -1,0 +1,94 @@
+name: 🐞 Bug report
+description: Report a problem with IPForge
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for filing a bug. **Do not report security vulnerabilities here** —
+        use a [private security advisory](https://github.com/betz-anthony/ipforge/security/advisories/new).
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: A clear description of the bug, including the impact.
+    validations:
+      required: true
+
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      description: How can we reproduce it?
+      placeholder: |
+        1. Go to '...'
+        2. Click '...'
+        3. See error
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+      description: What did you expect to happen instead?
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: Version / commit
+      description: Image tag, release, or `git` short SHA.
+      placeholder: "v1.2.0 or 4679dc1"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: deployment
+    attributes:
+      label: Deployment
+      options:
+        - Docker Compose
+        - Kubernetes (Kustomize)
+        - Local dev (uvicorn + vite)
+        - Other
+    validations:
+      required: true
+
+  - type: dropdown
+    id: providers
+    attributes:
+      label: DNS/DHCP providers in use
+      description: Select any that are relevant to the bug.
+      multiple: true
+      options:
+        - None / not relevant
+        - "DNS: msdns (WinRM)"
+        - "DNS: bind"
+        - "DNS: pihole"
+        - "DNS: cloudflare"
+        - "DNS: route53"
+        - "DNS: azure_dns"
+        - "DNS: gcp_dns"
+        - "DHCP: msdhcp (WinRM)"
+        - "DHCP: keadhcp"
+        - "DHCP: pihole"
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant logs / screenshots
+      description: API logs, browser console, or screenshots. Redact secrets.
+      render: shell
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Confirmation
+      options:
+        - label: I am running a current release and searched existing issues.
+          required: true
+        - label: This is not a security vulnerability (those go to a private advisory).
+          required: true

@@ -1,0 +1,10 @@
+# Disable blank issues so reports use a template; route security + questions
+# to the right place.
+blank_issues_enabled: false
+contact_links:
+  - name: 🔒 Report a security vulnerability
+    url: https://github.com/betz-anthony/ipforge/security/advisories/new
+    about: Do NOT open a public issue. Report privately via a GitHub security advisory.
+  - name: 💬 Questions & discussion
+    url: https://github.com/betz-anthony/ipforge/discussions
+    about: For usage questions, ideas, and general help.
