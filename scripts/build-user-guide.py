@@ -9,7 +9,7 @@ from pathlib import Path
 import markdown
 
 ROOT = Path(__file__).resolve().parent.parent
-SRC = ROOT / "docs" / "user-guide.md"
+SRC = ROOT / "docs" / "private" / "user-guide.md"
 DST = ROOT / "docs" / "user-guide.html"
 
 CSS = """
