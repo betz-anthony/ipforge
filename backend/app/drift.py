@@ -5,6 +5,7 @@ Generalizes the former collision detection into a multi-way diff between IPAM
 """
 import json
 import logging
+from datetime import timedelta
 
 from sqlalchemy import func
 
@@ -23,6 +24,17 @@ from app.alerting.emit import emit
 logger = logging.getLogger(__name__)
 
 _USED_STATUSES = (AddressStatus.assigned, AddressStatus.reserved)
+
+# Scans older than this are too stale to flag unreachable_assigned.
+_UNREACHABLE_STALE_HOURS = 25
+
+
+def _ptr_arpa_name(ip: str) -> str | None:
+    """Return the in-addr.arpa name for an IPv4 address, or None for IPv6."""
+    parts = ip.split(".")
+    if len(parts) == 4:
+        return ".".join(reversed(parts)) + ".in-addr.arpa"
+    return None
 
 
 def _subnet_for_ip(subnets: list[Subnet], ip: str) -> int | None:
@@ -178,6 +190,50 @@ def detect_drift(db, subnet_id: int | None = None) -> None:
         if normalize_mac_optional(a.mac_address) != normalize_mac_optional(lease.mac_address):
             _upsert(a.address, DriftCategory.mac_mismatch,
                     {"ipam_mac": a.mac_address, "dhcp_mac": lease.mac_address}, a.subnet_id)
+
+    # ── missing_dhcp ─────────────────────────────────────────────────────────
+    for a in addresses:
+        if a.status not in _USED_STATUSES:
+            continue
+        if a.address not in lease_by_ip:
+            _upsert(a.address, DriftCategory.missing_dhcp,
+                    {"hostname": a.hostname, "status": a.status.value}, a.subnet_id)
+
+    # ── ptr_mismatch ──────────────────────────────────────────────────────────
+    # Only flagged when a PTR record EXISTS in the cache but its value doesn't
+    # match the A record name for that IP.
+    all_ptr = db.query(CachedDNSRecord).filter_by(record_type="PTR").all()
+    ptr_by_arpa: dict[str, CachedDNSRecord] = {}
+    for r in all_ptr:
+        ptr_by_arpa[r.name.lower().rstrip(".")] = r
+
+    for a in addresses:
+        rec = dns_by_value.get(a.address)
+        if rec is None:
+            continue  # no A record — can't evaluate PTR
+        arpa_name = _ptr_arpa_name(a.address)
+        if arpa_name is None:
+            continue
+        ptr_rec = ptr_by_arpa.get(arpa_name)
+        if ptr_rec is None:
+            continue  # no PTR — absence is not flagged here
+        a_name = rec.name.lower().rstrip(".")
+        ptr_val = ptr_rec.value.lower().rstrip(".")
+        # OK if PTR equals the A name or if A name is the first label of the PTR FQDN.
+        if ptr_val != a_name and not ptr_val.startswith(a_name + "."):
+            _upsert(a.address, DriftCategory.ptr_mismatch,
+                    {"a_name": rec.name, "ptr_value": ptr_rec.value}, a.subnet_id)
+
+    # ── unreachable_assigned ──────────────────────────────────────────────────
+    stale_threshold = now - timedelta(hours=_UNREACHABLE_STALE_HOURS)
+    for ip, sr in latest_scan_by_ip.items():
+        if sr.reachable or sr.scanned_at < stale_threshold:
+            continue
+        a = addr_by_ip.get(ip)
+        if a is None or a.status != AddressStatus.assigned:
+            continue
+        _upsert(ip, DriftCategory.unreachable_assigned,
+                {"last_scanned": sr.scanned_at.isoformat()}, a.subnet_id)
 
     # ── auto-resolve cleared items in scope ──────────────────────────────────
     for d in db.query(DriftItem).filter(DriftItem.resolved.is_(False)).all():

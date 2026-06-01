@@ -41,6 +41,49 @@ def test_policy_requires_admin(client_operator, db):
     assert r.status_code == 403
 
 
+def test_policy_with_provider_action_allowed_auto(client, db):
+    r = client.put("/api/drift/policies/missing_dns",
+                   json={"mode": "auto", "params": {"action": "push_dns", "zone": "example.com"}})
+    assert r.status_code == 200, r.text
+    assert r.json()["params"]["action"] == "push_dns"
+
+
+def test_subnet_policy_create_and_list(client, db):
+    from app.models.subnet import Subnet
+    s = Subnet(name="T", cidr="10.1.0.0/24", ip_version=4)
+    db.add(s); db.commit()
+    r = client.put("/api/drift/policies/orphan_dhcp",
+                   json={"mode": "auto", "dry_run": False, "subnet_id": s.id})
+    assert r.status_code == 200, r.text
+    assert r.json()["subnet_id"] == s.id
+    rows = client.get("/api/drift/policies").json()
+    sub_pol = next((p for p in rows if p["subnet_id"] == s.id), None)
+    assert sub_pol is not None and sub_pol["category"] == "orphan_dhcp"
+
+
+def test_subnet_policy_overrides_global_in_list(client, db):
+    from app.models.subnet import Subnet
+    s = Subnet(name="T", cidr="10.1.0.0/24", ip_version=4)
+    db.add(s); db.commit()
+    client.put("/api/drift/policies/orphan_dhcp", json={"mode": "review"})
+    client.put("/api/drift/policies/orphan_dhcp", json={"mode": "auto", "subnet_id": s.id})
+    rows = client.get("/api/drift/policies").json()
+    global_pol = next((p for p in rows if p["category"] == "orphan_dhcp" and p["subnet_id"] is None), None)
+    sub_pol = next((p for p in rows if p["category"] == "orphan_dhcp" and p["subnet_id"] == s.id), None)
+    assert global_pol is not None and global_pol["mode"] == "review"
+    assert sub_pol is not None and sub_pol["mode"] == "auto"
+
+
+def test_delete_subnet_policy(client, db):
+    from app.models.subnet import Subnet
+    s = Subnet(name="T", cidr="10.1.0.0/24", ip_version=4)
+    db.add(s); db.commit()
+    client.put("/api/drift/policies/orphan_dhcp", json={"mode": "auto", "subnet_id": s.id})
+    r = client.delete(f"/api/drift/policies/orphan_dhcp?subnet_id={s.id}")
+    assert r.status_code == 204
+    assert db.query(DriftPolicy).filter_by(category="orphan_dhcp", subnet_id=s.id).count() == 0
+
+
 def test_needs_review_filter(client, db):
     db.add(DriftItem(ip_address="10.0.0.1", category=DriftCategory.multi_dhcp_scope.value,
                      severity="warning", detected_at=_now(), resolved=False, needs_review=True))

@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from app.drift import detect_drift
 from app.models.subnet import Subnet
@@ -105,3 +105,98 @@ def test_auto_resolve_when_cleared(db):
     assert ("10.0.0.5", DriftCategory.missing_dns.value) not in _cats(db)
     cleared = db.query(DriftItem).filter_by(category=DriftCategory.missing_dns.value).first()
     assert cleared.resolved is True
+
+
+# ── v2 categories ────────────────────────────────────────────────────────────
+
+def test_missing_dhcp(db):
+    s = _subnet(db)
+    db.add(IPAddress(address="10.0.0.5", subnet_id=s.id, status=AddressStatus.assigned, hostname="web"))
+    db.commit()
+    detect_drift(db)
+    assert ("10.0.0.5", DriftCategory.missing_dhcp.value) in _cats(db)
+
+
+def test_missing_dhcp_satisfied_by_lease(db):
+    s = _subnet(db)
+    db.add(IPAddress(address="10.0.0.5", subnet_id=s.id, status=AddressStatus.assigned, hostname="web"))
+    db.add(CachedDHCPLease(scope_id="s", ip_address="10.0.0.5", name="web", source="msdhcp", synced_at=utcnow()))
+    db.commit()
+    detect_drift(db)
+    assert ("10.0.0.5", DriftCategory.missing_dhcp.value) not in _cats(db)
+
+
+def test_missing_dhcp_not_flagged_for_available(db):
+    s = _subnet(db)
+    db.add(IPAddress(address="10.0.0.5", subnet_id=s.id, status=AddressStatus.available))
+    db.commit()
+    detect_drift(db)
+    assert ("10.0.0.5", DriftCategory.missing_dhcp.value) not in _cats(db)
+
+
+def test_ptr_mismatch(db):
+    s = _subnet(db)
+    db.add(IPAddress(address="10.0.0.5", subnet_id=s.id, status=AddressStatus.assigned, hostname="web"))
+    db.add(CachedDNSRecord(name="web", record_type="A", value="10.0.0.5", zone="x", source="msdns", synced_at=utcnow()))
+    # PTR points to a different name
+    db.add(CachedDNSRecord(name="5.0.0.10.in-addr.arpa", record_type="PTR", value="other.example.com.", zone="x", source="msdns", synced_at=utcnow()))
+    db.commit()
+    detect_drift(db)
+    assert ("10.0.0.5", DriftCategory.ptr_mismatch.value) in _cats(db)
+
+
+def test_ptr_mismatch_ok_when_fqdn(db):
+    s = _subnet(db)
+    db.add(IPAddress(address="10.0.0.5", subnet_id=s.id, status=AddressStatus.assigned, hostname="web"))
+    db.add(CachedDNSRecord(name="web", record_type="A", value="10.0.0.5", zone="x", source="msdns", synced_at=utcnow()))
+    # PTR is web.example.com — starts with A record name, so OK
+    db.add(CachedDNSRecord(name="5.0.0.10.in-addr.arpa", record_type="PTR", value="web.example.com.", zone="x", source="msdns", synced_at=utcnow()))
+    db.commit()
+    detect_drift(db)
+    assert ("10.0.0.5", DriftCategory.ptr_mismatch.value) not in _cats(db)
+
+
+def test_ptr_no_record_no_mismatch(db):
+    s = _subnet(db)
+    db.add(IPAddress(address="10.0.0.5", subnet_id=s.id, status=AddressStatus.assigned, hostname="web"))
+    db.add(CachedDNSRecord(name="web", record_type="A", value="10.0.0.5", zone="x", source="msdns", synced_at=utcnow()))
+    db.commit()
+    detect_drift(db)
+    assert ("10.0.0.5", DriftCategory.ptr_mismatch.value) not in _cats(db)
+
+
+def test_unreachable_assigned(db):
+    s = _subnet(db)
+    db.add(IPAddress(address="10.0.0.5", subnet_id=s.id, status=AddressStatus.assigned))
+    db.add(ScanResult(subnet_id=s.id, ip_address="10.0.0.5", reachable=False, latency_ms=None, scanned_at=utcnow()))
+    db.commit()
+    detect_drift(db)
+    assert ("10.0.0.5", DriftCategory.unreachable_assigned.value) in _cats(db)
+
+
+def test_unreachable_available_not_flagged(db):
+    s = _subnet(db)
+    db.add(IPAddress(address="10.0.0.5", subnet_id=s.id, status=AddressStatus.available))
+    db.add(ScanResult(subnet_id=s.id, ip_address="10.0.0.5", reachable=False, latency_ms=None, scanned_at=utcnow()))
+    db.commit()
+    detect_drift(db)
+    assert ("10.0.0.5", DriftCategory.unreachable_assigned.value) not in _cats(db)
+
+
+def test_unreachable_assigned_stale_scan_no_flag(db):
+    s = _subnet(db)
+    db.add(IPAddress(address="10.0.0.5", subnet_id=s.id, status=AddressStatus.assigned))
+    stale = utcnow() - timedelta(hours=30)
+    db.add(ScanResult(subnet_id=s.id, ip_address="10.0.0.5", reachable=False, latency_ms=None, scanned_at=stale))
+    db.commit()
+    detect_drift(db)
+    assert ("10.0.0.5", DriftCategory.unreachable_assigned.value) not in _cats(db)
+
+
+def test_unreachable_reachable_no_flag(db):
+    s = _subnet(db)
+    db.add(IPAddress(address="10.0.0.5", subnet_id=s.id, status=AddressStatus.assigned))
+    db.add(ScanResult(subnet_id=s.id, ip_address="10.0.0.5", reachable=True, latency_ms=1.0, scanned_at=utcnow()))
+    db.commit()
+    detect_drift(db)
+    assert ("10.0.0.5", DriftCategory.unreachable_assigned.value) not in _cats(db)

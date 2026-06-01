@@ -13,7 +13,7 @@ from app.core.deps import get_current_user, require_operator, require_admin
 from app.core.time import utcnow
 from app.database import get_db
 from app.drift import detect_drift
-from app.drift_remediation import SAFE_CATEGORIES
+from app.drift_remediation import SAFE_CATEGORIES, PROVIDER_ACTIONS
 from app.models.address import IPAddress, AddressStatus
 from app.models.cache import CachedDHCPLease, CachedDNSRecord
 from app.models.scan import DriftItem, DriftPolicy
@@ -348,47 +348,52 @@ class PolicyIn(BaseModel):
     dry_run: bool = True
     params: dict = {}
     enabled: bool = True
+    subnet_id: int | None = None
 
 
 def _policy_out(p: DriftPolicy) -> dict:
-    return {"id": p.id, "category": p.category, "mode": p.mode, "dry_run": p.dry_run,
-            "params": p.params, "enabled": p.enabled}
+    return {"id": p.id, "category": p.category, "subnet_id": p.subnet_id,
+            "mode": p.mode, "dry_run": p.dry_run, "params": p.params, "enabled": p.enabled}
 
 
 @router.get("/policies")
 def list_policies(_: User = Depends(require_admin), db: Session = Depends(get_db)):
-    return [_policy_out(p) for p in db.query(DriftPolicy).order_by(DriftPolicy.category).all()]
+    return [_policy_out(p) for p in db.query(DriftPolicy).order_by(DriftPolicy.category, DriftPolicy.subnet_id).all()]
 
 
 @router.put("/policies/{category}")
 def upsert_policy(category: str, body: PolicyIn,
                   current_user: User = Depends(require_admin), db: Session = Depends(get_db)):
-    if body.mode == "auto" and category not in SAFE_CATEGORIES:
-        raise HTTPException(400, f"category {category!r} is not auto-eligible; use mode 'review'")
+    action_type = (body.params or {}).get("action", "")
+    if body.mode == "auto" and category not in SAFE_CATEGORIES and action_type not in PROVIDER_ACTIONS:
+        raise HTTPException(400, f"category {category!r} is not auto-eligible without a provider action; use mode 'review' or set params.action")
     target = (body.params or {}).get("target_status")
     if target is not None:
         try:
             AddressStatus(target)
         except ValueError:
             raise HTTPException(400, f"Invalid target_status: {target}")
-    p = db.query(DriftPolicy).filter_by(category=category).first()
+    p = db.query(DriftPolicy).filter_by(category=category, subnet_id=body.subnet_id).first()
     if p is None:
-        p = DriftPolicy(category=category)
+        p = DriftPolicy(category=category, subnet_id=body.subnet_id)
         db.add(p)
     p.mode, p.dry_run, p.params, p.enabled = body.mode, body.dry_run, body.params, body.enabled
     db.flush()
-    write_audit(db, current_user.username, "upsert", "drift_policy", str(p.id), category)
+    write_audit(db, current_user.username, "upsert", "drift_policy", str(p.id),
+                f"{category} subnet={body.subnet_id}")
     db.commit()
     db.refresh(p)
     return _policy_out(p)
 
 
 @router.delete("/policies/{category}", status_code=204)
-def delete_policy(category: str, current_user: User = Depends(require_admin), db: Session = Depends(get_db)):
-    p = db.query(DriftPolicy).filter_by(category=category).first()
+def delete_policy(category: str, subnet_id: int | None = None,
+                  current_user: User = Depends(require_admin), db: Session = Depends(get_db)):
+    p = db.query(DriftPolicy).filter_by(category=category, subnet_id=subnet_id).first()
     if p is None:
         raise HTTPException(404, "Policy not found")
-    write_audit(db, current_user.username, "delete", "drift_policy", str(p.id), category)
+    write_audit(db, current_user.username, "delete", "drift_policy", str(p.id),
+                f"{category} subnet={subnet_id}")
     db.delete(p)
     db.commit()
     return Response(status_code=204)

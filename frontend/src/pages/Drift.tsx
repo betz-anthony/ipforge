@@ -13,9 +13,12 @@ const CATEGORY_LABEL: Record<string, string> = {
   multi_dhcp_scope: 'Multi DHCP scope',
   hostname_mismatch: 'Hostname mismatch',
   missing_dns: 'Missing DNS',
+  missing_dhcp: 'Missing DHCP',
   orphan_dns: 'Orphan DNS',
   orphan_dhcp: 'Orphan DHCP',
   mac_mismatch: 'MAC mismatch',
+  ptr_mismatch: 'PTR mismatch',
+  unreachable_assigned: 'Unreachable (assigned)',
 }
 
 const SEV_BADGE: Record<string, string> = { error: 'badge-red', warning: 'badge-yellow', info: 'badge-gray' }
