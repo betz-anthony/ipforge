@@ -15,6 +15,10 @@ class DriftCategory(str, enum.Enum):
     orphan_dns           = "orphan_dns"
     orphan_dhcp          = "orphan_dhcp"
     mac_mismatch         = "mac_mismatch"
+    # v2 categories
+    missing_dhcp         = "missing_dhcp"
+    ptr_mismatch         = "ptr_mismatch"
+    unreachable_assigned = "unreachable_assigned"
 
 
 # Backwards-compatible alias (the three original values still resolve).
@@ -31,9 +35,12 @@ DRIFT_SEVERITY = {
     DriftCategory.hostname_mismatch:    "warning",
     DriftCategory.multi_dhcp_scope:     "warning",
     DriftCategory.missing_dns:          "warning",
+    DriftCategory.missing_dhcp:         "warning",
     DriftCategory.mac_mismatch:         "warning",
+    DriftCategory.ptr_mismatch:         "warning",
     DriftCategory.orphan_dns:           "info",
     DriftCategory.orphan_dhcp:          "info",
+    DriftCategory.unreachable_assigned: "info",
 }
 
 
@@ -73,9 +80,15 @@ class DriftItem(Base):
 
 class DriftPolicy(Base):
     __tablename__ = "drift_policies"
+    __table_args__ = (
+        # Global policies (subnet_id=None) uniqueness enforced at app layer.
+        # Subnet-specific policies unique per (category, subnet_id).
+        UniqueConstraint("category", "subnet_id", name="uq_drift_policies_category_subnet"),
+    )
 
     id:         Mapped[int]      = mapped_column(Integer, primary_key=True)
-    category:   Mapped[str]      = mapped_column(String(50), nullable=False, unique=True)
+    category:   Mapped[str]      = mapped_column(String(50), nullable=False)
+    subnet_id:  Mapped[int|None] = mapped_column(Integer, ForeignKey("subnets.id", ondelete="CASCADE"), nullable=True, index=True)
     mode:       Mapped[str]      = mapped_column(String(10), nullable=False)  # auto | review
     dry_run:    Mapped[bool]     = mapped_column(Boolean, nullable=False, default=True)
     params:     Mapped[dict]     = mapped_column(JSON, nullable=False, default=dict)
