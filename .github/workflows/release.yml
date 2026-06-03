@@ -1,0 +1,40 @@
+# Create a GitHub Release when a v* tag appears (the public mirror pushes tags;
+# tag pushes via the deploy key trigger this). Release notes are pulled from the
+# matching section of CHANGELOG.md.
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Extract changelog section
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          awk -v v="$VERSION" '
+            $0 ~ "^## \\[" v "\\]" {flag=1; next}
+            flag && (/^## \[/ || /^\[[^]]+\]: /) {flag=0}
+            flag {print}
+          ' CHANGELOG.md > release-notes.md
+          # Trim leading/trailing blank lines; fall back to a generic note.
+          sed -i -e '/./,$!d' release-notes.md
+          if [ ! -s release-notes.md ]; then
+            echo "Release ${GITHUB_REF_NAME}." > release-notes.md
+          fi
+          echo "----- notes -----"; cat release-notes.md
+
+      - name: Create release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: IPForge ${{ github.ref_name }}
+          tag_name: ${{ github.ref_name }}
+          body_path: release-notes.md
