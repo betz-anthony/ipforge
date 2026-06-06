@@ -307,7 +307,8 @@ def test_dns_create_record_register_ptr_creates_both(client, db):
     assert ptr_call.value == "web01."
 
 
-def test_dns_create_record_register_ptr_pihole_422(client, db):
+def test_dns_create_record_register_ptr_pihole_skips_ptr(client, db):
+    # Pi-hole has no PTR support — register_ptr must be skipped, not 422'd.
     _add_zone(db, "example.com", source="pihole01")
     _add_zone(db, "1.0.10.in-addr.arpa", source="pihole01")
     from app.providers.dns.pihole import PiholeDNSProvider as RealPihole
@@ -315,7 +316,7 @@ def test_dns_create_record_register_ptr_pihole_422(client, db):
     class FakePihole(RealPihole):
         source = "pihole01"
         def __init__(self): pass
-        def add_record(self, r): raise NotImplementedError()
+        def add_record(self, r): pass
         def get_zones(self): return []
         def get_records(self, z): return []
         def delete_record(self, r): pass
@@ -328,12 +329,12 @@ def test_dns_create_record_register_ptr_pihole_422(client, db):
             "zone": "example.com", "ttl": 3600, "source": "pihole01",
             "register_ptr": True,
         })
-    assert r.status_code == 422
+    assert r.status_code == 201, r.text
 
 
-def test_dns_create_record_register_ptr_no_reverse_zone_422(client, db):
+def test_dns_create_record_register_ptr_no_reverse_zone_skips_ptr(client, db):
     _add_zone(db, "example.com")
-    # No reverse zone
+    # No reverse zone — PTR is skipped, A record still created (no 422, no undo).
     mock_prov = MagicMock()
     mock_prov.source = "bind01"
     mock_prov.add_record = MagicMock()
@@ -345,11 +346,14 @@ def test_dns_create_record_register_ptr_no_reverse_zone_422(client, db):
             "zone": "example.com", "ttl": 3600, "source": "bind01",
             "register_ptr": True,
         })
-    assert r.status_code == 422
-    mock_prov.delete_record.assert_called_once()
+    assert r.status_code == 201, r.text
+    assert mock_prov.add_record.call_count == 1   # A only
+    mock_prov.delete_record.assert_not_called()   # A not rolled back
 
 
-def test_dns_create_record_register_ptr_ptr_fail_rolls_back_a(client, db):
+def test_dns_create_record_register_ptr_ptr_fail_keeps_a(client, db):
+    # PTR registration is best-effort: a PTR provider failure must NOT roll back
+    # the successfully-created A record.
     _add_zone(db, "example.com")
     _add_zone(db, "1.0.10.in-addr.arpa")
     add_count = 0
@@ -371,8 +375,9 @@ def test_dns_create_record_register_ptr_ptr_fail_rolls_back_a(client, db):
             "zone": "example.com", "ttl": 3600, "source": "bind01",
             "register_ptr": True,
         })
-    assert r.status_code == 502
-    mock_prov.delete_record.assert_called_once()
+    assert r.status_code == 201, r.text
+    assert mock_prov.add_record.call_count == 2   # A + PTR attempt
+    mock_prov.delete_record.assert_not_called()   # A kept
 
 
 def test_dns_delete_record_delete_ptr_deletes_both(client, db):
@@ -394,10 +399,11 @@ def test_dns_delete_record_delete_ptr_deletes_both(client, db):
     assert ptr_call.zone == "1.0.10.in-addr.arpa"
 
 
-def test_dns_delete_record_delete_ptr_no_reverse_zone_422(client, db):
+def test_dns_delete_record_delete_ptr_no_reverse_zone_skips_ptr(client, db):
     _add_zone(db, "example.com")  # forward zone present, no reverse zone
     mock_prov = MagicMock()
     mock_prov.source = "bind01"
+    mock_prov.delete_record = MagicMock()
 
     with patch("app.api.dns.get_dns_providers", return_value=[mock_prov]):
         r = client.request("DELETE", "/api/dns/zones/example.com/records", json={
@@ -405,10 +411,13 @@ def test_dns_delete_record_delete_ptr_no_reverse_zone_422(client, db):
             "zone": "example.com", "ttl": 3600, "source": "bind01",
             "delete_ptr": True,
         })
-    assert r.status_code == 422
+    assert r.status_code == 204, r.text
+    assert mock_prov.delete_record.call_count == 1   # A only — PTR skipped
 
 
-def test_dns_delete_record_ptr_fail_rolls_back_a(client, db):
+def test_dns_delete_record_ptr_fail_keeps_a_deleted(client, db):
+    # PTR delete is best-effort: an absent/failing PTR (record created outside its
+    # reverse zone) must NOT revert the A deletion.
     _add_zone(db, "1.0.10.in-addr.arpa")
     del_count = 0
 
@@ -416,7 +425,7 @@ def test_dns_delete_record_ptr_fail_rolls_back_a(client, db):
         nonlocal del_count
         del_count += 1
         if del_count == 2:
-            raise Exception("PTR delete error")
+            raise Exception("Remove-DnsServerResourceRecord: WIN32 9714 ObjectNotFound")
 
     mock_prov = MagicMock()
     mock_prov.source = "bind01"
@@ -429,8 +438,9 @@ def test_dns_delete_record_ptr_fail_rolls_back_a(client, db):
             "zone": "example.com", "ttl": 3600, "source": "bind01",
             "delete_ptr": True,
         })
-    assert r.status_code == 502
-    mock_prov.add_record.assert_called_once()
+    assert r.status_code == 204, r.text
+    assert mock_prov.delete_record.call_count == 2   # A + PTR attempt
+    mock_prov.add_record.assert_not_called()         # A NOT re-added
 
 
 def test_dns_create_record_commit_failure_undoes_provider(client, db, monkeypatch):
