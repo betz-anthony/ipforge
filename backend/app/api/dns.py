@@ -127,9 +127,6 @@ def create_record(
     if not target:
         raise HTTPException(502, "No DNS provider configured")
 
-    if record.register_ptr and record.record_type == "A" and not target.supports_ptr:
-        raise HTTPException(422, "Provider does not support PTR records")
-
     try:
         target.add_record(record)
         record.source = target.source
@@ -140,24 +137,25 @@ def create_record(
     now = utcnow()
     ptr_record = None
     ptr_added = False
-    try:
-        if record.register_ptr and record.record_type == "A":
-            zones = _zone_names(db, target)
-            reverse_zone = find_reverse_zone(record.value, zones)
-            if reverse_zone is None:
-                raise HTTPException(422, "No reverse zone found for this IP address")
-
-            ptr_record = build_ptr_record(record.value, record.name, reverse_zone, provider=record.source)
+    # PTR registration is auxiliary: only when the provider supports PTR and a
+    # reverse zone exists. A PTR failure is logged but never blocks the A record.
+    if record.register_ptr and record.record_type == "A" and target.supports_ptr:
+        reverse_zone = find_reverse_zone(record.value, _zone_names(db, target))
+        if reverse_zone is not None:
+            candidate = build_ptr_record(record.value, record.name, reverse_zone, provider=record.source)
             try:
-                target.add_record(ptr_record)
+                target.add_record(candidate)
+                ptr_record = candidate
                 ptr_added = True
             except Exception as e:
-                raise HTTPException(502, f"PTR registration failed: {e}")
+                logger.warning("PTR registration (best-effort) failed for %s: %s", candidate.name, e)
 
+    try:
+        if ptr_added and ptr_record is not None:
             db.add(CRow(name=ptr_record.name, record_type="PTR", value=ptr_record.value,
-                        zone=reverse_zone, ttl=ptr_record.ttl, source=record.source, synced_at=now))
-            if db.get(CachedDNSZone, (reverse_zone, record.source)) is None:
-                db.add(CachedDNSZone(zone=reverse_zone, source=record.source, synced_at=now))
+                        zone=ptr_record.zone, ttl=ptr_record.ttl, source=record.source, synced_at=now))
+            if db.get(CachedDNSZone, (ptr_record.zone, record.source)) is None:
+                db.add(CachedDNSZone(zone=ptr_record.zone, source=record.source, synced_at=now))
 
         db.add(CRow(name=record.name, record_type=record.record_type, value=record.value,
                     zone=zone, ttl=record.ttl, source=record.source, synced_at=now))
@@ -173,8 +171,6 @@ def create_record(
         if ptr_added and ptr_record is not None:
             _undo_provider(target, ptr_record, "delete")
         _undo_provider(target, record, "delete")
-        if isinstance(e, HTTPException):
-            raise
         logger.error("DNS create_record failed: %s", e, exc_info=True)
         raise HTTPException(502, f"DNS record creation failed: {e}")
     return record
@@ -194,14 +190,10 @@ def delete_record(
         raise HTTPException(502, "No DNS provider configured")
 
     ptr_record = None
-    if record.delete_ptr and record.record_type == "A":
-        if not target.supports_ptr:
-            raise HTTPException(422, "Provider does not support PTR records")
-        zones = _zone_names(db, target)
-        reverse_zone = find_reverse_zone(record.value, zones)
-        if reverse_zone is None:
-            raise HTTPException(422, "No reverse zone found for this IP address")
-        ptr_record = build_ptr_record(record.value, record.name, reverse_zone, provider=record.source)
+    if record.delete_ptr and record.record_type == "A" and target.supports_ptr:
+        reverse_zone = find_reverse_zone(record.value, _zone_names(db, target))
+        if reverse_zone is not None:
+            ptr_record = build_ptr_record(record.value, record.name, reverse_zone, provider=record.source)
 
     try:
         target.delete_record(record)
@@ -209,19 +201,19 @@ def delete_record(
         logger.error("DNS %s delete_record: %s", target.source, e, exc_info=True)
         raise HTTPException(502, str(e))
 
-    ptr_deleted = False
-    try:
-        if ptr_record is not None:
-            try:
-                target.delete_record(ptr_record)
-                ptr_deleted = True
-            except Exception as e:
-                raise HTTPException(502, f"PTR delete failed: {e}")
-            db.query(CRow).filter_by(
-                name=ptr_record.name, record_type="PTR",
-                zone=ptr_record.zone, source=record.source,
-            ).delete()
+    # PTR cleanup is best-effort: an absent or failed PTR delete (e.g. the record
+    # was created outside its reverse zone) must never revert the A deletion.
+    if ptr_record is not None:
+        try:
+            target.delete_record(ptr_record)
+        except Exception as e:
+            logger.warning("PTR delete (best-effort) failed for %s: %s", ptr_record.name, e)
+        db.query(CRow).filter_by(
+            name=ptr_record.name, record_type="PTR",
+            zone=ptr_record.zone, source=record.source,
+        ).delete()
 
+    try:
         db.query(CRow).filter_by(
             name=record.name, record_type=record.record_type,
             value=record.value, zone=zone, source=record.source,
@@ -233,10 +225,8 @@ def delete_record(
         db.commit()
     except Exception as e:
         db.rollback()
-        if ptr_deleted and ptr_record is not None:
-            _undo_provider(target, ptr_record, "add")
+        # Cache write failed after the provider delete succeeded — re-add the A
+        # record so provider and IPAM stay consistent.
         _undo_provider(target, record, "add")
-        if isinstance(e, HTTPException):
-            raise
-        logger.error("DNS delete_record failed: %s", e, exc_info=True)
+        logger.error("DNS delete cache update failed: %s", e, exc_info=True)
         raise HTTPException(502, f"DNS record deletion failed: {e}")

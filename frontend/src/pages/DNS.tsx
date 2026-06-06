@@ -42,6 +42,15 @@ function classifyZone(zone: string): ZoneType {
   return 'forward'
 }
 
+// AD-managed system zones (clutter). Hidden by default; records here are not
+// hand-managed and were a source of confusion (e.g. records mistakenly created
+// in _msdcs.domain.local).
+function isSystemZone(zone: string): boolean {
+  const z = zone.toLowerCase()
+  return z === '_msdcs' || z.startsWith('_msdcs.') ||
+         z.startsWith('domaindnszones.') || z.startsWith('forestdnszones.')
+}
+
 // Render a reverse-DNS zone name as its network CIDR (e.g.
 // "2.1.10.in-addr.arpa" -> "10.1.2.0/24"). Returns null for forward zones.
 function reverseZoneToCidr(zone: string): string | null {
@@ -133,6 +142,7 @@ export default function DNS() {
   const [selectedRecord, setSelectedRecord] = useState<DNSRecord | null>(null)
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set())
   const [zoneSearch, setZoneSearch]       = useState('')
+  const [showSystemZones, setShowSystemZones] = useState(false)
   const [confirmRecord, setConfirmRecord] = useState<DNSRecord | null>(null)
   const [registerPtr, setRegisterPtr]   = useState(false)
   const [deletePtr, setDeletePtr]       = useState(true)
@@ -239,13 +249,20 @@ export default function DNS() {
     setSelectedAddSubnetId(null)
   }, [ipamQuery.data])
 
-  // Only show zones from configured providers
-  const filteredZones = useMemo(
-    () => dnsProviders.length
+  // Only show zones from configured providers; hide AD system zones by default.
+  const filteredZones = useMemo(() => {
+    const base = dnsProviders.length
       ? (zones ?? []).filter(z => dnsProviders.includes(z.source))
-      : (zones ?? []),
-    [zones, dnsProviders]
-  )
+      : (zones ?? [])
+    return showSystemZones ? base : base.filter(z => !isSystemZone(z.zone))
+  }, [zones, dnsProviders, showSystemZones])
+
+  const hiddenSystemZoneCount = useMemo(() => {
+    const base = dnsProviders.length
+      ? (zones ?? []).filter(z => dnsProviders.includes(z.source))
+      : (zones ?? [])
+    return base.filter(z => isSystemZone(z.zone)).length
+  }, [zones, dnsProviders])
 
   // Zones matching the zone-list search box (zone name or reverse-zone CIDR)
   const searchedZones = useMemo(() => {
@@ -488,6 +505,16 @@ export default function DNS() {
               onChange={e => setZoneSearch(e.target.value)}
               aria-label="Filter zones"
             />
+            {hiddenSystemZoneCount > 0 && (
+              <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.72rem', color: 'var(--text-muted)', padding: '0.4rem 0.1rem 0' }}>
+                <input
+                  type="checkbox"
+                  checked={showSystemZones}
+                  onChange={e => setShowSystemZones(e.target.checked)}
+                />
+                Show system zones ({hiddenSystemZoneCount})
+              </label>
+            )}
           </div>
           {loadingZones && <p className="loading" style={{ padding: '0.75rem' }}>Loading…</p>}
           {viewMode === 'combined' ? (
