@@ -14,6 +14,7 @@ from app.core.audit import write_audit
 from app.core.mac import normalize_mac_optional
 from app.core.validators import validate_hostname
 from app.core.ptr import find_reverse_zone, build_ptr_record
+from app.core.errors import raise_provider_error
 from app.database import get_db
 from app.models.address import IPAddress, AddressStatus
 from app.models.subnet import Subnet
@@ -220,14 +221,14 @@ def _do_allocate(
             addr.dns_zone = body.dns_zone or ""
         except Exception as exc:
             _rollback()
-            raise HTTPException(502, f"DNS registration failed: {exc}")
+            raise_provider_error(exc, step="dns", user=current_user)
 
     if body.register_ptr and dns_prov and dns_registered:
         try:
             zones = dns_prov.get_zones()
         except Exception as exc:
             _rollback()
-            raise HTTPException(502, f"Failed to fetch DNS zones for PTR: {exc}")
+            raise_provider_error(exc, step="dns", user=current_user)
 
         reverse_zone = find_reverse_zone(addr.address, zones)
         if reverse_zone is None:
@@ -241,14 +242,14 @@ def _do_allocate(
             addr.ptr_zone = reverse_zone
         except Exception as exc:
             _rollback()
-            raise HTTPException(502, f"PTR registration failed: {exc}")
+            raise_provider_error(exc, step="dns", user=current_user)
 
     if body.register_dhcp and dhcp_prov:
         try:
             scope_id = _find_dhcp_scope(dhcp_prov, addr.address)
         except Exception as exc:
             _rollback()
-            raise HTTPException(502, f"DHCP provider error fetching scopes: {exc}")
+            raise_provider_error(exc, step="dhcp", user=current_user)
         if scope_id is None:
             _rollback()
             raise HTTPException(400, f"No DHCP scope found containing {addr.address}")
@@ -265,7 +266,7 @@ def _do_allocate(
             addr.dhcp_scope_id = scope_id
         except Exception as exc:
             _rollback()
-            raise HTTPException(502, f"DHCP registration failed: {exc}")
+            raise_provider_error(exc, step="dhcp", user=current_user)
 
     if is_new:
         write_audit(db, current_user.username, "create", "address", str(addr.id),

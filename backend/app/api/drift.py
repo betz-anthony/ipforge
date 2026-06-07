@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 
 from app.core.audit import write_audit
 from app.core.deps import get_current_user, require_operator, require_admin
+from app.core.errors import raise_provider_error
 from app.core.time import utcnow
 from app.database import get_db
 from app.drift import detect_drift
@@ -117,7 +118,7 @@ def trigger_scan(
     return {"status": "ok"}
 
 
-def _resolve_one(db: Session, d: DriftItem, body: ResolveRequest) -> dict:
+def _resolve_one(db: Session, d: DriftItem, body: ResolveRequest, user=None) -> dict:
     """Apply the category-specific remediation. Returns the audit action dict.
     Raises HTTPException on provider failure (rolled back)."""
     cat = d.category
@@ -135,16 +136,16 @@ def _resolve_one(db: Session, d: DriftItem, body: ResolveRequest) -> dict:
         return {"new_status": body.new_status}
 
     if cat == "hostname_mismatch" and body.canonical_hostname:
-        return _resolve_hostname_mismatch(db, ip, body.canonical_hostname)
+        return _resolve_hostname_mismatch(db, ip, body.canonical_hostname, user=user)
 
     if cat == "multi_dhcp_scope" and body.sources_to_remove:
-        return _resolve_multi_dhcp(db, ip, body.sources_to_remove)
+        return _resolve_multi_dhcp(db, ip, body.sources_to_remove, user=user)
 
     if cat == "orphan_dns" and body.action:
-        return _resolve_orphan_dns(db, ip, body.action)
+        return _resolve_orphan_dns(db, ip, body.action, user=user)
 
     if cat == "orphan_dhcp" and body.action:
-        return _resolve_orphan_dhcp(db, ip, body.action)
+        return _resolve_orphan_dhcp(db, ip, body.action, user=user)
 
     if cat == "mac_mismatch" and body.action == "update_ipam":
         lease = db.query(CachedDHCPLease).filter_by(ip_address=ip).first()
@@ -156,7 +157,7 @@ def _resolve_one(db: Session, d: DriftItem, body: ResolveRequest) -> dict:
     return {}  # plain dismiss
 
 
-def _resolve_hostname_mismatch(db: Session, ip: str, canonical: str) -> dict:
+def _resolve_hostname_mismatch(db: Session, ip: str, canonical: str, user=None) -> dict:
     lease = db.query(CachedDHCPLease).filter_by(ip_address=ip).first()
     dns_row = db.query(CachedDNSRecord).filter(
         CachedDNSRecord.value == ip,
@@ -174,7 +175,7 @@ def _resolve_hostname_mismatch(db: Session, ip: str, canonical: str) -> dict:
                 dhcp_provider.update_reservation_name(lease.scope_id, ip, canonical)
             except Exception as exc:
                 logger.error("DHCP update_reservation_name failed: %s", exc)
-                raise HTTPException(502, detail={"error": "connection_error", "detail": str(exc), "step": "dhcp"})
+                raise_provider_error(exc, step="dhcp", user=user)
 
     if dns_row:
         providers = get_dns_providers()
@@ -194,7 +195,7 @@ def _resolve_hostname_mismatch(db: Session, ip: str, canonical: str) -> dict:
                         dhcp_provider.update_reservation_name(lease.scope_id, ip, original_hostname)
                     except Exception as rb_exc:
                         logger.error("DHCP rollback failed: %s", rb_exc)
-                raise HTTPException(502, detail={"error": "connection_error", "detail": str(exc), "step": "dns"})
+                raise_provider_error(exc, step="dns", user=user)
 
     addr = db.query(IPAddress).filter_by(address=ip).first()
     if addr:
@@ -202,7 +203,7 @@ def _resolve_hostname_mismatch(db: Session, ip: str, canonical: str) -> dict:
     return {"canonical_hostname": canonical}
 
 
-def _resolve_multi_dhcp(db: Session, ip: str, sources_to_remove: list[str]) -> dict:
+def _resolve_multi_dhcp(db: Session, ip: str, sources_to_remove: list[str], user=None) -> dict:
     providers = get_dhcp_providers()
     leases_by_source = {}
     for source in sources_to_remove:
@@ -229,7 +230,7 @@ def _resolve_multi_dhcp(db: Session, ip: str, sources_to_remove: list[str]) -> d
                     ))
                 except Exception as rb_exc:
                     logger.error("DHCP rollback add_reservation failed: %s", rb_exc)
-            raise HTTPException(502, detail={"error": "connection_error", "detail": str(exc), "step": "dhcp"})
+            raise_provider_error(exc, step="dhcp", user=user)
     return {"sources_to_remove": sources_to_remove}
 
 
@@ -250,7 +251,7 @@ def _import_address(db: Session, ip: str, hostname: str | None, mac: str | None)
                      hostname=hostname or None, mac_address=mac or None))
 
 
-def _resolve_orphan_dns(db: Session, ip: str, action: str) -> dict:
+def _resolve_orphan_dns(db: Session, ip: str, action: str, user=None) -> dict:
     rec = db.query(CachedDNSRecord).filter(
         CachedDNSRecord.value == ip, CachedDNSRecord.record_type.in_(["A", "AAAA"])
     ).first()
@@ -268,12 +269,12 @@ def _resolve_orphan_dns(db: Session, ip: str, action: str) -> dict:
                         name=rec.name, record_type=rec.record_type, value=rec.value,
                         zone=rec.zone, ttl=rec.ttl, source=rec.source))
                 except Exception as exc:
-                    raise HTTPException(502, detail={"error": "connection_error", "detail": str(exc), "step": "dns"})
+                    raise_provider_error(exc, step="dns", user=user)
         return {"action": "delete"}
     raise HTTPException(422, f"Invalid action for orphan_dns: {action}")
 
 
-def _resolve_orphan_dhcp(db: Session, ip: str, action: str) -> dict:
+def _resolve_orphan_dhcp(db: Session, ip: str, action: str, user=None) -> dict:
     lease = db.query(CachedDHCPLease).filter_by(ip_address=ip).first()
     if action == "import":
         _import_address(db, ip, lease.name if lease else None, lease.mac_address if lease else None)
@@ -287,7 +288,7 @@ def _resolve_orphan_dhcp(db: Session, ip: str, action: str) -> dict:
                 try:
                     provider.delete_reservation(lease.scope_id, ip)
                 except Exception as exc:
-                    raise HTTPException(502, detail={"error": "connection_error", "detail": str(exc), "step": "dhcp"})
+                    raise_provider_error(exc, step="dhcp", user=user)
         return {"action": "delete"}
     raise HTTPException(422, f"Invalid action for orphan_dhcp: {action}")
 
@@ -302,7 +303,7 @@ def resolve_drift(
     d = db.get(DriftItem, drift_id)
     if not d:
         raise HTTPException(404, "Drift item not found")
-    action = _resolve_one(db, d, body or ResolveRequest())
+    action = _resolve_one(db, d, body or ResolveRequest(), user=current_user)
     d.resolved = True
     d.resolved_at = utcnow()
     db.flush()
@@ -327,7 +328,7 @@ def resolve_bulk(
             continue
         try:
             req = ResolveRequest(action=body.action) if body.action in ("delete", "import") else ResolveRequest()
-            action = _resolve_one(db, d, req)
+            action = _resolve_one(db, d, req, user=current_user)
             d.resolved = True
             d.resolved_at = utcnow()
             db.flush()

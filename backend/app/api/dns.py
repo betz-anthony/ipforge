@@ -12,6 +12,7 @@ from app.core.deps import require_operator
 from app.core.audit import write_audit
 from app.core.time import utcnow
 from app.core.ptr import find_reverse_zone, build_ptr_record
+from app.core.errors import raise_provider_error, provider_unconfigured
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -125,14 +126,13 @@ def create_record(
     providers = get_dns_providers()
     target = next((p for p in providers if p.source == record.source), None) or (providers[0] if providers else None)
     if not target:
-        raise HTTPException(502, "No DNS provider configured")
+        provider_unconfigured("dns")
 
     try:
         target.add_record(record)
         record.source = target.source
     except Exception as e:
-        logger.error("DNS %s add_record: %s", target.source, e, exc_info=True)
-        raise HTTPException(502, str(e))
+        raise_provider_error(e, step="dns", user=current_user)
 
     now = utcnow()
     ptr_record = None
@@ -187,7 +187,7 @@ def delete_record(
     providers = get_dns_providers()
     target = next((p for p in providers if p.source == record.source), None) or (providers[0] if providers else None)
     if not target:
-        raise HTTPException(502, "No DNS provider configured")
+        provider_unconfigured("dns")
 
     ptr_record = None
     if record.delete_ptr and record.record_type == "A" and target.supports_ptr:
@@ -198,8 +198,7 @@ def delete_record(
     try:
         target.delete_record(record)
     except Exception as e:
-        logger.error("DNS %s delete_record: %s", target.source, e, exc_info=True)
-        raise HTTPException(502, str(e))
+        raise_provider_error(e, step="dns", user=current_user)
 
     # PTR cleanup is best-effort: an absent or failed PTR delete (e.g. the record
     # was created outside its reverse zone) must never revert the A deletion.

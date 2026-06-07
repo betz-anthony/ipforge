@@ -5,6 +5,7 @@ from fastapi import FastAPI, Depends
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s [%(name)s] %(message)s", force=True)
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from app.database import SessionLocal
 from app.config import settings as app_settings, DEFAULT_JWT_SECRET_KEY
 from app.api import subnets, addresses, dns, dhcp
@@ -132,6 +133,17 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="IPForge", lifespan=lifespan)
+
+
+@app.exception_handler(Exception)
+async def _unhandled_exception_handler(request, exc):
+    # FastAPI handles HTTPException itself; this only catches truly uncaught errors.
+    logger.exception("unhandled error on %s %s", request.method, request.url.path)
+    return JSONResponse(
+        status_code=500,
+        content={"detail": {"code": "internal_error",
+                            "message": "Something went wrong on the server."}},
+    )
 
 app.add_middleware(
     CORSMiddleware,

@@ -243,7 +243,7 @@ def test_allocation_register_ptr_failure_rolls_back_a(client, db):
             "dns_zone": "example.com",
         })
     assert r.status_code == 502
-    assert "PTR registration failed" in r.json()["detail"]
+    assert r.json()["detail"]["code"] == "provider_error"
     mock_prov.delete_record.assert_called_once()
     addr = db.query(IPAddressModel).filter_by(hostname="web05").first()
     assert addr is None
@@ -266,7 +266,7 @@ def test_allocation_register_ptr_get_zones_failure_rolls_back_a(client, db):
             "dns_zone": "example.com",
         })
     assert r.status_code == 502
-    assert "zones" in r.json()["detail"].lower()
+    assert r.json()["detail"]["code"] == "provider_error"
     # A record rolled back
     mock_prov.delete_record.assert_called_once()
     # DB row rolled back
@@ -504,3 +504,21 @@ def test_delete_preview_no_ptr_item_when_ptr_zone_null(client, db):
     items = r.json()["items"]
     ptr_items = [i for i in items if i.get("record_type") == "PTR"]
     assert len(ptr_items) == 0
+
+
+def test_dns_create_provider_error_returns_envelope(client, db):
+    _add_zone(db, "example.com")
+    prov = MagicMock()
+    prov.source = "msdns"
+    prov.supports_ptr = True
+    prov.add_record = MagicMock(side_effect=Exception("WinRMTransportError: 401 Unauthorized"))
+    with patch("app.api.dns.get_dns_providers", return_value=[prov]):
+        r = client.post("/api/dns/zones/example.com/records", json={
+            "name": "web01", "record_type": "A", "value": "10.0.1.5",
+            "zone": "example.com", "ttl": 3600, "source": "msdns"})
+    assert r.status_code == 502
+    d = r.json()["detail"]
+    assert d["code"] == "provider_auth_failed"
+    assert d["hint"]
+    # client fixture user is admin -> raw detail present
+    assert "WinRMTransportError" in d["detail"]
