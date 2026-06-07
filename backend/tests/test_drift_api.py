@@ -190,3 +190,18 @@ def test_bulk_dismiss(client, db):
 def test_resolve_requires_operator(client_gr, db):
     d = _drift(db, "10.0.0.1", "missing_dns")
     assert client_gr.post(f"/api/drift/{d.id}/resolve").status_code == 403
+
+
+def test_resolve_orphan_dhcp_provider_error_returns_envelope(client, db):
+    _subnet(db)
+    db.add(CachedDHCPLease(scope_id="10.0.0.0", ip_address="10.0.0.8", name="x", source="msdhcp", synced_at=_now()))
+    db.commit()
+    d = _drift(db, "10.0.0.8", "orphan_dhcp", severity="info")
+    mock = MagicMock(); mock.source = "msdhcp"
+    mock.delete_reservation.side_effect = Exception("Connection timed out to dc01")
+    with patch("app.api.drift.get_dhcp_providers", return_value=[mock]):
+        r = client.post(f"/api/drift/{d.id}/resolve", json={"action": "delete"})
+    assert r.status_code == 502
+    detail = r.json()["detail"]
+    assert detail["code"] == "provider_unreachable"
+    assert detail["step"] == "dhcp" and detail["hint"]
