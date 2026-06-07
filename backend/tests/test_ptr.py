@@ -504,3 +504,21 @@ def test_delete_preview_no_ptr_item_when_ptr_zone_null(client, db):
     items = r.json()["items"]
     ptr_items = [i for i in items if i.get("record_type") == "PTR"]
     assert len(ptr_items) == 0
+
+
+def test_dns_create_provider_error_returns_envelope(client, db):
+    _add_zone(db, "example.com")
+    prov = MagicMock()
+    prov.source = "msdns"
+    prov.supports_ptr = True
+    prov.add_record = MagicMock(side_effect=Exception("WinRMTransportError: 401 Unauthorized"))
+    with patch("app.api.dns.get_dns_providers", return_value=[prov]):
+        r = client.post("/api/dns/zones/example.com/records", json={
+            "name": "web01", "record_type": "A", "value": "10.0.1.5",
+            "zone": "example.com", "ttl": 3600, "source": "msdns"})
+    assert r.status_code == 502
+    d = r.json()["detail"]
+    assert d["code"] == "provider_auth_failed"
+    assert d["hint"]
+    # client fixture user is admin -> raw detail present
+    assert "WinRMTransportError" in d["detail"]
