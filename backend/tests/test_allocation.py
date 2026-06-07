@@ -192,7 +192,7 @@ def test_allocate_register_dns_failure_rolls_back_ip(client, db):
                         json={"hostname": "web-01", "register_dns": True,
                               "dns_zone": "example.com"})
     assert r.status_code == 502
-    assert "DNS registration failed" in r.json()["detail"]
+    assert r.json()["detail"]["code"] == "provider_unreachable"
     assert db.query(IPAddress).filter_by(subnet_id=s.id).count() == 0
 
 
@@ -318,7 +318,7 @@ def test_allocate_dhcp_failure_rolls_back_ip(client, db):
                         json={"hostname": "web-01", "register_dhcp": True,
                               "mac_address": "aa:bb:cc:dd:ee:ff"})
     assert r.status_code == 502
-    assert "DHCP registration failed" in r.json()["detail"]
+    assert r.json()["detail"]["code"] == "provider_error"
     assert db.query(IPAddress).filter_by(subnet_id=s.id).count() == 0
 
 
@@ -356,3 +356,14 @@ def test_allocate_uses_subnet_dhcp_provider(client, db):
     assert r.status_code == 201
     mock_preferred.add_reservation.assert_called_once()
     mock_other.add_reservation.assert_not_called()
+
+def test_allocation_dns_failure_returns_envelope(client, db):
+    s = _subnet(db)   # reuse the module's subnet helper
+    mock_dns = MagicMock()
+    mock_dns.source = "msdns"
+    mock_dns.add_record = MagicMock(side_effect=Exception("401 Unauthorized"))
+    with patch("app.api.allocation.get_dns_providers", return_value=[mock_dns]):
+        r = client.post(f"/api/subnets/{s.id}/allocate", json={
+            "hostname": "web01", "register_dns": True, "dns_zone": "example.com"})
+    assert r.status_code == 502
+    assert r.json()["detail"]["code"] == "provider_auth_failed"
