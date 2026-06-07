@@ -12,6 +12,7 @@ import { TableSkeleton } from '../components/Skeleton'
 import { useTableSort } from '../hooks/useTableSort'
 import { useToast } from '../contexts/ToastContext'
 import { rowActivation } from '../utils/a11y'
+import { apiError } from '../utils/apiError'
 
 const STATUS_BADGE: Record<string, string> = {
   available:  'badge-green',
@@ -150,8 +151,8 @@ export default function Addresses() {
       setDeletePreview(null)
     },
     onError: (err: any) => {
-      const msg = err?.response?.data?.detail ?? 'Delete failed'
-      showToast(msg, 'error')
+      const e = apiError(err, 'Delete failed')
+      showToast(e.message, 'error', { hint: e.hint, detail: e.detail })
       setDeletingId(null)
       setDeletePreview(null)
     },

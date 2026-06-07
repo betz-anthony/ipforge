@@ -4,6 +4,7 @@ import { Plus, Trash2 } from 'lucide-react'
 import { subnetRangesApi, addressesApi, type Subnet, type RangeKind, type MapCell } from '../api/client'
 import { isValidIPv4, isValidIPv6 } from '../utils/ip'
 import { useToast } from '../contexts/ToastContext'
+import { apiError } from '../utils/apiError'
 
 const KINDS: RangeKind[] = ['gateway', 'dhcp_pool', 'static', 'reserved']
 
@@ -51,7 +52,10 @@ export default function SubnetSpace({ subnet }: { subnet: Subnet }) {
       setShowAdd(false); setStart(''); setEnd(''); setLabel(''); setKind('reserved')
       showToast('Range added', 'success')
     },
-    onError: (err: any) => showToast(err?.response?.data?.detail ?? 'Add failed', 'error'),
+    onError: (err: any) => {
+      const e = apiError(err, 'Add failed')
+      showToast(e.message, 'error', { hint: e.hint, detail: e.detail })
+    },
   })
 
   const deleteRange = useMutation({
@@ -62,7 +66,10 @@ export default function SubnetSpace({ subnet }: { subnet: Subnet }) {
       qc.invalidateQueries({ queryKey: ['subnets'] })
       showToast('Range deleted', 'success')
     },
-    onError: (err: any) => showToast(err?.response?.data?.detail ?? 'Delete failed', 'error'),
+    onError: (err: any) => {
+      const e = apiError(err, 'Delete failed')
+      showToast(e.message, 'error', { hint: e.hint, detail: e.detail })
+    },
   })
 
   const createAddr = useMutation({
@@ -74,7 +81,10 @@ export default function SubnetSpace({ subnet }: { subnet: Subnet }) {
       setSelected(null)
       showToast('Address created', 'success')
     },
-    onError: (err: any) => showToast(err?.response?.data?.detail ?? 'Create failed', 'error'),
+    onError: (err: any) => {
+      const e = apiError(err, 'Create failed')
+      showToast(e.message, 'error', { hint: e.hint, detail: e.detail })
+    },
   })
 
   const startValid = start && validIp(start)

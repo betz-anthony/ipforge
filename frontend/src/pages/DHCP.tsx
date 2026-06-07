@@ -9,6 +9,7 @@ import DetailPanel from '../components/DetailPanel'
 import ConfirmModal from '../components/ConfirmModal'
 import { useToast } from '../contexts/ToastContext'
 import { rowActivation } from '../utils/a11y'
+import { apiError } from '../utils/apiError'
 
 const SOURCE_LABEL: Record<string, string> = {
   msdhcp: 'MS DHCP', pihole: 'Pi-hole', keadhcp: 'Kea',
@@ -76,7 +77,8 @@ export default function DHCP() {
       setConfirmIp(null)
     },
     onError: (err: any) => {
-      showToast(err?.response?.data?.detail ?? 'Delete failed', 'error')
+      const e = apiError(err, 'Delete failed')
+      showToast(e.message, 'error', { hint: e.hint, detail: e.detail })
       setConfirmIp(null)
     },
   })

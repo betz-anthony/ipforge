@@ -9,6 +9,7 @@ import DetailPanel from '../components/DetailPanel'
 import ConfirmModal from '../components/ConfirmModal'
 import { useToast } from '../contexts/ToastContext'
 import { rowActivation } from '../utils/a11y'
+import { apiError } from '../utils/apiError'
 
 const RECORD_TYPES = ['A', 'AAAA', 'CNAME', 'PTR', 'MX', 'TXT', 'NS']
 
@@ -199,7 +200,8 @@ export default function DNS() {
       showToast('Record deleted', 'success')
     },
     onError: (err: any) => {
-      showToast(err?.response?.data?.detail ?? 'Delete failed', 'error')
+      const e = apiError(err, 'Delete failed')
+      showToast(e.message, 'error', { hint: e.hint, detail: e.detail })
     },
   })
 
