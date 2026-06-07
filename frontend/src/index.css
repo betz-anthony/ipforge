@@ -881,3 +881,8 @@ tbody tr.clickable { cursor: pointer; }
 }
 .empty-state-block .empty-state-desc { font-size: 0.82rem; }
 .empty-state-block .empty-state-action { margin-top: 0.4rem; }
+
+.toast-body { display: flex; flex-direction: column; gap: 2px; }
+.toast-hint { font-size: 0.75rem; color: var(--text-muted); }
+.toast-detail-toggle { align-self: flex-start; background: none; border: none; color: var(--text-muted); font-size: 0.7rem; cursor: pointer; padding: 2px 0; text-decoration: underline; }
+.toast-detail { margin: 4px 0 0; max-height: 160px; overflow: auto; font-size: 0.7rem; white-space: pre-wrap; background: var(--surface-2); padding: 6px; border-radius: 4px; }

@@ -15,6 +15,7 @@ from app.schemas.address import AddressCreate, AddressRead, AddressUpdate
 from app.core.deps import get_current_user
 from app.core.audit import write_audit
 from app.core.access import AccessContext, get_access_context
+from app.core.errors import raise_provider_error
 from app.core.custom_fields import (
     load_custom_fields, load_tags, load_custom_fields_bulk, load_tags_bulk,
     set_custom_fields, set_tags, filter_entity_ids,
@@ -418,9 +419,11 @@ def delete_address(
         dns_prov_map = {p.source: p for p in get_dns_providers()}
         dhcp_prov_map = {p.source: p for p in get_dhcp_providers()}
         completed: list[DeletePreviewItem] = []
+        current_step = "dns"
         try:
             for item in to_clean:
                 if item.type == "dns":
+                    current_step = "dns"
                     prov = dns_prov_map.get(item.provider)
                     if prov is None:
                         raise RuntimeError(f"DNS provider '{item.provider}' not available")
@@ -430,6 +433,7 @@ def delete_address(
                     ))
                     completed.append(item)
                 elif item.type == "dhcp":
+                    current_step = "dhcp"
                     prov = dhcp_prov_map.get(item.provider)
                     if prov is None:
                         raise RuntimeError(f"DHCP provider '{item.provider}' not available")
@@ -437,11 +441,7 @@ def delete_address(
                     completed.append(item)
         except Exception as exc:
             _rollback_provider_deletes(completed, dns_prov_map, dhcp_prov_map, address.hostname)
-            raise HTTPException(
-                502,
-                f"Provider deletion failed: {exc}. "
-                f"Attempted rollback of {len(completed)} completed operation(s).",
-            )
+            raise_provider_error(exc, step=current_step, user=current_user)
         audit_after: dict | None = {"cleanup": f"{len(completed)} provider record(s) removed"}
     else:
         audit_after = None
