@@ -243,7 +243,7 @@ def test_allocation_register_ptr_failure_rolls_back_a(client, db):
             "dns_zone": "example.com",
         })
     assert r.status_code == 502
-    assert "PTR registration failed" in r.json()["detail"]
+    assert r.json()["detail"]["code"] == "provider_error"
     mock_prov.delete_record.assert_called_once()
     addr = db.query(IPAddressModel).filter_by(hostname="web05").first()
     assert addr is None
@@ -266,7 +266,7 @@ def test_allocation_register_ptr_get_zones_failure_rolls_back_a(client, db):
             "dns_zone": "example.com",
         })
     assert r.status_code == 502
-    assert "zones" in r.json()["detail"].lower()
+    assert r.json()["detail"]["code"] == "provider_error"
     # A record rolled back
     mock_prov.delete_record.assert_called_once()
     # DB row rolled back
