@@ -57,3 +57,34 @@ def classify_provider_error(exc: Exception, step: str) -> ErrorInfo:
         if pattern.search(text):
             return replace(info, message=info.message.format(step=_label(step)))
     return replace(_GENERIC, message=_GENERIC.message.format(step=_label(step)))
+
+
+from typing import NoReturn
+
+_PRIVILEGED_ROLES = {"admin", "operator"}
+
+
+def _envelope(info: ErrorInfo, step: str, exc: Exception | None, user) -> dict:
+    detail = {
+        "code": info.code,
+        "message": info.message.format(step=_label(step)),
+        "hint": info.hint,
+        "step": step,
+    }
+    if exc is not None and user is not None and getattr(user, "role", None) in _PRIVILEGED_ROLES:
+        detail["detail"] = str(exc)
+    return detail
+
+
+def raise_provider_error(exc: Exception, *, step: str, user=None,
+                         status: int | None = None) -> NoReturn:
+    info = classify_provider_error(exc, step)
+    logger.error("provider error [%s] step=%s: %s", info.code, step, exc, exc_info=True)
+    raise HTTPException(status or info.status, detail=_envelope(info, step, exc, user))
+
+
+def provider_unconfigured(step: str) -> NoReturn:
+    info = ErrorInfo("provider_not_configured",
+                     "No {step} provider is configured.",
+                     "Add one in Settings → Providers.", status=502)
+    raise HTTPException(info.status, detail=_envelope(info, step, None, None))
