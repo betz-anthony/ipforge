@@ -4,6 +4,7 @@ import { GitCompareArrows, RefreshCw } from 'lucide-react'
 import { driftApi, type DriftItem, type Collision } from '../api/client'
 import { useToast } from '../contexts/ToastContext'
 import EmptyState from '../components/EmptyState'
+import { apiError } from '../utils/apiError'
 import CollisionResolveDialog from './CollisionResolveDialog'
 
 const CONFLICT = new Set(['active_but_available', 'multi_dhcp_scope', 'hostname_mismatch'])
@@ -53,7 +54,10 @@ export default function DriftPage() {
   const resolveMut = useMutation({
     mutationFn: ({ id, action }: { id: number; action?: string }) => driftApi.resolve(id, action ? { action } : {}),
     onSuccess: () => { invalidate(); showToast('Resolved', 'success') },
-    onError: (e: any) => showToast(e?.response?.data?.detail ?? 'Resolve failed', 'error'),
+    onError: (err: any) => {
+      const e = apiError(err, 'Resolve failed')
+      showToast(e.message, 'error', { hint: e.hint, detail: e.detail })
+    },
   })
 
   const bulkMut = useMutation({
