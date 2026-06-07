@@ -9,6 +9,7 @@ from app.models.cache import CachedDHCPScope, CachedDHCPLease
 from app.core.deps import require_operator
 from app.core.audit import write_audit
 from app.core.time import utcnow
+from app.core.errors import raise_provider_error, provider_unconfigured
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -72,12 +73,11 @@ def add_reservation(
     providers = get_dhcp_providers()
     target = next((p for p in providers if p.source == source), None) or (providers[0] if providers else None)
     if not target:
-        raise HTTPException(502, "No DHCP provider configured")
+        provider_unconfigured("dhcp")
     try:
         target.add_reservation(reservation)
     except Exception as e:
-        logger.error("DHCP %s add_reservation: %s", target.source, e, exc_info=True)
-        raise HTTPException(502, str(e))
+        raise_provider_error(e, step="dhcp", user=current_user)
 
     now = utcnow()
     db.add(CachedDHCPLease(
@@ -105,12 +105,11 @@ def delete_reservation(
     providers = get_dhcp_providers()
     target = next((p for p in providers if p.source == source), None) or (providers[0] if providers else None)
     if not target:
-        raise HTTPException(502, "No DHCP provider configured")
+        provider_unconfigured("dhcp")
     try:
         target.delete_reservation(scope_id, ip_address)
     except Exception as e:
-        logger.error("DHCP %s delete_reservation: %s", target.source, e, exc_info=True)
-        raise HTTPException(502, str(e))
+        raise_provider_error(e, step="dhcp", user=current_user)
 
     lease = db.query(CachedDHCPLease).filter(
         CachedDHCPLease.scope_id == scope_id,
