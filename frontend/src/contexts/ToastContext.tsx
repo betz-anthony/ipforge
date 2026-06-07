@@ -1,8 +1,11 @@
 import { createContext, useContext, useState, useCallback, useRef } from 'react'
 import Toast, { type ToastVariant } from '../components/Toast'
 
-interface ToastItem { id: number; message: string; variant: ToastVariant }
-interface ToastContextValue { showToast: (message: string, variant: ToastVariant) => void }
+interface ToastOpts { hint?: string; detail?: string }
+interface ToastItem { id: number; message: string; variant: ToastVariant; hint?: string; detail?: string }
+interface ToastContextValue {
+  showToast: (message: string, variant: ToastVariant, opts?: ToastOpts) => void
+}
 
 const ToastContext = createContext<ToastContextValue>({ showToast: () => {} })
 
@@ -10,9 +13,9 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
   const [toasts, setToasts] = useState<ToastItem[]>([])
   const nextId = useRef(0)
 
-  const showToast = useCallback((message: string, variant: ToastVariant) => {
+  const showToast = useCallback((message: string, variant: ToastVariant, opts?: ToastOpts) => {
     const id = nextId.current++
-    setToasts(t => [...t, { id, message, variant }])
+    setToasts(t => [...t, { id, message, variant, hint: opts?.hint, detail: opts?.detail }])
   }, [])
 
   const dismiss = useCallback((id: number) => {
@@ -25,7 +28,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
       <div className="toast-container">
         {toasts.map(t => (
           <Toast key={t.id} message={t.message} variant={t.variant}
-                 onDismiss={() => dismiss(t.id)} />
+                 hint={t.hint} detail={t.detail} onDismiss={() => dismiss(t.id)} />
         ))}
       </div>
     </ToastContext.Provider>
