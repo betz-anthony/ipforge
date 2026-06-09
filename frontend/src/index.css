@@ -886,3 +886,11 @@ tbody tr.clickable { cursor: pointer; }
 .toast-hint { font-size: 0.75rem; color: var(--text-muted); }
 .toast-detail-toggle { align-self: flex-start; background: none; border: none; color: var(--text-muted); font-size: 0.7rem; cursor: pointer; padding: 2px 0; text-decoration: underline; }
 .toast-detail { margin: 4px 0 0; max-height: 160px; overflow: auto; font-size: 0.7rem; white-space: pre-wrap; background: var(--surface-2); padding: 6px; border-radius: 4px; }
+
+/* Pager */
+.pager { display: flex; align-items: center; justify-content: space-between; padding: 0.5rem 0; font-size: 0.82rem; color: var(--text-muted); flex-wrap: wrap; gap: 0.5rem; }
+.pager-controls { display: flex; align-items: center; gap: 0.25rem; }
+.pager-page { padding: 0 0.4rem; font-variant-numeric: tabular-nums; }
+.pager-btn { padding: 0.15rem 0.35rem; display: inline-flex; align-items: center; gap: 0.15rem; }
+.pager-size-select { margin-left: 0.5rem; padding: 0.15rem 0.3rem; font-size: 0.82rem; background: var(--bg-card); border: 1px solid var(--border); border-radius: 4px; color: var(--text); cursor: pointer; }
+.pager-loading { font-style: italic; opacity: 0.7; }
