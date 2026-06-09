@@ -137,7 +137,7 @@ def test_audit_list_returns_entries(client, db):
     db.commit()
     r = client.get("/api/audit")
     assert r.status_code == 200
-    data = r.json()
+    data = r.json()["items"]
     assert len(data) == 2
     assert data[0]["username"] in ("alice", "bob")
 
@@ -147,7 +147,7 @@ def test_audit_filter_by_resource_type(client, db):
     write_audit(db, "alice", "create", "address", "2", "10.0.0.1")
     db.commit()
     r = client.get("/api/audit?resource_type=subnet")
-    data = r.json()
+    data = r.json()["items"]
     assert len(data) == 1
     assert data[0]["resource_type"] == "subnet"
 
@@ -157,7 +157,7 @@ def test_audit_filter_by_username(client, db):
     write_audit(db, "bob",   "create", "subnet", "2", "10.1.0.0/24")
     db.commit()
     r = client.get("/api/audit?username=alice")
-    data = r.json()
+    data = r.json()["items"]
     assert len(data) == 1
     assert data[0]["username"] == "alice"
 
@@ -167,7 +167,7 @@ def test_audit_limit(client, db):
         write_audit(db, "alice", "create", "subnet", str(i), f"10.{i}.0.0/24")
     db.commit()
     r = client.get("/api/audit?limit=3")
-    assert len(r.json()) == 3
+    assert len(r.json()["items"]) == 3
 
 
 def test_audit_ordered_newest_first(client, db):
@@ -180,6 +180,66 @@ def test_audit_ordered_newest_first(client, db):
                     resource_id="2", summary="new"))
     db.commit()
     r = client.get("/api/audit")
-    data = r.json()
+    data = r.json()["items"]
     assert data[0]["summary"] == "new"
     assert data[1]["summary"] == "old"
+
+
+# ── Keyset pagination ─────────────────────────────────────────────────────
+
+
+def test_audit_list_returns_cursor_envelope(client, db):
+    write_audit(db, "alice", "create", "subnet", "1", "10.0.0.0/24", after={"id": 1})
+    db.commit()
+    r = client.get("/api/audit")
+    assert r.status_code == 200
+    body = r.json()
+    assert "items" in body
+    assert "next_cursor" in body
+    assert "limit" in body
+
+
+def test_audit_keyset_no_duplicates_no_gaps(client, db):
+    from datetime import datetime, timezone, timedelta
+    base = datetime(2026, 1, 1, 12, 0, 0)
+    for i in range(7):
+        ts = base + timedelta(seconds=i)
+        db.add(AuditLog(timestamp=ts, username="u", action="create",
+                        resource_type="subnet", resource_id=str(i), summary=f"s{i}"))
+    db.commit()
+
+    page1 = client.get("/api/audit?limit=3").json()
+    assert len(page1["items"]) == 3
+    assert page1["next_cursor"] is not None
+
+    page2 = client.get(f"/api/audit?limit=3&cursor={page1['next_cursor']}").json()
+    assert len(page2["items"]) == 3
+    assert page2["next_cursor"] is not None
+
+    page3 = client.get(f"/api/audit?limit=3&cursor={page2['next_cursor']}").json()
+    assert len(page3["items"]) == 1
+    assert page3["next_cursor"] is None
+
+    all_ids = (
+        [e["id"] for e in page1["items"]] +
+        [e["id"] for e in page2["items"]] +
+        [e["id"] for e in page3["items"]]
+    )
+    assert len(all_ids) == len(set(all_ids)), "duplicate IDs across pages"
+    assert len(all_ids) == 7, "missing entries across pages"
+
+
+def test_audit_keyset_null_cursor_on_last_page(client, db):
+    write_audit(db, "a", "create", "subnet", "1", "x")
+    db.commit()
+    body = client.get("/api/audit?limit=50").json()
+    assert body["next_cursor"] is None
+
+
+def test_audit_keyset_filters_still_apply(client, db):
+    write_audit(db, "alice", "create", "subnet", "1", "x")
+    write_audit(db, "bob", "create", "subnet", "2", "y")
+    db.commit()
+    body = client.get("/api/audit?username=alice").json()
+    assert len(body["items"]) == 1
+    assert body["items"][0]["username"] == "alice"

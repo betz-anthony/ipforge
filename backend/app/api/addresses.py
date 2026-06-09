@@ -21,6 +21,7 @@ from app.core.custom_fields import (
     set_custom_fields, set_tags, filter_entity_ids,
 )
 from app.core.ptr import build_ptr_record
+from app.core.pagination import paginate
 from app.providers.registry import get_dns_providers, get_dhcp_providers
 from app.providers.dns.base import DNSRecord
 from app.providers.dhcp.base import DHCPReservation
@@ -29,6 +30,22 @@ from pydantic import BaseModel
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+
+class PagedAddressRead(BaseModel):
+    items: list[AddressRead]
+    total: int
+    limit: int
+    offset: int
+
+
+ADDR_SORT_MAP = {
+    "address":     IPAddress.address,
+    "hostname":    IPAddress.hostname,
+    "status":      IPAddress.status,
+    "mac_address": IPAddress.mac_address,
+    "last_seen":   IPAddress.last_seen,
+}
 
 
 class ScanHistoryDayRead(BaseModel):
@@ -50,34 +67,52 @@ def _address_state(a: IPAddress) -> dict:
     }
 
 
-@router.get("", response_model=list[AddressRead])
+@router.get("", response_model=PagedAddressRead)
 def list_addresses(
     request: Request,
     subnet_id: int | None = Query(None),
     status: AddressStatus | None = Query(None),
     tag: str | None = Query(None, description="Filter by tag name"),
+    q: str | None = Query(None),
+    sort: str = Query(""),
+    dir: str = Query("asc", pattern="^(asc|desc)$"),
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
     db: Session = Depends(get_db),
     access: AccessContext = Depends(get_access_context),
 ):
-    q = db.query(IPAddress)
+    query = db.query(IPAddress)
     if subnet_id is not None:
-        q = q.filter(IPAddress.subnet_id == subnet_id)
+        query = query.filter(IPAddress.subnet_id == subnet_id)
     if status is not None:
-        q = q.filter(IPAddress.status == status)
-    rows = q.all()
+        query = query.filter(IPAddress.status == status)
     if not access.global_read:
-        rows = [r for r in rows if r.subnet_id in access.viewable]
+        query = query.filter(IPAddress.subnet_id.in_(list(access.viewable)))
+
     cf_filters = {k[3:]: v for k, v in request.query_params.items() if k.startswith("cf_")}
     match = filter_entity_ids(db, "address", tag=tag, cf_filters=cf_filters)
     if match is not None:
-        rows = [r for r in rows if r.id in match]
-    ids = [r.id for r in rows]
+        query = query.filter(IPAddress.id.in_(list(match)))
+
+    if q:
+        pattern = f"%{q}%"
+        query = query.filter(or_(
+            IPAddress.address.ilike(pattern),
+            IPAddress.hostname.ilike(pattern),
+            IPAddress.mac_address.ilike(pattern),
+            IPAddress.description.ilike(pattern),
+        ))
+
+    result = paginate(query, limit=limit, offset=offset,
+                      sort_map=ADDR_SORT_MAP, sort=sort, dir=dir,
+                      tiebreaker=IPAddress.id.asc())
+    ids = [r.id for r in result["items"]]
     cf = load_custom_fields_bulk(db, "address", ids)
     tg = load_tags_bulk(db, "address", ids)
-    for r in rows:
+    for r in result["items"]:
         r.custom_fields = cf.get(r.id, {})
         r.tags = tg.get(r.id, [])
-    return rows
+    return result
 
 
 @router.post("", response_model=AddressRead, status_code=201)

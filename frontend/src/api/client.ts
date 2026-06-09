@@ -392,8 +392,17 @@ export const tagsApi = {
 }
 
 export const addressesApi = {
-  list: (params?: { subnet_id?: number; status?: string; tag?: string }) =>
-    api.get<IPAddress[]>('/addresses', { params }).then(r => r.data),
+  list: (params?: {
+    subnet_id?: number
+    status?: string
+    tag?: string
+    q?: string
+    sort?: string
+    dir?: 'asc' | 'desc'
+    limit?: number
+    offset?: number
+  }) =>
+    api.get<Paged<IPAddress>>('/addresses', { params }).then(r => r.data),
   create: (data: Omit<IPAddress, 'id' | 'created_at' | 'updated_at' | 'notes' | 'last_seen'> & { notes?: string | null }) =>
     api.post<IPAddress>('/addresses', data).then(r => r.data),
   update: (id: number, data: Partial<IPAddress>) =>
@@ -469,6 +478,19 @@ export interface DNSRecord {
   synced_at?: string | null
 }
 
+export interface Paged<T> {
+  items: T[]
+  total: number
+  limit: number
+  offset: number
+}
+
+export interface Cursor<T> {
+  items: T[]
+  next_cursor: string | null
+  limit: number
+}
+
 export interface PingResult {
   host: string
   reachable: boolean
@@ -485,8 +507,15 @@ export const toolsApi = {
 
 export const dhcpApi = {
   listScopes: () => api.get<DHCPScope[]>('/dhcp/scopes').then(r => r.data),
-  listLeases: (scope_id: string, source: string) =>
-    api.get<DHCPReservation[]>(`/dhcp/scopes/${scope_id}/leases`, { params: { source } }).then(r => r.data),
+  listLeases: (scope_id: string, source: string, params?: {
+    q?: string
+    sort?: string
+    dir?: 'asc' | 'desc'
+    limit?: number
+    offset?: number
+  }) =>
+    api.get<Paged<DHCPReservation>>(`/dhcp/scopes/${scope_id}/leases`,
+      { params: { source, ...params } }).then(r => r.data),
   addReservation: (scope_id: string, data: Omit<DHCPReservation, 'scope_id'>, source: string) =>
     api.post<DHCPReservation>(`/dhcp/scopes/${scope_id}/reservations`, data, { params: { source } }).then(r => r.data),
   deleteReservation: (scope_id: string, ip_address: string, source: string) =>
@@ -501,8 +530,14 @@ export const providersApi = {
 
 export const dnsApi = {
   listZones: () => api.get<DNSZone[]>('/dns/zones').then(r => r.data),
-  listRecords: (zone: string) =>
-    api.get<DNSRecord[]>(`/dns/zones/${zone}/records`).then(r => r.data),
+  listRecords: (zone: string, params?: {
+    q?: string
+    sort?: string
+    dir?: 'asc' | 'desc'
+    limit?: number
+    offset?: number
+  }) =>
+    api.get<Paged<DNSRecord>>(`/dns/zones/${zone}/records`, { params }).then(r => r.data),
   createRecord: (zone: string, data: Omit<DNSRecord, 'zone'> & { register_ptr?: boolean }) =>
     api.post<DNSRecord>(`/dns/zones/${zone}/records`, data).then(r => r.data),
   deleteRecord: (zone: string, record: DNSRecord, opts?: { delete_ptr?: boolean }) =>
@@ -774,8 +809,8 @@ export const auditApi = {
     from_date?: string
     to_date?: string
     limit?: number
-    offset?: number
-  }) => api.get<AuditEntry[]>('/audit', { params }).then(r => r.data),
+    cursor?: string
+  }) => api.get<Cursor<AuditEntry>>('/audit', { params }).then(r => r.data),
 }
 
 export interface ScanHistoryDay {

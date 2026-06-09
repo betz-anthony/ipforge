@@ -58,7 +58,7 @@ def test_address_tag_filter(client, db):
     db.commit()
     client.put(f"/api/addresses/{a1.id}", json={"tags": ["managed"]})
 
-    rows = client.get("/api/addresses", params={"tag": "managed"}).json()
+    rows = client.get("/api/addresses", params={"tag": "managed"}).json()["items"]
     assert {r["id"] for r in rows} == {a1.id}
 
 
