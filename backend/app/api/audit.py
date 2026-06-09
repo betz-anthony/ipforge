@@ -61,7 +61,7 @@ def list_audit(
     has_more = len(rows) > limit
     items = rows[:limit]
     next_cursor = None
-    if has_more and items:
+    if has_more:
         last = items[-1]
         next_cursor = _encode_cursor(last.timestamp, last.id)
     return CursorAuditRead(items=items, next_cursor=next_cursor, limit=limit)
