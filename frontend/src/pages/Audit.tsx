@@ -1,10 +1,11 @@
-import { useState, useMemo } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useState, useMemo, useEffect } from 'react'
+import { useQuery, keepPreviousData } from '@tanstack/react-query'
 import { ClipboardList } from 'lucide-react'
 import { auditApi, type AuditEntry } from '../api/client'
 import SearchInput from '../components/SearchInput'
 import { Skeleton } from '../components/Skeleton'
 import EmptyState from '../components/EmptyState'
+import { CursorPager } from '../components/CursorPager'
 
 const RESOURCE_TYPES = ['subnet', 'address', 'dns_record', 'dhcp_reservation']
 
@@ -54,16 +55,29 @@ export default function AuditPage() {
   const [expanded,   setExpanded]   = useState<number | null>(null)
   const [searchTerm, setSearchTerm] = useState('')
 
-  const { data: entries = [], isLoading, isError } = useQuery({
-    queryKey: ['audit', filterType, filterUser, fromDate, toDate],
+  const [cursorStack, setCursorStack] = useState<(string | null)[]>([null])
+  const cursor = cursorStack[cursorStack.length - 1]
+
+  const { data, isFetching, isLoading, isError } = useQuery({
+    queryKey: ['audit', filterType, filterUser, fromDate, toDate, cursor],
     queryFn: () => auditApi.list({
       resource_type: filterType || undefined,
       username:      filterUser || undefined,
       from_date:     fromDate   || undefined,
       to_date:       toDate     || undefined,
-      limit: 200,
+      limit: 50,
+      cursor: cursor ?? undefined,
     }),
+    placeholderData: keepPreviousData,
   })
+
+  const entries = data?.items ?? []
+  const nextCursor = data?.next_cursor ?? null
+
+  const goNext = () => { if (nextCursor) setCursorStack(s => [...s, nextCursor]) }
+  const goPrev = () => { setCursorStack(s => s.length > 1 ? s.slice(0, -1) : s) }
+
+  useEffect(() => { setCursorStack([null]) }, [filterType, filterUser, fromDate, toDate])
 
   const visibleEntries = useMemo(() => {
     const q = searchTerm.trim().toLowerCase()
@@ -128,7 +142,7 @@ export default function AuditPage() {
           description={
             entries.length === 0
               ? 'Activity will appear here once users start creating, updating, or deleting resources.'
-              : 'Try clearing the filters or search to widen the result set.'
+              : 'Try clearing the search to widen the result set.'
           }
         />
       )}
@@ -178,6 +192,14 @@ export default function AuditPage() {
           )}
         </div>
       ))}
+
+      <CursorPager
+        hasPrev={cursorStack.length > 1}
+        hasNext={nextCursor !== null}
+        isFetching={isFetching}
+        onPrev={goPrev}
+        onNext={goNext}
+      />
     </div>
   )
 }
