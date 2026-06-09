@@ -43,7 +43,7 @@ def test_address_read_schema_exposes_provider_fields(client, db):
         dhcp_provider="pihole", dhcp_scope_id="pihole")
     r = client.get("/api/addresses")
     assert r.status_code == 200
-    row = next(x for x in r.json() if x["address"] == "10.1.0.2")
+    row = next(x for x in r.json()["items"] if x["address"] == "10.1.0.2")
     assert row["dns_provider"] == "bind01"
     assert row["dns_zone"] == "example.com"
     assert row["dhcp_provider"] == "pihole"

@@ -265,7 +265,7 @@ def test_address_list_includes_last_seen(client, db):
     _make_address(db, subnet.id, "10.0.0.1")
     r = client.get("/api/addresses")
     assert r.status_code == 200
-    a = r.json()[0]
+    a = r.json()["items"][0]
     assert "last_seen" in a
     assert a["last_seen"] is None
 
