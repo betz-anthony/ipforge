@@ -72,6 +72,6 @@ def test_address_put_and_read_custom_fields_and_tags(client, db):
     })
     assert r.status_code == 200, r.text
 
-    row = next(x for x in client.get("/api/addresses").json() if x["id"] == a.id)
+    row = next(x for x in client.get("/api/addresses").json()["items"] if x["id"] == a.id)
     assert row["custom_fields"]["role"] == "db"
     assert row["tags"] == ["managed"]
