@@ -1,4 +1,3 @@
-import pytest
 from unittest.mock import MagicMock
 from app.core.pagination import paginate, _encode_cursor, _decode_cursor
 from datetime import datetime
@@ -41,6 +40,7 @@ def test_paginate_offset_floored_at_0():
     q = _make_query([])
     result = paginate(q, limit=50, offset=-10, sort_map={}, sort="", dir="asc")
     q.offset.assert_called_with(0)
+    assert result["offset"] == 0
 
 
 def test_paginate_unknown_sort_not_applied():
