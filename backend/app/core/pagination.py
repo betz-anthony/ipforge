@@ -8,7 +8,8 @@ def paginate(query, *, limit: int, offset: int, sort_map: dict, sort: str, dir: 
     if col is not None:
         query = query.order_by(col.desc() if dir == "desc" else col.asc())
     limit = min(max(limit, 1), 200)
-    items = query.offset(max(offset, 0)).limit(limit).all()
+    offset = max(offset, 0)
+    items = query.offset(offset).limit(limit).all()
     return {"items": items, "total": total, "limit": limit, "offset": offset}
 
 
