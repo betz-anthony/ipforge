@@ -2,6 +2,8 @@ import { useState, useMemo, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { SlidersHorizontal, Plus, X, Trash2, Globe } from 'lucide-react'
 import { dnsApi, providersApi, addressesApi, subnetsApi, type DNSRecord, type DNSZone } from '../api/client'
+import { usePagedQuery } from '../hooks/usePagedQuery'
+import { Pager } from '../components/Pager'
 import { ipInCidr, isValidIPv4, isValidIPv6, isValidHostname } from '../utils/ip'
 import SyncBar from '../components/SyncBar'
 import EmptyState from '../components/EmptyState'
@@ -131,10 +133,7 @@ function PtrCheckbox({ label, checked, onChange, disabled = false, disabledNote 
 export default function DNS() {
   const [selectedZone, setSelectedZone]         = useState<string | null>(null)
   const [selectedZoneSource, setSelectedZoneSource] = useState<string | null>(null)
-  const [filter, setFilter]                 = useState('')
   const [typeFilter, setTypeFilter]         = useState<string>('')
-  const [sortCol, setSortCol]               = useState<SortCol | null>(null)
-  const [sortDir, setSortDir]               = useState<SortDir>('asc')
   const [showForm, setShowForm]             = useState(false)
   const [form, setForm]                     = useState(emptyForm)
   const [nameError, setNameError]           = useState('')
@@ -167,11 +166,29 @@ export default function DNS() {
 
   const selectedZoneIsPihole = selectedZoneSource === 'pihole'
 
-  const { data: records, isLoading: loadingRecords } = useQuery({
-    queryKey: ['dns-records', selectedZone],
-    queryFn: () => dnsApi.listRecords(selectedZone!),
-    enabled: !!selectedZone,
+  const {
+    items: records,
+    total: recordsTotal,
+    page: recordsPage,
+    setPage: setRecordsPage,
+    sort: recordsSort,
+    dir: recordsDir,
+    setSort: toggleRecordsSort,
+    q: recordsQ,
+    setQuery: setRecordsQ,
+    pageSize: recordsPageSize,
+    setPageSize: setRecordsPageSize,
+    isFetching: fetchingRecords,
+    isLoading: loadingRecords,
+  } = usePagedQuery({
+    queryKey: ['dns-records', selectedZone ?? ''],
+    queryFn: (params) => selectedZone
+      ? dnsApi.listRecords(selectedZone, params)
+      : Promise.resolve({ items: [], total: 0, limit: params.limit, offset: params.offset }),
+    defaultSort: 'name',
   })
+
+  useEffect(() => { setRecordsPage(1) }, [selectedZone])
 
   const createMutation = useMutation({
     mutationFn: () => dnsApi.createRecord(selectedZone!, {
@@ -303,32 +320,14 @@ export default function DNS() {
   )
 
   const presentTypes = useMemo(
-    () => [...new Set((records ?? []).map(r => r.record_type))].sort(),
+    () => [...new Set(records.map(r => r.record_type))].sort(),
     [records]
   )
 
-  const handleSort = (col: SortCol) => {
-    if (sortCol === col) setSortDir(d => d === 'asc' ? 'desc' : 'asc')
-    else { setSortCol(col); setSortDir('asc') }
-  }
-
-  const processed = useMemo(() => {
-    const q = filter.toLowerCase()
-    let result = (records ?? []).filter(r =>
-      (!q || r.name.toLowerCase().includes(q) || r.value.toLowerCase().includes(q)) &&
-      (!typeFilter || r.record_type === typeFilter)
-    )
-    if (sortCol) {
-      result = [...result].sort((a, b) => {
-        const av = sortCol === 'ttl' ? a.ttl : a[sortCol].toLowerCase()
-        const bv = sortCol === 'ttl' ? b.ttl : b[sortCol].toLowerCase()
-        return av < bv ? (sortDir === 'asc' ? -1 : 1)
-             : av > bv ? (sortDir === 'asc' ?  1 : -1)
-             : 0
-      })
-    }
-    return result
-  }, [records, filter, typeFilter, sortCol, sortDir])
+  const processed = useMemo(
+    () => typeFilter ? records.filter(r => r.record_type === typeFilter) : records,
+    [records, typeFilter]
+  )
 
   const groupedByServer = useMemo(() => {
     const groups = new Map<string, DNSRecord[]>()
@@ -341,7 +340,7 @@ export default function DNS() {
   }, [processed])
 
   const recordSources = useMemo(
-    () => new Set((records ?? []).map(r => r.source).filter(Boolean)),
+    () => new Set(records.map(r => r.source).filter(Boolean)),
     [records]
   )
 
@@ -357,13 +356,13 @@ export default function DNS() {
   const resetZone = (z: string, source?: string) => {
     setSelectedZone(z)
     setSelectedZoneSource(source ?? filteredZones.find(fz => fz.zone === z)?.source ?? null)
-    setFilter(''); setTypeFilter('')
-    setSortCol(null); setShowForm(false); setSelectedRecord(null)
+    setRecordsQ(''); setTypeFilter('')
+    setRecordsPage(1); setShowForm(false); setSelectedRecord(null)
   }
 
   const thProps = (col: SortCol) => ({
-    className: 'sortable' + (sortCol === col ? ' sorted' : ''),
-    onClick: () => handleSort(col),
+    className: 'sortable' + (recordsSort === col ? ' sorted' : ''),
+    onClick: () => toggleRecordsSort(col),
   })
 
   const renderTable = (recs: DNSRecord[]) => (
@@ -371,10 +370,10 @@ export default function DNS() {
       <table>
         <thead>
           <tr>
-            <th {...thProps('name')}>Name <SortArrow col="name" sortCol={sortCol} sortDir={sortDir} /></th>
-            <th {...thProps('record_type')}>Type <SortArrow col="record_type" sortCol={sortCol} sortDir={sortDir} /></th>
-            <th {...thProps('value')}>Value <SortArrow col="value" sortCol={sortCol} sortDir={sortDir} /></th>
-            <th {...thProps('ttl')}>TTL <SortArrow col="ttl" sortCol={sortCol} sortDir={sortDir} /></th>
+            <th {...thProps('name')}>Name <SortArrow col="name" sortCol={recordsSort as SortCol} sortDir={recordsDir} /></th>
+            <th {...thProps('record_type')}>Type <SortArrow col="record_type" sortCol={recordsSort as SortCol} sortDir={recordsDir} /></th>
+            <th {...thProps('value')}>Value <SortArrow col="value" sortCol={recordsSort as SortCol} sortDir={recordsDir} /></th>
+            <th>TTL</th>
             {multiProvider && <th>Source</th>}
             <th style={{ width: '2.5rem' }}></th>
           </tr>
@@ -383,11 +382,11 @@ export default function DNS() {
           {recs.length === 0 && (
             <tr>
               <td colSpan={multiProvider ? 6 : 5}>
-                {filter || typeFilter ? (
+                {recordsQ || typeFilter ? (
                   <EmptyState
                     icon={Globe}
                     title="No records match filters"
-                    action={<button className="btn-ghost btn-sm" onClick={() => { setFilter(''); setTypeFilter('') }}>Clear filters</button>}
+                    action={<button className="btn-ghost btn-sm" onClick={() => { setRecordsQ(''); setTypeFilter('') }}>Clear filters</button>}
                   />
                 ) : (
                   <EmptyState icon={Globe} title="No records in this zone" description="Add a record using the form above." />
@@ -551,8 +550,8 @@ export default function DNS() {
                     <SlidersHorizontal size={14} style={{ color: 'var(--text-muted)', flexShrink: 0 }} />
                     <input
                       placeholder="Filter name or value…"
-                      value={filter}
-                      onChange={e => setFilter(e.target.value)}
+                      value={recordsQ}
+                      onChange={e => setRecordsQ(e.target.value)}
                       style={{ width: '200px' }}
                     />
                   </div>
@@ -577,7 +576,7 @@ export default function DNS() {
                     className={'type-chip' + (!typeFilter ? ' active' : '')}
                     onClick={() => setTypeFilter('')}
                   >
-                    All ({(records ?? []).length})
+                    All ({records.length})
                   </button>
                   {presentTypes.map(t => (
                     <button
@@ -585,7 +584,7 @@ export default function DNS() {
                       className={'type-chip' + (typeFilter === t ? ' active' : '')}
                       onClick={() => setTypeFilter(typeFilter === t ? '' : t)}
                     >
-                      {t} ({(records ?? []).filter(r => r.record_type === t).length})
+                      {t} ({records.filter(r => r.record_type === t).length})
                     </button>
                   ))}
                 </div>
@@ -689,6 +688,16 @@ export default function DNS() {
                   ))}
                   {groupedByServer.size === 0 && renderTable([])}
                 </>
+              )}
+              {selectedZone && (
+                <Pager
+                  page={recordsPage}
+                  total={recordsTotal}
+                  pageSize={recordsPageSize}
+                  isFetching={fetchingRecords}
+                  onPage={setRecordsPage}
+                  onPageSize={setRecordsPageSize}
+                />
               )}
             </>
           ) : (
