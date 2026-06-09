@@ -1,5 +1,6 @@
 import logging
 from fastapi import APIRouter, HTTPException, Depends, Query
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 from app.database import get_db
 from app.models.user import User
@@ -10,9 +11,15 @@ from app.core.deps import require_operator
 from app.core.audit import write_audit
 from app.core.time import utcnow
 from app.core.errors import raise_provider_error, provider_unconfigured
+from app.core.pagination import paginate
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
+
+DHCP_SORT_MAP = {
+    "ip_address": CachedDHCPLease.ip_address,
+    "name":       CachedDHCPLease.name,
+}
 
 
 @router.get("/scopes", response_model=list[DHCPScope])
@@ -30,20 +37,40 @@ def list_scopes(db: Session = Depends(get_db)):
 
 
 @router.get("/scopes/{scope_id:path}/leases")
-def list_leases(scope_id: str, source: str = Query(""), db: Session = Depends(get_db)):
-    q = db.query(CachedDHCPLease).filter(CachedDHCPLease.scope_id == scope_id)
+def list_leases(
+    scope_id: str,
+    source: str = Query(""),
+    q: str | None = Query(None),
+    sort: str = Query(""),
+    dir: str = Query("asc", pattern="^(asc|desc)$"),
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+    db: Session = Depends(get_db),
+):
+    query = db.query(CachedDHCPLease).filter(CachedDHCPLease.scope_id == scope_id)
     if source:
-        q = q.filter(CachedDHCPLease.source == source)
-    rows = q.all()
-    return [
+        query = query.filter(CachedDHCPLease.source == source)
+    if q:
+        pattern = f"%{q}%"
+        query = query.filter(or_(
+            CachedDHCPLease.ip_address.ilike(pattern),
+            CachedDHCPLease.mac_address.ilike(pattern),
+            CachedDHCPLease.name.ilike(pattern),
+        ))
+    result = paginate(query, limit=limit, offset=offset,
+                      sort_map=DHCP_SORT_MAP, sort=sort, dir=dir,
+                      tiebreaker=CachedDHCPLease.id.asc())
+    items = [
         {
             "scope_id": r.scope_id, "ip_address": r.ip_address,
             "mac_address": r.mac_address, "client_duid": r.client_duid,
             "iaid": r.iaid, "name": r.name, "description": r.description,
             "synced_at": r.synced_at.isoformat() + "Z" if r.synced_at else None,
         }
-        for r in rows
+        for r in result["items"]
     ]
+    return {"items": items, "total": result["total"],
+            "limit": result["limit"], "offset": result["offset"]}
 
 
 @router.get("/by-ip/{address}")
