@@ -75,7 +75,7 @@ def list_addresses(
     tag: str | None = Query(None, description="Filter by tag name"),
     q: str | None = Query(None),
     sort: str = Query(""),
-    dir: str = Query("asc"),
+    dir: str = Query("asc", pattern="^(asc|desc)$"),
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
     db: Session = Depends(get_db),
@@ -104,7 +104,8 @@ def list_addresses(
         ))
 
     result = paginate(query, limit=limit, offset=offset,
-                      sort_map=ADDR_SORT_MAP, sort=sort, dir=dir)
+                      sort_map=ADDR_SORT_MAP, sort=sort, dir=dir,
+                      tiebreaker=IPAddress.id.asc())
     ids = [r.id for r in result["items"]]
     cf = load_custom_fields_bulk(db, "address", ids)
     tg = load_tags_bulk(db, "address", ids)
