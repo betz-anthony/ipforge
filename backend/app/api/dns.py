@@ -1,7 +1,8 @@
 import logging
 import re
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException, Depends, Query
 from pydantic import field_validator
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 from app.database import get_db
 from app.models.user import User
@@ -13,6 +14,7 @@ from app.core.audit import write_audit
 from app.core.time import utcnow
 from app.core.ptr import find_reverse_zone, build_ptr_record
 from app.core.errors import raise_provider_error, provider_unconfigured
+from app.core.pagination import paginate
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -20,6 +22,12 @@ router = APIRouter()
 
 _DNS_NAME_RE = re.compile(r"^[A-Za-z0-9_.*@-]{1,255}$")
 _VALID_RECORD_TYPES = {"A", "AAAA", "CNAME", "PTR", "MX", "TXT", "NS"}
+
+DNS_SORT_MAP = {
+    "name":        CRow.name,
+    "record_type": CRow.record_type,
+    "value":       CRow.value,
+}
 
 
 class CreateRecordRequest(DNSRecord):
@@ -90,16 +98,35 @@ def list_zones(db: Session = Depends(get_db)):
 
 
 @router.get("/zones/{zone}/records")
-def list_records(zone: str, db: Session = Depends(get_db)):
-    rows = db.query(CRow).filter_by(zone=zone).all()
-    return [
+def list_records(
+    zone: str,
+    q: str | None = None,
+    sort: str = "",
+    dir: str = Query("asc", pattern="^(asc|desc)$"),
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+    db: Session = Depends(get_db),
+):
+    query = db.query(CRow).filter(CRow.zone == zone)
+    if q:
+        pattern = f"%{q}%"
+        query = query.filter(or_(
+            CRow.name.ilike(pattern),
+            CRow.value.ilike(pattern),
+        ))
+    result = paginate(query, limit=limit, offset=offset,
+                      sort_map=DNS_SORT_MAP, sort=sort, dir=dir,
+                      tiebreaker=CRow.id.asc())
+    items = [
         {
             "name": r.name, "record_type": r.record_type, "value": r.value,
             "zone": r.zone, "ttl": r.ttl, "source": r.source,
             "synced_at": r.synced_at.isoformat() + "Z" if r.synced_at else None,
         }
-        for r in rows
+        for r in result["items"]
     ]
+    return {"items": items, "total": result["total"],
+            "limit": result["limit"], "offset": result["offset"]}
 
 
 @router.get("/by-ip/{address}")

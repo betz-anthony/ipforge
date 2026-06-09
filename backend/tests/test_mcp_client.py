@@ -21,10 +21,13 @@ def test_list_subnets():
 
 def test_list_addresses_filters():
     calls = []
-    c = _client({("GET", "/addresses"): []}, calls)
-    c.list_addresses(subnet_id=3, tag="prod")
+    c = _client({("GET", "/addresses"): {"items": [], "total": 0, "limit": 200, "offset": 0}}, calls)
+    result = c.list_addresses(subnet_id=3, tag="prod")
+    assert result == []
     assert calls[0][0] == "GET" and calls[0][1] == "/addresses"
-    assert calls[0][2] == {"subnet_id": 3, "tag": "prod"}
+    assert calls[0][2]["subnet_id"] == 3
+    assert calls[0][2]["tag"] == "prod"
+    assert calls[0][2]["limit"] == 200
 
 
 def test_find_free_ip_returns_first_free():

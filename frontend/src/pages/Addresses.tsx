@@ -1,15 +1,16 @@
-import { useState, useRef, useMemo } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Plus, X, Download, Upload, Server } from 'lucide-react'
+import { Plus, X, Download, Upload, Server, ArrowUp, ArrowDown, ArrowUpDown } from 'lucide-react'
 import { addressesApi, subnetsApi, dnsApi, dhcpApi, scanHistoryApi, importExportApi, customFieldsApi, discoveryApi, type IPAddress, type ImportResult, type DeletePreview } from '../api/client'
 import { formatRelative } from '../utils/time'
-import { ipCompare, isValidIPv4, isValidIPv6, isValidEUI48 } from '../utils/ip'
+import { isValidIPv4, isValidIPv6, isValidEUI48 } from '../utils/ip'
 import DetailDrawer from '../components/DetailDrawer'
 import EmptyState from '../components/EmptyState'
 import CustomFieldsEditor, { parseTags } from '../components/CustomFieldsEditor'
 import SearchInput from '../components/SearchInput'
 import { TableSkeleton } from '../components/Skeleton'
-import { useTableSort } from '../hooks/useTableSort'
+import { usePagedQuery } from '../hooks/usePagedQuery'
+import { Pager } from '../components/Pager'
 import { useToast } from '../contexts/ToastContext'
 import { rowActivation } from '../utils/a11y'
 import { apiError } from '../utils/apiError'
@@ -95,10 +96,38 @@ export default function Addresses() {
     retry: false,
   })
 
-  const { data, isLoading, error } = useQuery({
+  const {
+    items: visibleAddresses,
+    total,
+    page,
+    setPage,
+    sort: sortKey,
+    dir: sortDirRaw,
+    setSort: toggleSort,
+    q: searchTerm,
+    setQuery: setSearchTerm,
+    pageSize,
+    setPageSize,
+    isFetching,
+    isLoading,
+    error,
+  } = usePagedQuery({
     queryKey: ['addresses'],
-    queryFn: () => addressesApi.list(),
+    queryFn: (params) => addressesApi.list(params),
+    filters: {
+      subnet_id: filterSubnet !== '' ? filterSubnet : undefined,
+      status: filterStatus !== '' ? filterStatus : undefined,
+    } as { subnet_id?: number; status?: string },
+    defaultSort: 'address',
+    defaultDir: 'asc',
   })
+
+  useEffect(() => { setPage(1) }, [filterStatus, filterSubnet])
+
+  const sortIcon = (key: string) => {
+    if (sortKey !== key) return <ArrowUpDown size={11} className="sort-icon-idle" />
+    return sortDirRaw === 'asc' ? <ArrowUp size={11} /> : <ArrowDown size={11} />
+  }
 
   const { data: subnets } = useQuery({
     queryKey: ['subnets'],
@@ -179,41 +208,6 @@ export default function Addresses() {
     setTagsText((a.tags ?? []).join(', '))
   }
 
-  const [searchTerm, setSearchTerm] = useState('')
-  const { sortKey, toggleSort, sortIcon, dir } = useTableSort<
-    'address' | 'hostname' | 'status' | 'mac' | 'description' | 'last_seen'
-  >('address')
-
-  const visibleAddresses = useMemo(() => {
-    const base = (data ?? []).filter(a =>
-      (filterStatus === '' || a.status === filterStatus) &&
-      (filterSubnet === '' || a.subnet_id === filterSubnet)
-    )
-    const q = searchTerm.trim().toLowerCase()
-    const filtered = q
-      ? base.filter(a =>
-          a.address.toLowerCase().includes(q) ||
-          (a.hostname ?? '').toLowerCase().includes(q) ||
-          (a.mac_address ?? '').toLowerCase().includes(q) ||
-          (a.description ?? '').toLowerCase().includes(q)
-        )
-      : base.slice()
-    const cmp = (a: IPAddress, b: IPAddress) => {
-      switch (sortKey) {
-        case 'address':     return ipCompare(a.address, b.address) * dir
-        case 'hostname':    return (a.hostname ?? '').localeCompare(b.hostname ?? '') * dir
-        case 'status':      return a.status.localeCompare(b.status) * dir
-        case 'mac':         return (a.mac_address ?? '').localeCompare(b.mac_address ?? '') * dir
-        case 'description': return (a.description ?? '').localeCompare(b.description ?? '') * dir
-        case 'last_seen': {
-          const av = a.last_seen ? new Date(a.last_seen).getTime() : 0
-          const bv = b.last_seen ? new Date(b.last_seen).getTime() : 0
-          return (av - bv) * dir
-        }
-      }
-    }
-    return filtered.sort(cmp)
-  }, [data, filterStatus, filterSubnet, searchTerm, sortKey, dir])
 
   const SOURCE_LABEL: Record<string, string> = {
     msdhcp: 'MS DHCP', pihole: 'Pi-hole', keadhcp: 'Kea',
@@ -567,9 +561,9 @@ export default function Addresses() {
       )}
 
       {isLoading && <TableSkeleton cols={7} />}
-      {error    && <p className="feedback-error">Failed to load addresses.</p>}
+      {!!error   && <p className="feedback-error">Failed to load addresses.</p>}
 
-      {data && (
+      {!isLoading && (
         <>
           <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '0.5rem' }}>
             <SearchInput
@@ -585,8 +579,8 @@ export default function Addresses() {
                 <th className="th-sortable" onClick={() => toggleSort('address')}><span>Address {sortIcon('address')}</span></th>
                 <th className="th-sortable" onClick={() => toggleSort('hostname')}><span>Hostname {sortIcon('hostname')}</span></th>
                 <th className="th-sortable" onClick={() => toggleSort('status')}><span>Status {sortIcon('status')}</span></th>
-                <th className="th-sortable" onClick={() => toggleSort('mac')}><span>MAC {sortIcon('mac')}</span></th>
-                <th className="th-sortable" onClick={() => toggleSort('description')}><span>Description {sortIcon('description')}</span></th>
+                <th className="th-sortable" onClick={() => toggleSort('mac_address')}><span>MAC {sortIcon('mac_address')}</span></th>
+                <th><span>Description</span></th>
                 <th className="th-sortable" onClick={() => toggleSort('last_seen')}><span>Last Seen {sortIcon('last_seen')}</span></th>
                 <th style={{ width: '2.5rem' }}></th>
               </tr>
@@ -594,7 +588,7 @@ export default function Addresses() {
             <tbody>
               {visibleAddresses.length === 0 && (
                 <tr><td colSpan={7}>
-                  {data?.length === 0 ? (
+                  {total === 0 && !searchTerm && !filterStatus && !filterSubnet ? (
                     <EmptyState
                       icon={Server}
                       title="No addresses tracked"
@@ -656,6 +650,14 @@ export default function Addresses() {
             </tbody>
           </table>
           </div>
+          <Pager
+            page={page}
+            total={total}
+            pageSize={pageSize}
+            isFetching={isFetching}
+            onPage={setPage}
+            onPageSize={setPageSize}
+          />
         </>
       )}
 

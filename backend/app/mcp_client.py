@@ -29,12 +29,12 @@ class IPForgeClient:
         return self._req("GET", f"/subnets/{subnet_id}")
 
     def list_addresses(self, subnet_id: int | None = None, tag: str | None = None) -> list:
-        params = {}
+        params: dict = {"limit": 200}
         if subnet_id is not None:
             params["subnet_id"] = subnet_id
         if tag is not None:
             params["tag"] = tag
-        return self._req("GET", "/addresses", params=params or None)
+        return self._req("GET", "/addresses", params=params)["items"]
 
     def find_free_ip(self, subnet_id: int) -> str | None:
         m = self._req("GET", f"/subnets/{subnet_id}/map")

@@ -108,7 +108,7 @@ def test_scoped_address_list_only_granted_subnet(db):
     db.commit()
     client = _client(db, user)
     try:
-        rows = client.get("/api/addresses").json()
+        rows = client.get("/api/addresses").json()["items"]
         assert {r["address"] for r in rows} == {"10.0.0.5"}
     finally:
         app.dependency_overrides.clear()

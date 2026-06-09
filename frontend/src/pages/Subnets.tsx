@@ -154,7 +154,7 @@ export default function Subnets() {
 
   const { data: subnetAddresses } = useQuery({
     queryKey: ['addresses', selectedSubnet?.id],
-    queryFn: () => addressesApi.list({ subnet_id: selectedSubnet!.id }),
+    queryFn: () => addressesApi.list({ subnet_id: selectedSubnet!.id, limit: 200 }).then(p => p.items),
     enabled: !!selectedSubnet,
   })
 
