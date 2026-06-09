@@ -26,14 +26,13 @@ from app.providers.registry import get_dns_providers, get_dhcp_providers
 from app.providers.dns.base import DNSRecord
 from app.providers.dhcp.base import DHCPReservation
 from pydantic import BaseModel
-from pydantic import BaseModel as _BaseModel
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
 
-class PagedAddressRead(_BaseModel):
+class PagedAddressRead(BaseModel):
     items: list[AddressRead]
     total: int
     limit: int
