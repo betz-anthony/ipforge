@@ -86,3 +86,13 @@ def test_cursor_roundtrip():
 def test_decode_cursor_invalid_returns_none():
     assert _decode_cursor("not-valid-base64!!!") is None
     assert _decode_cursor(None) is None
+
+
+def test_migration_0029_exists():
+    import os
+    import glob
+    versions_dir = os.path.join(
+        os.path.dirname(__file__), "..", "alembic", "versions"
+    )
+    files = glob.glob(os.path.join(versions_dir, "0029_*.py"))
+    assert files, "Migration 0029 does not exist"
