@@ -13,11 +13,8 @@ depends_on = None
 
 
 def upgrade():
-    # Hostname lookups (ILIKE on Postgres benefit from text_pattern_ops)
-    op.create_index(
-        "ix_ip_addresses_hostname", "ip_addresses", ["hostname"],
-        postgresql_ops={"hostname": "text_pattern_ops"},
-    )
+    # Hostname index supports ORDER BY hostname; ILIKE '%..%' is seq-scan regardless
+    op.create_index("ix_ip_addresses_hostname", "ip_addresses", ["hostname"])
 
     # Cache DNS records by zone + name (for sorted iteration)
     op.create_index(
