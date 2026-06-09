@@ -2,7 +2,9 @@ import { useMemo, useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Plus, X, Search, ArrowUp, ArrowDown, ArrowUpDown, Network } from 'lucide-react'
 import { dhcpApi, providersApi, addressesApi, subnetsApi, type DHCPReservation, type DHCPScope } from '../api/client'
-import { rangeSize, ipInCidr, ipToNum, ipCompare, isValidIPv4, isValidIPv6, isValidEUI48, isValidEUI64 } from '../utils/ip'
+import { rangeSize, ipInCidr, ipToNum, isValidIPv4, isValidIPv6, isValidEUI48, isValidEUI64 } from '../utils/ip'
+import { usePagedQuery } from '../hooks/usePagedQuery'
+import { Pager } from '../components/Pager'
 import SyncBar from '../components/SyncBar'
 import EmptyState from '../components/EmptyState'
 import DetailPanel from '../components/DetailPanel'
@@ -16,8 +18,6 @@ const SOURCE_LABEL: Record<string, string> = {
 }
 
 type ViewMode = 'combined' | 'by-server'
-type SortKey = 'ip_address' | 'mac' | 'iaid' | 'name' | 'description'
-type SortDir = 'asc' | 'desc'
 
 const emptyForm = {
   ip_address: '', mac_address: '', client_duid: '', iaid: 0,
@@ -35,9 +35,6 @@ export default function DHCP() {
   const [editingNotes, setEditingNotes]       = useState(false)
   const [notesValue, setNotesValue]           = useState('')
   const [selectedAddSubnetId, setSelectedAddSubnetId] = useState<number | null>(null)
-  const [searchTerm, setSearchTerm] = useState('')
-  const [sortKey, setSortKey] = useState<SortKey>('ip_address')
-  const [sortDir, setSortDir] = useState<SortDir>('asc')
   const qc = useQueryClient()
 
   const isV6 = (scope: DHCPScope | null) => scope ? scope.ip_version === 6 : false
@@ -54,11 +51,29 @@ export default function DHCP() {
 
   const dhcpProviders = providers?.dhcp ?? []
 
-  const { data: leases, isLoading: loadingLeases } = useQuery({
-    queryKey: ['dhcp-leases', selectedScope?.scope_id, selectedScope?.source],
-    queryFn: () => dhcpApi.listLeases(selectedScope!.scope_id, selectedScope!.source),
-    enabled: !!selectedScope,
+  const {
+    items: leases,
+    total: leasesTotal,
+    page: leasesPage,
+    setPage: setLeasesPage,
+    sort: leasesSort,
+    dir: leasesDir,
+    setSort: toggleLeasesSort,
+    q: leasesQ,
+    setQuery: setLeasesQ,
+    pageSize: leasesPageSize,
+    setPageSize: setLeasesPageSize,
+    isFetching: fetchingLeases,
+    isLoading: loadingLeases,
+  } = usePagedQuery({
+    queryKey: ['dhcp-leases', selectedScope?.scope_id ?? '', selectedScope?.source ?? ''],
+    queryFn: (params) => selectedScope
+      ? dhcpApi.listLeases(selectedScope.scope_id, selectedScope.source, params)
+      : Promise.resolve({ items: [], total: 0, limit: params.limit, offset: params.offset }),
+    defaultSort: 'ip_address',
   })
+
+  useEffect(() => { setLeasesPage(1) }, [selectedScope?.scope_id])
 
   const addMutation = useMutation({
     mutationFn: () => dhcpApi.addReservation(selectedScope!.scope_id, form, selectedScope!.source),
@@ -189,50 +204,10 @@ export default function DHCP() {
     isV6(selectedScope) ? form.client_duid : form.mac_address
   )
 
-  const visibleLeases = useMemo(() => {
-    if (!leases) return []
-    const v6 = isV6(selectedScope)
-    const q = searchTerm.trim().toLowerCase()
-    const filtered = q
-      ? leases.filter(l => {
-          const idField = v6 ? l.client_duid : l.mac_address
-          return (
-            l.ip_address.toLowerCase().includes(q) ||
-            (idField || '').toLowerCase().includes(q) ||
-            (l.name || '').toLowerCase().includes(q) ||
-            (l.description || '').toLowerCase().includes(q) ||
-            (v6 && l.iaid ? String(l.iaid).includes(q) : false)
-          )
-        })
-      : leases.slice()
-    const dir = sortDir === 'asc' ? 1 : -1
-    const cmp = (a: DHCPReservation, b: DHCPReservation) => {
-      switch (sortKey) {
-        case 'ip_address': return ipCompare(a.ip_address, b.ip_address) * dir
-        case 'mac': {
-          const av = (v6 ? a.client_duid : a.mac_address) || ''
-          const bv = (v6 ? b.client_duid : b.mac_address) || ''
-          return av.localeCompare(bv) * dir
-        }
-        case 'iaid': return ((a.iaid ?? 0) - (b.iaid ?? 0)) * dir
-        case 'name': return (a.name || '').localeCompare(b.name || '') * dir
-        case 'description': return (a.description || '').localeCompare(b.description || '') * dir
-      }
-    }
-    return filtered.sort(cmp)
-  }, [leases, selectedScope, searchTerm, sortKey, sortDir])
-
-  const toggleSort = (key: SortKey) => {
-    if (sortKey === key) setSortDir(d => d === 'asc' ? 'desc' : 'asc')
-    else { setSortKey(key); setSortDir('asc') }
-  }
-
-  const sortIcon = (key: SortKey) =>
-    sortKey !== key ? <ArrowUpDown size={11} className="sort-icon-idle" />
-    : sortDir === 'asc' ? <ArrowUp size={11} />
+  const sortIcon = (key: string) =>
+    leasesSort !== key ? <ArrowUpDown size={11} className="sort-icon-idle" />
+    : leasesDir === 'asc' ? <ArrowUp size={11} />
     : <ArrowDown size={11} />
-
-  useEffect(() => { setSearchTerm('') }, [selectedScope])
 
   const renderScopeItem = (s: DHCPScope) => (
     <div
@@ -413,14 +388,14 @@ export default function DHCP() {
                 </div>
               )}
 
-              {!loadingLeases && leases && (
+              {!loadingLeases && (
                 <div style={{
                   display: 'flex', flexWrap: 'wrap', gap: '1.5rem', alignItems: 'center',
                   padding: '0.5rem 0', marginBottom: '0.75rem',
                   fontSize: '0.8rem', borderBottom: '1px solid var(--border)',
                 }}>
                   <span>
-                    <strong>{searchTerm ? `${visibleLeases.length} / ${leases.length}` : leases.length}</strong> reservation{leases.length !== 1 ? 's' : ''}
+                    <strong>{leasesTotal}</strong> reservation{leasesTotal !== 1 ? 's' : ''}
                   </span>
                   {selectedScope.ip_version === 4 && selectedScope.start_range && selectedScope.end_range && (() => {
                     const size = rangeSize(selectedScope.start_range, selectedScope.end_range)
@@ -447,13 +422,13 @@ export default function DHCP() {
                     <input
                       type="text"
                       placeholder="Search IP, MAC, hostname…"
-                      value={searchTerm}
-                      onChange={e => setSearchTerm(e.target.value)}
+                      value={leasesQ}
+                      onChange={e => setLeasesQ(e.target.value)}
                       style={{ fontSize: '0.75rem', padding: '0.3rem 1.8rem 0.3rem 1.7rem', width: '15rem' }}
                     />
-                    {searchTerm && (
+                    {leasesQ && (
                       <button
-                        onClick={() => setSearchTerm('')}
+                        onClick={() => setLeasesQ('')}
                         aria-label="Clear search"
                         style={{ position: 'absolute', right: '0.3rem', background: 'transparent', border: 'none', cursor: 'pointer', padding: '2px', display: 'flex', color: 'var(--text-muted)' }}
                       >
@@ -471,35 +446,33 @@ export default function DHCP() {
                   <table>
                     <thead>
                       <tr>
-                        <th className="th-sortable" onClick={() => toggleSort('ip_address')}>
+                        <th className="th-sortable" onClick={() => toggleLeasesSort('ip_address')}>
                           <span>IP Address {sortIcon('ip_address')}</span>
                         </th>
-                        <th className="th-sortable" onClick={() => toggleSort('mac')}>
-                          <span>{isV6(selectedScope) ? 'Client DUID' : 'MAC'} {sortIcon('mac')}</span>
+                        <th>
+                          <span>{isV6(selectedScope) ? 'Client DUID' : 'MAC'}</span>
                         </th>
                         {isV6(selectedScope) && (
-                          <th className="th-sortable" onClick={() => toggleSort('iaid')}>
-                            <span>IAID {sortIcon('iaid')}</span>
-                          </th>
+                          <th><span>IAID</span></th>
                         )}
-                        <th className="th-sortable" onClick={() => toggleSort('name')}>
+                        <th className="th-sortable" onClick={() => toggleLeasesSort('name')}>
                           <span>Hostname {sortIcon('name')}</span>
                         </th>
-                        <th className="th-sortable" onClick={() => toggleSort('description')}>
-                          <span>Description {sortIcon('description')}</span>
+                        <th>
+                          <span>Description</span>
                         </th>
                         <th></th>
                       </tr>
                     </thead>
                     <tbody>
-                      {visibleLeases.length === 0 && (
+                      {leases.length === 0 && (
                         <tr>
                           <td colSpan={isV6(selectedScope) ? 6 : 5}>
-                            {leases && leases.length > 0 ? (
+                            {leasesQ ? (
                               <EmptyState
                                 icon={Network}
                                 title="No leases match search"
-                                action={<button className="btn-ghost btn-sm" onClick={() => setSearchTerm('')}>Clear search</button>}
+                                action={<button className="btn-ghost btn-sm" onClick={() => setLeasesQ('')}>Clear search</button>}
                               />
                             ) : (
                               <EmptyState icon={Network} title="No leases in this scope" description="Reservations and active leases will appear here." />
@@ -507,7 +480,7 @@ export default function DHCP() {
                           </td>
                         </tr>
                       )}
-                      {visibleLeases.map(l => (
+                      {leases.map(l => (
                         <tr
                           key={l.ip_address}
                           className="clickable"
@@ -534,6 +507,16 @@ export default function DHCP() {
                     </tbody>
                   </table>
                 </div>
+              )}
+              {selectedScope && (
+                <Pager
+                  page={leasesPage}
+                  total={leasesTotal}
+                  pageSize={leasesPageSize}
+                  isFetching={fetchingLeases}
+                  onPage={setLeasesPage}
+                  onPageSize={setLeasesPageSize}
+                />
               )}
             </>
           ) : (
