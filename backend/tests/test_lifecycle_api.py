@@ -28,7 +28,7 @@ def _audit(db, action, ip, after=None, ts=None):
 def test_history_by_id(client, db):
     s, a = _seed(db)
     _audit(db, "create", "10.0.0.5", after={"address": "10.0.0.5", "hostname": "web"}, ts=datetime(2026, 1, 1))
-    r = client.get(f"/api/addresses/{a.id}/history")
+    r = client.get(f"/api/v1/addresses/{a.id}/history")
     assert r.status_code == 200, r.text
     body = r.json()
     assert body["ip"] == "10.0.0.5"
@@ -39,7 +39,7 @@ def test_history_by_ip_point_in_time(client, db):
     _seed(db)
     _audit(db, "create", "10.0.0.5", after={"address": "10.0.0.5", "hostname": "web01"}, ts=datetime(2026, 1, 1))
     _audit(db, "update", "10.0.0.5", after={"address": "10.0.0.5", "hostname": "web02"}, ts=datetime(2026, 1, 10))
-    r = client.get("/api/addresses/by-ip/10.0.0.5/history", params={"as_of": "2026-01-05"})
+    r = client.get("/api/v1/addresses/by-ip/10.0.0.5/history", params={"as_of": "2026-01-05"})
     assert r.status_code == 200, r.text
     body = r.json()
     assert body["point_in_time"]["hostname"] == "web01"
@@ -49,6 +49,6 @@ def test_history_by_ip_point_in_time(client, db):
 def test_history_by_ip_untracked(client, db):
     # IP never in IPAM but has audit history (e.g. deleted long ago)
     _audit(db, "create", "192.0.2.9", after={"address": "192.0.2.9"}, ts=datetime(2026, 1, 1))
-    r = client.get("/api/addresses/by-ip/192.0.2.9/history")
+    r = client.get("/api/v1/addresses/by-ip/192.0.2.9/history")
     assert r.status_code == 200
     assert any(e["kind"] == "change" for e in r.json()["timeline"])

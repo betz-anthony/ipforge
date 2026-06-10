@@ -21,7 +21,7 @@ def test_forecast_endpoint_returns_projection(client, db):
     _seed_history(db, s.id, 60, 10, 7)  # rising
     db.commit()
 
-    r = client.get(f"/api/subnets/{s.id}/forecast")
+    r = client.get(f"/api/v1/subnets/{s.id}/forecast")
     assert r.status_code == 200
     body = r.json()
     assert body["subnet_id"] == s.id
@@ -34,7 +34,7 @@ def test_forecast_endpoint_no_history(client, db):
     s = Subnet(name="Empty", cidr="10.0.1.0/24", ip_version=4)
     db.add(s)
     db.commit()
-    r = client.get(f"/api/subnets/{s.id}/forecast")
+    r = client.get(f"/api/v1/subnets/{s.id}/forecast")
     assert r.status_code == 200
     body = r.json()
     assert body["confidence"] == "none"
@@ -42,7 +42,7 @@ def test_forecast_endpoint_no_history(client, db):
 
 
 def test_forecast_endpoint_404(client, db):
-    r = client.get("/api/subnets/99999/forecast")
+    r = client.get("/api/v1/subnets/99999/forecast")
     assert r.status_code == 404
 
 
@@ -57,7 +57,7 @@ def test_forecasts_top_sorted_and_limited(client, db):
     _seed_history(db, flat.id, 50, 0, 7)    # no projection
     db.commit()
 
-    r = client.get("/api/subnets/forecasts?limit=5")
+    r = client.get("/api/v1/subnets/forecasts?limit=5")
     assert r.status_code == 200
     items = r.json()
     # flat excluded (no critical projection)
@@ -74,6 +74,6 @@ def test_forecasts_top_respects_limit(client, db):
         db.flush()
         _seed_history(db, s.id, 100, 10 + i, 7)
     db.commit()
-    r = client.get("/api/subnets/forecasts?limit=2")
+    r = client.get("/api/v1/subnets/forecasts?limit=2")
     assert r.status_code == 200
     assert len(r.json()) == 2

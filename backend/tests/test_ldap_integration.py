@@ -16,14 +16,14 @@ def test_ldap_login_token_grants_access(client, db):
     try:
         with patch("app.api.auth.authenticate_ldap", return_value="operator"):
             login_r = client.post(
-                "/api/auth/login",
+                "/api/v1/auth/login",
                 data={"username": "aduser", "password": "adpass"},
                 headers={"Content-Type": "application/x-www-form-urlencoded"},
             )
         assert login_r.status_code == 200
         token = login_r.json()["access_token"]
 
-        me_r = client.get("/api/auth/me", headers={"Authorization": f"Bearer {token}"})
+        me_r = client.get("/api/v1/auth/me", headers={"Authorization": f"Bearer {token}"})
         assert me_r.status_code == 200
         assert me_r.json()["username"] == "aduser"
         assert me_r.json()["role"] == "operator"
@@ -45,7 +45,7 @@ def test_local_login_unaffected_by_ldap_enabled(client, db):
     db.commit()
 
     r = client.post(
-        "/api/auth/login",
+        "/api/v1/auth/login",
         data={"username": "localadmin", "password": "pass1234"},
         headers={"Content-Type": "application/x-www-form-urlencoded"},
     )

@@ -5,7 +5,7 @@ from app.models.address import IPAddress, AddressStatus
 def test_subnet_list_includes_hierarchy_fields(client, db):
     db.add(Subnet(name="Root", cidr="10.0.0.0/8", ip_version=4))
     db.commit()
-    r = client.get("/api/subnets")
+    r = client.get("/api/v1/subnets")
     assert r.status_code == 200
     s = r.json()[0]
     assert "parent_id" in s
@@ -24,7 +24,7 @@ def test_rollup_leaf_equals_own_stats(client, db):
     db.add(IPAddress(address="10.1.0.1", subnet_id=child.id, status=AddressStatus.assigned))
     db.commit()
 
-    r = client.get("/api/subnets")
+    r = client.get("/api/v1/subnets")
     assert r.status_code == 200
     by_id = {s["id"]: s for s in r.json()}
 
@@ -44,7 +44,7 @@ def test_rollup_parent_includes_children(client, db):
     db.add(IPAddress(address="10.1.0.2", subnet_id=child.id, status=AddressStatus.reserved))
     db.commit()
 
-    r = client.get("/api/subnets")
+    r = client.get("/api/v1/subnets")
     by_id = {s["id"]: s for s in r.json()}
 
     parent_row = by_id[parent.id]
@@ -58,7 +58,7 @@ def test_rollup_utilization_pct(client, db):
     db.add(subnet)
     db.commit()
 
-    r = client.get("/api/subnets")
+    r = client.get("/api/v1/subnets")
     s = r.json()[0]
     assert s["rollup_utilization_pct"] == s["utilization_pct"]
 
@@ -69,7 +69,7 @@ def test_suggest_parent_returns_containing_subnets(client, db):
     db.add(Subnet(name="Unrelated", cidr="192.168.0.0/16", ip_version=4))
     db.commit()
 
-    r = client.get("/api/subnets/suggest-parent", params={"cidr": "10.1.1.0/24"})
+    r = client.get("/api/v1/subnets/suggest-parent", params={"cidr": "10.1.1.0/24"})
     assert r.status_code == 200
     names = [s["name"] for s in r.json()]
     assert "Corp" in names
@@ -82,13 +82,13 @@ def test_suggest_parent_sorted_most_specific_first(client, db):
     db.add(Subnet(name="Prod", cidr="10.1.0.0/16", ip_version=4))
     db.commit()
 
-    r = client.get("/api/subnets/suggest-parent", params={"cidr": "10.1.1.0/24"})
+    r = client.get("/api/v1/subnets/suggest-parent", params={"cidr": "10.1.1.0/24"})
     names = [s["name"] for s in r.json()]
     assert names[0] == "Prod"   # /16 before /8
 
 
 def test_suggest_parent_invalid_cidr_returns_empty(client, db):
-    r = client.get("/api/subnets/suggest-parent", params={"cidr": "notacidr"})
+    r = client.get("/api/v1/subnets/suggest-parent", params={"cidr": "notacidr"})
     assert r.status_code == 200
     assert r.json() == []
 
@@ -98,7 +98,7 @@ def test_create_subnet_with_valid_parent(client, db):
     db.add(parent)
     db.commit()
 
-    r = client.post("/api/subnets", json={
+    r = client.post("/api/v1/subnets", json={
         "name": "Prod", "cidr": "10.1.0.0/16", "parent_id": parent.id
     })
     assert r.status_code == 201
@@ -106,7 +106,7 @@ def test_create_subnet_with_valid_parent(client, db):
 
 
 def test_create_subnet_parent_not_found_returns_404(client, db):
-    r = client.post("/api/subnets", json={
+    r = client.post("/api/v1/subnets", json={
         "name": "Prod", "cidr": "10.1.0.0/16", "parent_id": 9999
     })
     assert r.status_code == 404
@@ -117,7 +117,7 @@ def test_create_subnet_parent_cidr_mismatch_returns_422(client, db):
     db.add(parent)
     db.commit()
 
-    r = client.post("/api/subnets", json={
+    r = client.post("/api/v1/subnets", json={
         "name": "Prod", "cidr": "10.1.0.0/16", "parent_id": parent.id
     })
     assert r.status_code == 422
@@ -131,7 +131,7 @@ def test_delete_subnet_with_children_returns_409(client, db):
     db.add(child)
     db.commit()
 
-    r = client.delete(f"/api/subnets/{parent.id}")
+    r = client.delete(f"/api/v1/subnets/{parent.id}")
     assert r.status_code == 409
 
 
@@ -143,7 +143,7 @@ def test_delete_subnet_leaf_succeeds(client, db):
     db.add(child)
     db.commit()
 
-    r = client.delete(f"/api/subnets/{child.id}")
+    r = client.delete(f"/api/v1/subnets/{child.id}")
     assert r.status_code == 204
 
 
@@ -155,7 +155,7 @@ def test_update_subnet_reparent(client, db):
     db.add(child)
     db.commit()
 
-    r = client.put(f"/api/subnets/{child.id}", json={"parent_id": parent.id})
+    r = client.put(f"/api/v1/subnets/{child.id}", json={"parent_id": parent.id})
     assert r.status_code == 200
     assert r.json()["parent_id"] == parent.id
 
@@ -169,7 +169,7 @@ def test_update_subnet_make_root(client, db):
     db.commit()
 
     # Explicit null = make root
-    r = client.put(f"/api/subnets/{child.id}", json={"parent_id": None})
+    r = client.put(f"/api/v1/subnets/{child.id}", json={"parent_id": None})
     assert r.status_code == 200
     assert r.json()["parent_id"] is None
 
@@ -183,7 +183,7 @@ def test_update_subnet_omit_parent_id_leaves_unchanged(client, db):
     db.commit()
 
     # No parent_id in body = leave unchanged
-    r = client.put(f"/api/subnets/{child.id}", json={"name": "Production"})
+    r = client.put(f"/api/v1/subnets/{child.id}", json={"name": "Production"})
     assert r.status_code == 200
     assert r.json()["parent_id"] == parent.id
 
@@ -200,7 +200,7 @@ def test_cycle_detection_rejects_descendant_as_parent(client, db):
     db.commit()
 
     # Try to set root's parent to grandchild (cycle)
-    r = client.put(f"/api/subnets/{root.id}", json={"parent_id": grandchild.id})
+    r = client.put(f"/api/v1/subnets/{root.id}", json={"parent_id": grandchild.id})
     assert r.status_code == 422
 
 
@@ -209,7 +209,7 @@ def test_self_parent_returns_422(client, db):
     db.add(subnet)
     db.commit()
 
-    r = client.put(f"/api/subnets/{subnet.id}", json={"parent_id": subnet.id})
+    r = client.put(f"/api/v1/subnets/{subnet.id}", json={"parent_id": subnet.id})
     assert r.status_code == 422
 
 
@@ -220,12 +220,12 @@ def test_update_subnet_reparent_cidr_mismatch_returns_422(client, db):
     db.add(unrelated)
     db.commit()
 
-    r = client.put(f"/api/subnets/{child.id}", json={"parent_id": unrelated.id})
+    r = client.put(f"/api/v1/subnets/{child.id}", json={"parent_id": unrelated.id})
     assert r.status_code == 422
 
 
 def test_subnet_stores_provider_names(client, db):
-    r = client.post("/api/subnets", json={
+    r = client.post("/api/v1/subnets", json={
         "name": "test", "cidr": "10.9.0.0/24",
         "dns_provider_name": "msdns-prod",
         "dhcp_provider_name": "msdhcp-prod",

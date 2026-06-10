@@ -19,7 +19,7 @@ def test_dns_by_ip_returns_matching_records(client, db):
     ))
     db.flush()
 
-    r = client.get("/api/dns/by-ip/10.0.0.5")
+    r = client.get("/api/v1/dns/by-ip/10.0.0.5")
     assert r.status_code == 200
     data = r.json()
     assert len(data) == 1
@@ -29,7 +29,7 @@ def test_dns_by_ip_returns_matching_records(client, db):
 
 
 def test_dns_by_ip_returns_empty_when_not_found(client):
-    r = client.get("/api/dns/by-ip/192.168.99.99")
+    r = client.get("/api/v1/dns/by-ip/192.168.99.99")
     assert r.status_code == 200
     assert r.json() == []
 
@@ -42,7 +42,7 @@ def test_dns_by_ip_returns_multiple_records(client, db):
         ))
     db.flush()
 
-    r = client.get("/api/dns/by-ip/10.0.0.10")
+    r = client.get("/api/v1/dns/by-ip/10.0.0.10")
     assert r.status_code == 200
     assert len(r.json()) == 2
 
@@ -57,7 +57,7 @@ def test_dhcp_by_ip_returns_matching_leases(client, db):
     ))
     db.flush()
 
-    r = client.get("/api/dhcp/by-ip/192.168.1.105")
+    r = client.get("/api/v1/dhcp/by-ip/192.168.1.105")
     assert r.status_code == 200
     data = r.json()
     assert len(data) == 1
@@ -67,6 +67,6 @@ def test_dhcp_by_ip_returns_matching_leases(client, db):
 
 
 def test_dhcp_by_ip_returns_empty_when_not_found(client):
-    r = client.get("/api/dhcp/by-ip/10.99.99.99")
+    r = client.get("/api/v1/dhcp/by-ip/10.99.99.99")
     assert r.status_code == 200
     assert r.json() == []

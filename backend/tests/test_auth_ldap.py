@@ -14,7 +14,7 @@ def test_local_user_still_works(client, db):
     db.add(User(username="localuser", hashed_password=_PASS1234_HASH,
                 role="operator", enabled=True))
     db.commit()
-    r = client.post("/api/auth/login",
+    r = client.post("/api/v1/auth/login",
                     data={"username": "localuser", "password": "pass1234"},
                     headers={"Content-Type": "application/x-www-form-urlencoded"})
     assert r.status_code == 200
@@ -25,7 +25,7 @@ def test_local_wrong_password_rejected(client, db):
     db.add(User(username="localuser", hashed_password=_PASS1234_HASH,
                 role="operator", enabled=True))
     db.commit()
-    r = client.post("/api/auth/login",
+    r = client.post("/api/v1/auth/login",
                     data={"username": "localuser", "password": "wrong"},
                     headers={"Content-Type": "application/x-www-form-urlencoded"})
     assert r.status_code == 401
@@ -33,7 +33,7 @@ def test_local_wrong_password_rejected(client, db):
 
 def test_ldap_user_creates_shadow_account(client, db):
     with patch("app.api.auth.authenticate_ldap", return_value="operator"):
-        r = client.post("/api/auth/login",
+        r = client.post("/api/v1/auth/login",
                         data={"username": "ldapuser", "password": "ldappass"},
                         headers={"Content-Type": "application/x-www-form-urlencoded"})
     assert r.status_code == 200
@@ -49,7 +49,7 @@ def test_ldap_role_refreshed_on_login(client, db):
                 auth_source="ldap", enabled=True))
     db.commit()
     with patch("app.api.auth.authenticate_ldap", return_value="admin"):
-        r = client.post("/api/auth/login",
+        r = client.post("/api/v1/auth/login",
                         data={"username": "ldapuser", "password": "ldappass"},
                         headers={"Content-Type": "application/x-www-form-urlencoded"})
     assert r.status_code == 200
@@ -64,7 +64,7 @@ def test_ldap_disabled_user_rejected(client, db):
                 auth_source="ldap", enabled=False))
     db.commit()
     with patch("app.api.auth.authenticate_ldap", return_value="operator"):
-        r = client.post("/api/auth/login",
+        r = client.post("/api/v1/auth/login",
                         data={"username": "ldapuser", "password": "ldappass"},
                         headers={"Content-Type": "application/x-www-form-urlencoded"})
     assert r.status_code == 401
@@ -72,7 +72,7 @@ def test_ldap_disabled_user_rejected(client, db):
 
 def test_ldap_failed_auth_rejected(client, db):
     with patch("app.api.auth.authenticate_ldap", return_value=None):
-        r = client.post("/api/auth/login",
+        r = client.post("/api/v1/auth/login",
                         data={"username": "unknown", "password": "bad"},
                         headers={"Content-Type": "application/x-www-form-urlencoded"})
     assert r.status_code == 401
@@ -82,7 +82,7 @@ def test_change_password_rejected_for_ldap_user(client, db):
     ldap_user = User(id=99, username="ldapuser", hashed_password="",
                      role="readonly", auth_source="ldap", enabled=True)
     app.dependency_overrides[get_current_user] = lambda: ldap_user
-    r = client.post("/api/auth/change-password",
+    r = client.post("/api/v1/auth/change-password",
                     json={"current_password": "x", "new_password": "newpass1234"})
     assert r.status_code == 400
     assert "LDAP" in r.json()["detail"]

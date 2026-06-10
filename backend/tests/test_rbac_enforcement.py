@@ -46,7 +46,7 @@ def test_scoped_subnet_list_only_granted(db):
     db.commit()
     client = _client(db, user)
     try:
-        rows = client.get("/api/subnets").json()
+        rows = client.get("/api/v1/subnets").json()
         assert {r["cidr"] for r in rows} == {"10.0.0.0/24"}
     finally:
         app.dependency_overrides.clear()
@@ -57,7 +57,7 @@ def test_scoped_get_ungranted_subnet_403(db):
     other = _subnet(db, "10.9.0.0/24")
     client = _client(db, user)
     try:
-        assert client.get(f"/api/subnets/{other.id}").status_code == 403
+        assert client.get(f"/api/v1/subnets/{other.id}").status_code == 403
     finally:
         app.dependency_overrides.clear()
 
@@ -69,7 +69,7 @@ def test_scoped_view_grant_cannot_write_subnet(db):
     db.commit()
     client = _client(db, user)
     try:
-        r = client.put(f"/api/subnets/{sn.id}", json={"name": "renamed"})
+        r = client.put(f"/api/v1/subnets/{sn.id}", json={"name": "renamed"})
         assert r.status_code == 403
     finally:
         app.dependency_overrides.clear()
@@ -82,7 +82,7 @@ def test_scoped_manage_grant_can_write_subnet(db):
     db.commit()
     client = _client(db, user)
     try:
-        r = client.put(f"/api/subnets/{sn.id}", json={"name": "renamed"})
+        r = client.put(f"/api/v1/subnets/{sn.id}", json={"name": "renamed"})
         assert r.status_code == 200
     finally:
         app.dependency_overrides.clear()
@@ -92,7 +92,7 @@ def test_scoped_cannot_create_subnet(db):
     user = _scoped_user(db)
     client = _client(db, user)
     try:
-        r = client.post("/api/subnets", json={"name": "n", "cidr": "10.5.0.0/24"})
+        r = client.post("/api/v1/subnets", json={"name": "n", "cidr": "10.5.0.0/24"})
         assert r.status_code == 403
     finally:
         app.dependency_overrides.clear()
@@ -108,7 +108,7 @@ def test_scoped_address_list_only_granted_subnet(db):
     db.commit()
     client = _client(db, user)
     try:
-        rows = client.get("/api/addresses").json()["items"]
+        rows = client.get("/api/v1/addresses").json()["items"]
         assert {r["address"] for r in rows} == {"10.0.0.5"}
     finally:
         app.dependency_overrides.clear()
@@ -121,7 +121,7 @@ def test_scoped_address_write_requires_manage(db):
     db.commit()
     client = _client(db, user)
     try:
-        r = client.post("/api/addresses", json={"address": "10.0.0.7", "subnet_id": sn.id})
+        r = client.post("/api/v1/addresses", json={"address": "10.0.0.7", "subnet_id": sn.id})
         assert r.status_code == 403
     finally:
         app.dependency_overrides.clear()
@@ -134,7 +134,7 @@ def test_operator_unaffected(db):
     _subnet(db, "10.0.0.0/24")
     client = _client(db, op_user)
     try:
-        assert len(client.get("/api/subnets").json()) == 1
+        assert len(client.get("/api/v1/subnets").json()) == 1
     finally:
         app.dependency_overrides.clear()
 
@@ -146,7 +146,7 @@ def test_scoped_allocate_requires_manage(db):
     db.commit()
     client = _client(db, user)
     try:
-        r = client.post(f"/api/subnets/{sn.id}/allocate", json={"hostname": "h1"})
+        r = client.post(f"/api/v1/subnets/{sn.id}/allocate", json={"hostname": "h1"})
         assert r.status_code == 403
     finally:
         app.dependency_overrides.clear()
@@ -159,7 +159,7 @@ def test_scoped_allocate_with_manage_succeeds(db):
     db.commit()
     client = _client(db, user)
     try:
-        r = client.post(f"/api/subnets/{sn.id}/allocate", json={"hostname": "h1"})
+        r = client.post(f"/api/v1/subnets/{sn.id}/allocate", json={"hostname": "h1"})
         assert r.status_code in (200, 201)
     finally:
         app.dependency_overrides.clear()

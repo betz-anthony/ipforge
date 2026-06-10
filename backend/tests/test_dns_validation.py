@@ -6,7 +6,7 @@ BASE = {
 
 def _post(client, **overrides):
     body = {**BASE, **overrides}
-    return client.post("/api/dns/zones/example.com/records", json=body)
+    return client.post("/api/v1/dns/zones/example.com/records", json=body)
 
 
 def test_create_record_rejects_injection_in_name(client):

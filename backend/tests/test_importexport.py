@@ -38,7 +38,7 @@ ADDRESS_COLS = ["address", "subnet_cidr", "hostname", "status",
 # ── Export ─────────────────────────────────────────────────────────────────────
 
 def test_export_subnets_empty(client):
-    r = client.get("/api/importexport/subnets.csv")
+    r = client.get("/api/v1/importexport/subnets.csv")
     assert r.status_code == 200
     lines = r.text.strip().splitlines()
     assert lines[0] == ",".join(SUBNET_COLS + ["tags"])
@@ -49,7 +49,7 @@ def test_export_subnets_content(client, db):
     db.add(Subnet(name="net1", cidr="10.0.0.0/24", ip_version=4, vlan_id=10,
                   description="d", notes="n", scan_interval_minutes=5))
     db.commit()
-    r = client.get("/api/importexport/subnets.csv")
+    r = client.get("/api/v1/importexport/subnets.csv")
     assert r.status_code == 200
     reader = csv.DictReader(io.StringIO(r.text))
     rows = list(reader)
@@ -61,7 +61,7 @@ def test_export_subnets_content(client, db):
 
 
 def test_export_addresses_empty(client):
-    r = client.get("/api/importexport/addresses.csv")
+    r = client.get("/api/v1/importexport/addresses.csv")
     assert r.status_code == 200
     lines = r.text.strip().splitlines()
     assert lines[0] == ",".join(ADDRESS_COLS + ["tags"])
@@ -74,7 +74,7 @@ def test_export_addresses_content(client, db):
     db.add(IPAddress(address="10.0.0.5", subnet_id=s.id, hostname="host1",
                      status=AddressStatus.assigned, mac_address="aa:bb:cc:dd:ee:ff"))
     db.commit()
-    r = client.get("/api/importexport/addresses.csv")
+    r = client.get("/api/v1/importexport/addresses.csv")
     assert r.status_code == 200
     reader = csv.DictReader(io.StringIO(r.text))
     rows = list(reader)
@@ -91,7 +91,7 @@ def test_import_subnets_create(client, db):
     data = _csv([{"name": "net1", "cidr": "10.0.0.0/24", "ip_version": "",
                   "vlan_id": "10", "description": "desc", "notes": "",
                   "parent_cidr": "", "scan_interval_minutes": "15"}], SUBNET_COLS)
-    r = client.post("/api/importexport/subnets",
+    r = client.post("/api/v1/importexport/subnets",
                     files={"file": ("subnets.csv", data, "text/csv")})
     assert r.status_code == 200
     body = r.json()
@@ -111,7 +111,7 @@ def test_import_subnets_update(client, db):
     data = _csv([{"name": "new", "cidr": "10.0.0.0/24", "ip_version": "",
                   "vlan_id": "", "description": "", "notes": "",
                   "parent_cidr": "", "scan_interval_minutes": ""}], SUBNET_COLS)
-    r = client.post("/api/importexport/subnets",
+    r = client.post("/api/v1/importexport/subnets",
                     files={"file": ("subnets.csv", data, "text/csv")})
     assert r.status_code == 200
     body = r.json()
@@ -130,7 +130,7 @@ def test_import_subnets_parent_cidr(client, db):
          "vlan_id": "", "description": "", "notes": "",
          "parent_cidr": "10.0.0.0/16", "scan_interval_minutes": ""},
     ], SUBNET_COLS)
-    r = client.post("/api/importexport/subnets",
+    r = client.post("/api/v1/importexport/subnets",
                     files={"file": ("subnets.csv", data, "text/csv")})
     assert r.status_code == 200
     body = r.json()
@@ -144,7 +144,7 @@ def test_import_subnets_missing_parent(client, db):
     data = _csv([{"name": "child", "cidr": "10.0.1.0/24", "ip_version": "",
                   "vlan_id": "", "description": "", "notes": "",
                   "parent_cidr": "10.0.0.0/16", "scan_interval_minutes": ""}], SUBNET_COLS)
-    r = client.post("/api/importexport/subnets",
+    r = client.post("/api/v1/importexport/subnets",
                     files={"file": ("subnets.csv", data, "text/csv")})
     assert r.status_code == 200
     body = r.json()
@@ -156,7 +156,7 @@ def test_import_subnets_invalid_cidr(client, db):
     data = _csv([{"name": "bad", "cidr": "not-a-cidr", "ip_version": "",
                   "vlan_id": "", "description": "", "notes": "",
                   "parent_cidr": "", "scan_interval_minutes": ""}], SUBNET_COLS)
-    r = client.post("/api/importexport/subnets",
+    r = client.post("/api/v1/importexport/subnets",
                     files={"file": ("subnets.csv", data, "text/csv")})
     assert r.status_code == 200
     body = r.json()
@@ -166,7 +166,7 @@ def test_import_subnets_invalid_cidr(client, db):
 
 def test_import_subnets_missing_columns(client):
     data = b"name,description\nfoo,bar\n"
-    r = client.post("/api/importexport/subnets",
+    r = client.post("/api/v1/importexport/subnets",
                     files={"file": ("subnets.csv", data, "text/csv")})
     assert r.status_code == 400
     assert "missing required columns" in r.json()["detail"].lower()
@@ -182,7 +182,7 @@ def test_import_addresses_create(client, db):
                   "hostname": "host1", "status": "assigned",
                   "mac_address": "aa:bb:cc:dd:ee:ff",
                   "description": "", "notes": ""}], ADDRESS_COLS)
-    r = client.post("/api/importexport/addresses",
+    r = client.post("/api/v1/importexport/addresses",
                     files={"file": ("addresses.csv", data, "text/csv")})
     assert r.status_code == 200
     body = r.json()
@@ -202,7 +202,7 @@ def test_import_addresses_update(client, db):
     data = _csv([{"address": "10.0.0.5", "subnet_cidr": "10.0.0.0/24",
                   "hostname": "updated", "status": "reserved",
                   "mac_address": "", "description": "", "notes": ""}], ADDRESS_COLS)
-    r = client.post("/api/importexport/addresses",
+    r = client.post("/api/v1/importexport/addresses",
                     files={"file": ("addresses.csv", data, "text/csv")})
     assert r.status_code == 200
     body = r.json()
@@ -219,7 +219,7 @@ def test_import_addresses_invalid_status(client, db):
     data = _csv([{"address": "10.0.0.5", "subnet_cidr": "10.0.0.0/24",
                   "hostname": "", "status": "bad_status",
                   "mac_address": "", "description": "", "notes": ""}], ADDRESS_COLS)
-    r = client.post("/api/importexport/addresses",
+    r = client.post("/api/v1/importexport/addresses",
                     files={"file": ("addresses.csv", data, "text/csv")})
     assert r.status_code == 200
     body = r.json()
@@ -234,7 +234,7 @@ def test_import_addresses_out_of_subnet(client, db):
     data = _csv([{"address": "192.168.1.1", "subnet_cidr": "10.0.0.0/24",
                   "hostname": "", "status": "",
                   "mac_address": "", "description": "", "notes": ""}], ADDRESS_COLS)
-    r = client.post("/api/importexport/addresses",
+    r = client.post("/api/v1/importexport/addresses",
                     files={"file": ("addresses.csv", data, "text/csv")})
     assert r.status_code == 200
     body = r.json()
@@ -246,7 +246,7 @@ def test_import_addresses_missing_subnet(client, db):
     data = _csv([{"address": "10.0.0.5", "subnet_cidr": "10.0.0.0/24",
                   "hostname": "", "status": "",
                   "mac_address": "", "description": "", "notes": ""}], ADDRESS_COLS)
-    r = client.post("/api/importexport/addresses",
+    r = client.post("/api/v1/importexport/addresses",
                     files={"file": ("addresses.csv", data, "text/csv")})
     assert r.status_code == 200
     body = r.json()
@@ -261,7 +261,7 @@ def test_import_addresses_default_status(client, db):
     data = _csv([{"address": "10.0.0.10", "subnet_cidr": "10.0.0.0/24",
                   "hostname": "", "status": "",
                   "mac_address": "", "description": "", "notes": ""}], ADDRESS_COLS)
-    r = client.post("/api/importexport/addresses",
+    r = client.post("/api/v1/importexport/addresses",
                     files={"file": ("addresses.csv", data, "text/csv")})
     assert r.status_code == 200
     a = db.query(IPAddress).filter_by(address="10.0.0.10").first()

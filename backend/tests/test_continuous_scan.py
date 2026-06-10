@@ -219,32 +219,32 @@ def test_detect_no_event_if_stable_reachable(db):
 
 
 def test_settings_includes_scan_interval(client):
-    r = client.get("/api/settings")
+    r = client.get("/api/v1/settings")
     assert r.status_code == 200
     assert "scan_interval_minutes" in r.json()
     assert r.json()["scan_interval_minutes"] == 30
 
 
 def test_settings_update_scan_interval(client):
-    r = client.put("/api/settings", json={"scan_interval_minutes": 15})
+    r = client.put("/api/v1/settings", json={"scan_interval_minutes": 15})
     assert r.status_code == 200
     assert r.json()["scan_interval_minutes"] == 15
 
-    r2 = client.get("/api/settings")
+    r2 = client.get("/api/v1/settings")
     assert r2.json()["scan_interval_minutes"] == 15
 
 
 def test_subnet_list_includes_scan_interval(client, db):
     db.add(Subnet(name="Net", cidr="10.0.0.0/24", ip_version=4, scan_interval_minutes=15))
     db.commit()
-    r = client.get("/api/subnets")
+    r = client.get("/api/v1/subnets")
     assert r.status_code == 200
     s = r.json()[0]
     assert s["scan_interval_minutes"] == 15
 
 
 def test_subnet_create_with_scan_interval(client):
-    r = client.post("/api/subnets", json={
+    r = client.post("/api/v1/subnets", json={
         "name": "Net", "cidr": "10.0.0.0/24", "ip_version": 4,
         "scan_interval_minutes": 20,
     })
@@ -255,7 +255,7 @@ def test_subnet_create_with_scan_interval(client):
 def test_subnet_update_scan_interval(client, db):
     s = Subnet(name="Net", cidr="10.0.0.0/24", ip_version=4)
     db.add(s); db.commit(); db.refresh(s)
-    r = client.put(f"/api/subnets/{s.id}", json={"scan_interval_minutes": 60})
+    r = client.put(f"/api/v1/subnets/{s.id}", json={"scan_interval_minutes": 60})
     assert r.status_code == 200
     assert r.json()["scan_interval_minutes"] == 60
 
@@ -263,7 +263,7 @@ def test_subnet_update_scan_interval(client, db):
 def test_address_list_includes_last_seen(client, db):
     subnet = _make_subnet(db)
     _make_address(db, subnet.id, "10.0.0.1")
-    r = client.get("/api/addresses")
+    r = client.get("/api/v1/addresses")
     assert r.status_code == 200
     a = r.json()["items"][0]
     assert "last_seen" in a
@@ -281,7 +281,7 @@ def test_scan_history_endpoint_returns_rows(client, db):
     ))
     db.commit()
 
-    r = client.get(f"/api/addresses/{addr.id}/scan-history")
+    r = client.get(f"/api/v1/addresses/{addr.id}/scan-history")
     assert r.status_code == 200
     rows = r.json()
     assert len(rows) == 1
@@ -292,7 +292,7 @@ def test_scan_history_endpoint_returns_rows(client, db):
 def test_scan_history_returns_empty_for_new_address(client, db):
     subnet = _make_subnet(db)
     addr = _make_address(db, subnet.id, "10.0.0.1")
-    r = client.get(f"/api/addresses/{addr.id}/scan-history")
+    r = client.get(f"/api/v1/addresses/{addr.id}/scan-history")
     assert r.status_code == 200
     assert r.json() == []
 
@@ -310,7 +310,7 @@ def _make_alert(db, subnet_id, ip="10.0.0.1", event_type="went_unreachable"):
 def test_list_alerts_returns_unacknowledged(client, db):
     subnet = _make_subnet(db)
     _make_alert(db, subnet.id)
-    r = client.get("/api/scan/alerts")
+    r = client.get("/api/v1/scan/alerts")
     assert r.status_code == 200
     alerts = r.json()
     assert len(alerts) == 1
@@ -323,7 +323,7 @@ def test_list_alerts_excludes_acknowledged_by_default(client, db):
     a = _make_alert(db, subnet.id)
     a.acknowledged = True
     db.commit()
-    r = client.get("/api/scan/alerts")
+    r = client.get("/api/v1/scan/alerts")
     assert r.status_code == 200
     assert r.json() == []
 
@@ -331,7 +331,7 @@ def test_list_alerts_excludes_acknowledged_by_default(client, db):
 def test_acknowledge_alert(client, db):
     subnet = _make_subnet(db)
     alert = _make_alert(db, subnet.id)
-    r = client.put(f"/api/scan/alerts/{alert.id}/acknowledge")
+    r = client.put(f"/api/v1/scan/alerts/{alert.id}/acknowledge")
     assert r.status_code == 200
     assert r.json()["acknowledged"] is True
 
@@ -344,11 +344,11 @@ def test_acknowledge_all_alerts(client, db):
     subnet = _make_subnet(db)
     _make_alert(db, subnet.id, "10.0.0.1")
     _make_alert(db, subnet.id, "10.0.0.2")
-    r = client.post("/api/scan/alerts/acknowledge-all")
+    r = client.post("/api/v1/scan/alerts/acknowledge-all")
     assert r.status_code == 200
     assert r.json()["count"] == 2
 
-    r2 = client.get("/api/scan/alerts")
+    r2 = client.get("/api/v1/scan/alerts")
     assert r2.json() == []
 
 

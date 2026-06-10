@@ -132,7 +132,7 @@ def _alloc_subnet(db, cidr="10.0.1.0/24"):
 
 def test_allocation_register_ptr_requires_register_dns(client, db):
     s = _alloc_subnet(db)
-    r = client.post(f"/api/subnets/{s.id}/allocate", json={
+    r = client.post(f"/api/v1/subnets/{s.id}/allocate", json={
         "hostname": "web01",
         "register_dns": False,
         "register_ptr": True,
@@ -157,7 +157,7 @@ def test_allocation_register_ptr_with_pihole_returns_422(client, db):
     fake = FakePihole()
     with patch("app.api.allocation.get_dns_providers", return_value=[fake]), \
          patch("app.api.allocation.get_dhcp_providers", return_value=[]):
-        r = client.post(f"/api/subnets/{s.id}/allocate", json={
+        r = client.post(f"/api/v1/subnets/{s.id}/allocate", json={
             "hostname": "web02",
             "register_dns": True,
             "register_ptr": True,
@@ -177,7 +177,7 @@ def test_allocation_register_ptr_no_reverse_zone_rolls_back_a(client, db):
 
     with patch("app.api.allocation.get_dns_providers", return_value=[mock_prov]), \
          patch("app.api.allocation.get_dhcp_providers", return_value=[]):
-        r = client.post(f"/api/subnets/{s.id}/allocate", json={
+        r = client.post(f"/api/v1/subnets/{s.id}/allocate", json={
             "hostname": "web03",
             "register_dns": True,
             "register_ptr": True,
@@ -201,7 +201,7 @@ def test_allocation_register_ptr_success_sets_ptr_zone(client, db):
 
     with patch("app.api.allocation.get_dns_providers", return_value=[mock_prov]), \
          patch("app.api.allocation.get_dhcp_providers", return_value=[]):
-        r = client.post(f"/api/subnets/{s.id}/allocate", json={
+        r = client.post(f"/api/v1/subnets/{s.id}/allocate", json={
             "hostname": "web04",
             "register_dns": True,
             "register_ptr": True,
@@ -236,7 +236,7 @@ def test_allocation_register_ptr_failure_rolls_back_a(client, db):
 
     with patch("app.api.allocation.get_dns_providers", return_value=[mock_prov]), \
          patch("app.api.allocation.get_dhcp_providers", return_value=[]):
-        r = client.post(f"/api/subnets/{s.id}/allocate", json={
+        r = client.post(f"/api/v1/subnets/{s.id}/allocate", json={
             "hostname": "web05",
             "register_dns": True,
             "register_ptr": True,
@@ -259,7 +259,7 @@ def test_allocation_register_ptr_get_zones_failure_rolls_back_a(client, db):
 
     with patch("app.api.allocation.get_dns_providers", return_value=[mock_prov]), \
          patch("app.api.allocation.get_dhcp_providers", return_value=[]):
-        r = client.post(f"/api/subnets/{s.id}/allocate", json={
+        r = client.post(f"/api/v1/subnets/{s.id}/allocate", json={
             "hostname": "web06",
             "register_dns": True,
             "register_ptr": True,
@@ -294,7 +294,7 @@ def test_dns_create_record_register_ptr_creates_both(client, db):
     mock_prov.add_record = MagicMock()
 
     with patch("app.api.dns.get_dns_providers", return_value=[mock_prov]):
-        r = client.post("/api/dns/zones/example.com/records", json={
+        r = client.post("/api/v1/dns/zones/example.com/records", json={
             "name": "web01", "record_type": "A", "value": "10.0.1.5",
             "zone": "example.com", "ttl": 3600, "source": "bind01",
             "register_ptr": True,
@@ -324,7 +324,7 @@ def test_dns_create_record_register_ptr_pihole_skips_ptr(client, db):
 
     fake = FakePihole()
     with patch("app.api.dns.get_dns_providers", return_value=[fake]):
-        r = client.post("/api/dns/zones/example.com/records", json={
+        r = client.post("/api/v1/dns/zones/example.com/records", json={
             "name": "web01", "record_type": "A", "value": "10.0.1.5",
             "zone": "example.com", "ttl": 3600, "source": "pihole01",
             "register_ptr": True,
@@ -341,7 +341,7 @@ def test_dns_create_record_register_ptr_no_reverse_zone_skips_ptr(client, db):
     mock_prov.delete_record = MagicMock()
 
     with patch("app.api.dns.get_dns_providers", return_value=[mock_prov]):
-        r = client.post("/api/dns/zones/example.com/records", json={
+        r = client.post("/api/v1/dns/zones/example.com/records", json={
             "name": "web01", "record_type": "A", "value": "10.0.1.5",
             "zone": "example.com", "ttl": 3600, "source": "bind01",
             "register_ptr": True,
@@ -370,7 +370,7 @@ def test_dns_create_record_register_ptr_ptr_fail_keeps_a(client, db):
     mock_prov.delete_record = MagicMock()
 
     with patch("app.api.dns.get_dns_providers", return_value=[mock_prov]):
-        r = client.post("/api/dns/zones/example.com/records", json={
+        r = client.post("/api/v1/dns/zones/example.com/records", json={
             "name": "web01", "record_type": "A", "value": "10.0.1.5",
             "zone": "example.com", "ttl": 3600, "source": "bind01",
             "register_ptr": True,
@@ -387,7 +387,7 @@ def test_dns_delete_record_delete_ptr_deletes_both(client, db):
     mock_prov.delete_record = MagicMock()
 
     with patch("app.api.dns.get_dns_providers", return_value=[mock_prov]):
-        r = client.request("DELETE", "/api/dns/zones/example.com/records", json={
+        r = client.request("DELETE", "/api/v1/dns/zones/example.com/records", json={
             "name": "web01", "record_type": "A", "value": "10.0.1.5",
             "zone": "example.com", "ttl": 3600, "source": "bind01",
             "delete_ptr": True,
@@ -406,7 +406,7 @@ def test_dns_delete_record_delete_ptr_no_reverse_zone_skips_ptr(client, db):
     mock_prov.delete_record = MagicMock()
 
     with patch("app.api.dns.get_dns_providers", return_value=[mock_prov]):
-        r = client.request("DELETE", "/api/dns/zones/example.com/records", json={
+        r = client.request("DELETE", "/api/v1/dns/zones/example.com/records", json={
             "name": "web01", "record_type": "A", "value": "10.0.1.5",
             "zone": "example.com", "ttl": 3600, "source": "bind01",
             "delete_ptr": True,
@@ -433,7 +433,7 @@ def test_dns_delete_record_ptr_fail_keeps_a_deleted(client, db):
     mock_prov.add_record = MagicMock()
 
     with patch("app.api.dns.get_dns_providers", return_value=[mock_prov]):
-        r = client.request("DELETE", "/api/dns/zones/example.com/records", json={
+        r = client.request("DELETE", "/api/v1/dns/zones/example.com/records", json={
             "name": "web01", "record_type": "A", "value": "10.0.1.5",
             "zone": "example.com", "ttl": 3600, "source": "bind01",
             "delete_ptr": True,
@@ -452,7 +452,7 @@ def test_dns_create_record_commit_failure_undoes_provider(client, db, monkeypatc
     monkeypatch.setattr(db, "commit", MagicMock(side_effect=Exception("commit boom")))
 
     with patch("app.api.dns.get_dns_providers", return_value=[mock_prov]):
-        r = client.post("/api/dns/zones/example.com/records", json={
+        r = client.post("/api/v1/dns/zones/example.com/records", json={
             "name": "web01", "record_type": "A", "value": "10.0.1.5",
             "zone": "example.com", "ttl": 3600, "source": "bind01",
         })
@@ -469,7 +469,7 @@ def test_dns_delete_record_commit_failure_undoes_provider(client, db, monkeypatc
     monkeypatch.setattr(db, "commit", MagicMock(side_effect=Exception("commit boom")))
 
     with patch("app.api.dns.get_dns_providers", return_value=[mock_prov]):
-        r = client.request("DELETE", "/api/dns/zones/example.com/records", json={
+        r = client.request("DELETE", "/api/v1/dns/zones/example.com/records", json={
             "name": "web01", "record_type": "A", "value": "10.0.1.5",
             "zone": "example.com", "ttl": 3600, "source": "bind01",
         })
@@ -483,7 +483,7 @@ def test_delete_preview_includes_ptr_when_ptr_zone_set(client, db):
     a = _ip(db, s, address="10.0.1.2", hostname="web01",
             dns_provider="bind01", dns_zone="example.com",
             ptr_zone="1.0.10.in-addr.arpa")
-    r = client.get(f"/api/addresses/{a.id}/delete-preview")
+    r = client.get(f"/api/v1/addresses/{a.id}/delete-preview")
     assert r.status_code == 200
     items = r.json()["items"]
     ptr_items = [i for i in items if i.get("record_type") == "PTR"]
@@ -499,7 +499,7 @@ def test_delete_preview_no_ptr_item_when_ptr_zone_null(client, db):
     s = _subnet(db)
     a = _ip(db, s, address="10.0.1.2", hostname="web01",
             dns_provider="bind01", dns_zone="example.com")
-    r = client.get(f"/api/addresses/{a.id}/delete-preview")
+    r = client.get(f"/api/v1/addresses/{a.id}/delete-preview")
     assert r.status_code == 200
     items = r.json()["items"]
     ptr_items = [i for i in items if i.get("record_type") == "PTR"]
@@ -513,7 +513,7 @@ def test_dns_create_provider_error_returns_envelope(client, db):
     prov.supports_ptr = True
     prov.add_record = MagicMock(side_effect=Exception("WinRMTransportError: 401 Unauthorized"))
     with patch("app.api.dns.get_dns_providers", return_value=[prov]):
-        r = client.post("/api/dns/zones/example.com/records", json={
+        r = client.post("/api/v1/dns/zones/example.com/records", json={
             "name": "web01", "record_type": "A", "value": "10.0.1.5",
             "zone": "example.com", "ttl": 3600, "source": "msdns"})
     assert r.status_code == 502

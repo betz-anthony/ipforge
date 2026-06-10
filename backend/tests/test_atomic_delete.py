@@ -41,7 +41,7 @@ def test_address_read_schema_exposes_provider_fields(client, db):
     s = _subnet(db)
     _ip(db, s, dns_provider="bind01", dns_zone="example.com",
         dhcp_provider="pihole", dhcp_scope_id="pihole")
-    r = client.get("/api/addresses")
+    r = client.get("/api/v1/addresses")
     assert r.status_code == 200
     row = next(x for x in r.json()["items"] if x["address"] == "10.1.0.2")
     assert row["dns_provider"] == "bind01"
@@ -56,7 +56,7 @@ def test_allocation_sets_dns_provider(client, db):
     mock_dns.source = "bind01"
     mock_dns.add_record = MagicMock()
     with patch("app.api.allocation.get_dns_providers", return_value=[mock_dns]):
-        r = client.post(f"/api/subnets/{s.id}/allocate", json={
+        r = client.post(f"/api/v1/subnets/{s.id}/allocate", json={
             "hostname": "web01",
             "register_dns": True,
             "dns_zone": "example.com",
@@ -77,7 +77,7 @@ def test_allocation_sets_dhcp_provider(client, db):
                   end_range="10.1.0.254", description="", active=True),
     ])
     with patch("app.api.allocation.get_dhcp_providers", return_value=[mock_dhcp]):
-        r = client.post(f"/api/subnets/{s.id}/allocate", json={
+        r = client.post(f"/api/v1/subnets/{s.id}/allocate", json={
             "hostname": "web02",
             "register_dhcp": True,
             "mac_address": "aa:bb:cc:dd:ee:ff",
@@ -142,7 +142,7 @@ def test_delete_preview_returns_stored_fields(client, db):
         dns_provider="bind01", dns_zone="example.com",
         dhcp_provider="pihole", dhcp_scope_id="lan")
     a = db.query(IPAddress).filter_by(address="10.5.0.2").first()
-    r = client.get(f"/api/addresses/{a.id}/delete-preview")
+    r = client.get(f"/api/v1/addresses/{a.id}/delete-preview")
     assert r.status_code == 200
     body = r.json()
     assert body["address"] == "10.5.0.2"
@@ -165,7 +165,7 @@ def test_delete_preview_returns_cache_hits(client, db):
         name="web02", source="msdhcp", synced_at=_utcnow(),
     ))
     db.commit()
-    r = client.get(f"/api/addresses/{a.id}/delete-preview")
+    r = client.get(f"/api/v1/addresses/{a.id}/delete-preview")
     assert r.status_code == 200
     items = r.json()["items"]
     assert len(items) == 2
@@ -184,7 +184,7 @@ def test_delete_preview_deduplicates_stored_and_cache(client, db):
         zone="example.com", ttl=300, source="bind01", synced_at=_utcnow(),
     ))
     db.commit()
-    r = client.get(f"/api/addresses/{a.id}/delete-preview")
+    r = client.get(f"/api/v1/addresses/{a.id}/delete-preview")
     assert r.status_code == 200
     dns_items = [i for i in r.json()["items"] if i["type"] == "dns"]
     assert len(dns_items) == 1
@@ -193,7 +193,7 @@ def test_delete_preview_deduplicates_stored_and_cache(client, db):
 def test_delete_with_no_cleanup_removes_db_row(client, db):
     s = _subnet(db, "10.8.0.0/24")
     a = _ip(db, s, "10.8.0.2")
-    r = client.delete(f"/api/addresses/{a.id}")
+    r = client.delete(f"/api/v1/addresses/{a.id}")
     assert r.status_code == 204
     assert db.get(IPAddress, a.id) is None
 
@@ -213,7 +213,7 @@ def test_delete_with_cleanup_keys_calls_providers(client, db):
     dhcp_key = f"dhcp-pihole-lan-10.9.0.2"
     with patch("app.api.addresses.get_dns_providers", return_value=[mock_dns]), \
          patch("app.api.addresses.get_dhcp_providers", return_value=[mock_dhcp]):
-        r = client.request("DELETE", f"/api/addresses/{a.id}",
+        r = client.request("DELETE", f"/api/v1/addresses/{a.id}",
                            json={"cleanup_keys": [dns_key, dhcp_key]})
     assert r.status_code == 204
     mock_dns.delete_record.assert_called_once()
@@ -233,7 +233,7 @@ def test_delete_rollback_on_provider_failure(client, db):
     dns_key = f"dns-bind01-example.com-web05-A-10.10.0.2"
     with patch("app.api.addresses.get_dns_providers", return_value=[mock_dns]), \
          patch("app.api.addresses.get_dhcp_providers", return_value=[]):
-        r = client.request("DELETE", f"/api/addresses/{addr_id}",
+        r = client.request("DELETE", f"/api/v1/addresses/{addr_id}",
                            json={"cleanup_keys": [dns_key]})
     assert r.status_code == 502
     assert db.get(IPAddress, addr_id) is not None  # DB row intact
@@ -242,7 +242,7 @@ def test_delete_rollback_on_provider_failure(client, db):
 def test_subnet_delete_blocked_when_has_addresses(client, db):
     s = _subnet(db, "10.11.0.0/24")
     _ip(db, s, "10.11.0.2")
-    r = client.delete(f"/api/subnets/{s.id}")
+    r = client.delete(f"/api/v1/subnets/{s.id}")
     assert r.status_code == 409
     assert "1 addresses remain" in r.json()["detail"]
     assert db.get(Subnet, s.id) is not None
@@ -250,6 +250,6 @@ def test_subnet_delete_blocked_when_has_addresses(client, db):
 
 def test_subnet_delete_succeeds_when_empty(client, db):
     s = _subnet(db, "10.12.0.0/24")
-    r = client.delete(f"/api/subnets/{s.id}")
+    r = client.delete(f"/api/v1/subnets/{s.id}")
     assert r.status_code == 204
     assert db.get(Subnet, s.id) is None

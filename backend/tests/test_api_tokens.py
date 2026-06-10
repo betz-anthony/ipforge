@@ -108,12 +108,12 @@ def test_valid_api_token_authenticates(noauth_client, db):
     user = _make_user(db)
     value = generate_api_token()
     _make_token(db, user, value)
-    r = noauth_client.get("/api/subnets", headers={"Authorization": f"Bearer {value}"})
+    r = noauth_client.get("/api/v1/subnets", headers={"Authorization": f"Bearer {value}"})
     assert r.status_code == 200
 
 
 def test_unknown_api_token_rejected(noauth_client, db):
-    r = noauth_client.get("/api/subnets",
+    r = noauth_client.get("/api/v1/subnets",
                           headers={"Authorization": "Bearer ipfg_does_not_exist"})
     assert r.status_code == 401
 
@@ -122,7 +122,7 @@ def test_expired_api_token_rejected(noauth_client, db):
     user = _make_user(db)
     value = generate_api_token()
     _make_token(db, user, value, expires_at=utcnow() - timedelta(seconds=1))
-    r = noauth_client.get("/api/subnets", headers={"Authorization": f"Bearer {value}"})
+    r = noauth_client.get("/api/v1/subnets", headers={"Authorization": f"Bearer {value}"})
     assert r.status_code == 401
 
 
@@ -130,7 +130,7 @@ def test_api_token_for_disabled_user_rejected(noauth_client, db):
     user = _make_user(db, username="off", enabled=False)
     value = generate_api_token()
     _make_token(db, user, value)
-    r = noauth_client.get("/api/subnets", headers={"Authorization": f"Bearer {value}"})
+    r = noauth_client.get("/api/v1/subnets", headers={"Authorization": f"Bearer {value}"})
     assert r.status_code == 401
 
 
@@ -138,7 +138,7 @@ def test_read_only_token_allows_get(noauth_client, db):
     user = _make_user(db)
     value = generate_api_token()
     _make_token(db, user, value, read_only=True)
-    r = noauth_client.get("/api/subnets", headers={"Authorization": f"Bearer {value}"})
+    r = noauth_client.get("/api/v1/subnets", headers={"Authorization": f"Bearer {value}"})
     assert r.status_code == 200
 
 
@@ -147,7 +147,7 @@ def test_read_only_token_blocks_write(noauth_client, db):
     value = generate_api_token()
     _make_token(db, user, value, read_only=True)
     r = noauth_client.post(
-        "/api/subnets",
+        "/api/v1/subnets",
         json={"name": "ro-test", "cidr": "10.9.0.0/24"},
         headers={"Authorization": f"Bearer {value}"},
     )
@@ -159,13 +159,13 @@ def test_valid_api_token_writes_last_used_at(noauth_client, db):
     value = generate_api_token()
     row = _make_token(db, user, value)
     assert row.last_used_at is None
-    noauth_client.get("/api/subnets", headers={"Authorization": f"Bearer {value}"})
+    noauth_client.get("/api/v1/subnets", headers={"Authorization": f"Bearer {value}"})
     db.refresh(row)
     assert row.last_used_at is not None
 
 
 def test_create_token_returns_value_once(client, db):
-    r = client.post("/api/auth/tokens", json={"name": "ci-pipeline"})
+    r = client.post("/api/v1/auth/tokens", json={"name": "ci-pipeline"})
     assert r.status_code == 201
     body = r.json()
     assert body["token"].startswith("ipfg_")
@@ -176,8 +176,8 @@ def test_create_token_returns_value_once(client, db):
 
 
 def test_list_tokens_excludes_value(client, db):
-    client.post("/api/auth/tokens", json={"name": "one"})
-    r = client.get("/api/auth/tokens")
+    client.post("/api/v1/auth/tokens", json={"name": "one"})
+    r = client.get("/api/v1/auth/tokens")
     assert r.status_code == 200
     items = r.json()
     assert len(items) == 1
@@ -186,8 +186,8 @@ def test_list_tokens_excludes_value(client, db):
 
 
 def test_delete_own_token(client, db):
-    created = client.post("/api/auth/tokens", json={"name": "tmp"}).json()
-    r = client.delete(f"/api/auth/tokens/{created['id']}")
+    created = client.post("/api/v1/auth/tokens", json={"name": "tmp"}).json()
+    r = client.delete(f"/api/v1/auth/tokens/{created['id']}")
     assert r.status_code == 204
     assert db.query(ApiToken).filter_by(id=created["id"]).first() is None
 
@@ -196,14 +196,14 @@ def test_cannot_delete_other_users_token(client, db):
     other = _make_user(db, username="other")
     value = generate_api_token()
     row = _make_token(db, other, value)
-    r = client.delete(f"/api/auth/tokens/{row.id}")
+    r = client.delete(f"/api/v1/auth/tokens/{row.id}")
     assert r.status_code == 404
     assert db.query(ApiToken).filter_by(id=row.id).first() is not None
 
 
 def test_create_token_writes_audit(client, db):
     from app.models.audit_log import AuditLog
-    client.post("/api/auth/tokens", json={"name": "ci-pipeline"})
+    client.post("/api/v1/auth/tokens", json={"name": "ci-pipeline"})
     entry = db.query(AuditLog).filter_by(action="create", resource_type="api_token").first()
     assert entry is not None
     assert entry.summary == "ci-pipeline"
@@ -211,8 +211,8 @@ def test_create_token_writes_audit(client, db):
 
 def test_delete_token_writes_audit(client, db):
     from app.models.audit_log import AuditLog
-    created = client.post("/api/auth/tokens", json={"name": "tmp"}).json()
-    client.delete(f"/api/auth/tokens/{created['id']}")
+    created = client.post("/api/v1/auth/tokens", json={"name": "tmp"}).json()
+    client.delete(f"/api/v1/auth/tokens/{created['id']}")
     entry = db.query(AuditLog).filter_by(action="delete", resource_type="api_token").first()
     assert entry is not None
 
@@ -221,12 +221,12 @@ def test_cannot_list_other_users_tokens(client, db):
     other = _make_user(db, username="other2")
     value = generate_api_token()
     _make_token(db, other, value)
-    r = client.get("/api/auth/tokens")
+    r = client.get("/api/v1/auth/tokens")
     assert r.status_code == 200
     assert r.json() == []   # the mock user owns no tokens; other user's token is not visible
 
 
 def test_create_token_rejects_past_expiry(client, db):
     past = (utcnow() - timedelta(days=1)).isoformat()
-    r = client.post("/api/auth/tokens", json={"name": "x", "expires_at": past})
+    r = client.post("/api/v1/auth/tokens", json={"name": "x", "expires_at": past})
     assert r.status_code == 422

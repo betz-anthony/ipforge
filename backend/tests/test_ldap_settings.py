@@ -1,5 +1,5 @@
 def test_get_ldap_settings_returns_defaults(client):
-    r = client.get("/api/settings/ldap")
+    r = client.get("/api/v1/settings/ldap")
     assert r.status_code == 200
     data = r.json()
     assert data["ldap_enabled"] is False
@@ -7,7 +7,7 @@ def test_get_ldap_settings_returns_defaults(client):
     assert data["ldap_default_role"] == "readonly"
 
 def test_update_ldap_settings(client):
-    r = client.put("/api/settings/ldap", json={
+    r = client.put("/api/v1/settings/ldap", json={
         "ldap_enabled": True,
         "ldap_host": "ldap.example.com",
         "ldap_port": 636,
@@ -28,8 +28,8 @@ def test_update_ldap_settings(client):
     assert data["ldap_port"] == 636
 
 def test_ldap_password_not_returned(client):
-    client.put("/api/settings/ldap", json={"ldap_bind_password": "secret"})
-    r = client.get("/api/settings/ldap")
+    client.put("/api/v1/settings/ldap", json={"ldap_bind_password": "secret"})
+    r = client.get("/api/v1/settings/ldap")
     assert r.status_code == 200
     data = r.json()
     assert "ldap_bind_password" not in data or data["ldap_bind_password"] == ""

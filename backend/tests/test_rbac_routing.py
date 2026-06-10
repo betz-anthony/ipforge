@@ -21,8 +21,8 @@ def _scoped_client(db):
     return TestClient(app)
 
 
-@pytest.mark.parametrize("path", ["/api/dns/zones", "/api/dhcp/scopes",
-                                  "/api/audit", "/api/search?q=x"])
+@pytest.mark.parametrize("path", ["/api/v1/dns/zones", "/api/v1/dhcp/scopes",
+                                  "/api/v1/audit", "/api/v1/search?q=x"])
 def test_scoped_user_blocked_from_global_routers(db, path):
     client = _scoped_client(db)
     try:
@@ -35,7 +35,7 @@ def test_scoped_user_blocked_from_global_routers(db, path):
 def test_scoped_user_reaches_subnets(db):
     client = _scoped_client(db)
     try:
-        r = client.get("/api/subnets")
+        r = client.get("/api/v1/subnets")
         assert r.status_code == 200   # reachable; contents filtered by a later task
     finally:
         app.dependency_overrides.clear()

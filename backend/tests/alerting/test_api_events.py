@@ -11,7 +11,7 @@ def test_list_events_filters(client_gr, db):
                       resolved_at=utcnow(), payload={}, deliveries=[]),
     ])
     db.commit()
-    r = client_gr.get("/api/alerts/events?state=firing")
+    r = client_gr.get("/api/v1/alerts/events?state=firing")
     assert r.status_code == 200
     body = r.json()
     assert all(e["state"] == "firing" for e in body)
@@ -23,7 +23,7 @@ def test_list_events_all(client_gr, db):
     db.add(AlertingEvent(rule_id=None, resource_key="x", state="firing",
                          first_fired_at=utcnow(), last_fired_at=utcnow(), payload={}, deliveries=[]))
     db.commit()
-    r = client_gr.get("/api/alerts/events")
+    r = client_gr.get("/api/v1/alerts/events")
     assert r.status_code == 200
 
 
@@ -33,7 +33,7 @@ def test_ack_resolves_event(client_operator, db):
                       first_fired_at=utcnow(), last_fired_at=utcnow(), payload={}, deliveries=[])
     db.add(e); db.commit()
     eid = e.id
-    r = client_operator.post(f"/api/alerts/events/{eid}/ack")
+    r = client_operator.post(f"/api/v1/alerts/events/{eid}/ack")
     assert r.status_code == 200, r.text
     e2 = db.get(AlertingEvent, eid)
     db.refresh(e2)
@@ -41,7 +41,7 @@ def test_ack_resolves_event(client_operator, db):
 
 
 def test_scoped_user_403_on_events(client_scoped):
-    r = client_scoped.get("/api/alerts/events")
+    r = client_scoped.get("/api/v1/alerts/events")
     assert r.status_code == 403
 
 
@@ -51,5 +51,5 @@ def test_readonly_can_list_but_not_ack(client_gr, db):
                       first_fired_at=utcnow(), last_fired_at=utcnow(), payload={}, deliveries=[])
     db.add(e); db.commit()
     eid = e.id
-    assert client_gr.get("/api/alerts/events").status_code == 200
-    assert client_gr.post(f"/api/alerts/events/{eid}/ack").status_code == 403
+    assert client_gr.get("/api/v1/alerts/events").status_code == 200
+    assert client_gr.post(f"/api/v1/alerts/events/{eid}/ack").status_code == 403

@@ -11,7 +11,7 @@ def reset_util_settings():
 
 
 def test_settings_returns_utilization_defaults(client):
-    r = client.get("/api/settings")
+    r = client.get("/api/v1/settings")
     assert r.status_code == 200
     data = r.json()
     assert data["util_warn_threshold"] == 80
@@ -20,7 +20,7 @@ def test_settings_returns_utilization_defaults(client):
 
 
 def test_settings_update_utilization_thresholds(client):
-    r = client.put("/api/settings", json={
+    r = client.put("/api/v1/settings", json={
         "util_warn_threshold": 70,
         "util_critical_threshold": 90,
         "util_dashboard_top_n": 10,
