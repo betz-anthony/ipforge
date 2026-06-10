@@ -6,22 +6,22 @@ from app.models.cache import CachedDHCPLease, CachedDNSRecord
 
 
 def test_search_requires_min_2_chars(client):
-    r = client.get("/api/search?q=a")
+    r = client.get("/api/v1/search?q=a")
     assert r.status_code == 422
 
 
 def test_search_missing_q(client):
-    r = client.get("/api/search")
+    r = client.get("/api/v1/search")
     assert r.status_code == 422
 
 
 def test_search_allows_2_char_query(client):
-    r = client.get("/api/search?q=ab")
+    r = client.get("/api/v1/search?q=ab")
     assert r.status_code == 200
 
 
 def test_search_returns_empty_on_no_match(client):
-    r = client.get("/api/search?q=zzz")
+    r = client.get("/api/v1/search?q=zzz")
     assert r.status_code == 200
     data = r.json()
     assert data["subnets"] == []
@@ -33,7 +33,7 @@ def test_search_returns_empty_on_no_match(client):
 def test_search_matches_subnet_name(client, db):
     db.add(Subnet(name="CoreNet", cidr="10.0.0.0/24", ip_version=4))
     db.commit()
-    r = client.get("/api/search?q=core")
+    r = client.get("/api/v1/search?q=core")
     assert r.status_code == 200
     assert any(s["name"] == "CoreNet" for s in r.json()["subnets"])
 
@@ -41,7 +41,7 @@ def test_search_matches_subnet_name(client, db):
 def test_search_matches_subnet_cidr(client, db):
     db.add(Subnet(name="Net", cidr="192.168.50.0/24", ip_version=4))
     db.commit()
-    r = client.get("/api/search?q=192.168.50")
+    r = client.get("/api/v1/search?q=192.168.50")
     assert r.status_code == 200
     assert any(s["cidr"] == "192.168.50.0/24" for s in r.json()["subnets"])
 
@@ -52,7 +52,7 @@ def test_search_matches_address_hostname(client, db):
     db.flush()
     db.add(IPAddress(address="10.0.0.5", subnet_id=s.id, hostname="webserver01", status=AddressStatus.assigned))
     db.commit()
-    r = client.get("/api/search?q=webserver")
+    r = client.get("/api/v1/search?q=webserver")
     assert r.status_code == 200
     assert any(a["hostname"] == "webserver01" for a in r.json()["addresses"])
 
@@ -63,7 +63,7 @@ def test_search_matches_address_ip(client, db):
     db.flush()
     db.add(IPAddress(address="10.0.0.42", subnet_id=s.id, status=AddressStatus.assigned))
     db.commit()
-    r = client.get("/api/search?q=10.0.0.42")
+    r = client.get("/api/v1/search?q=10.0.0.42")
     assert r.status_code == 200
     assert any(a["address"] == "10.0.0.42" for a in r.json()["addresses"])
 
@@ -75,7 +75,7 @@ def test_search_matches_dhcp_lease(client, db):
         synced_at=datetime.utcnow(),
     ))
     db.commit()
-    r = client.get("/api/search?q=printer")
+    r = client.get("/api/v1/search?q=printer")
     assert r.status_code == 200
     assert any(l["name"] == "printer01" for l in r.json()["leases"])
 
@@ -86,7 +86,7 @@ def test_search_matches_dns_record(client, db):
         zone="example.com", source="msdns", synced_at=datetime.utcnow(),
     ))
     db.commit()
-    r = client.get("/api/search?q=mail.example")
+    r = client.get("/api/v1/search?q=mail.example")
     assert r.status_code == 200
     assert any(rec["name"] == "mail.example.com" for rec in r.json()["records"])
 
@@ -94,7 +94,7 @@ def test_search_matches_dns_record(client, db):
 def test_search_is_case_insensitive(client, db):
     db.add(Subnet(name="Management", cidr="10.1.0.0/24", ip_version=4))
     db.commit()
-    r = client.get("/api/search?q=MANAGEMENT")
+    r = client.get("/api/v1/search?q=MANAGEMENT")
     assert r.status_code == 200
     assert any(s["name"] == "Management" for s in r.json()["subnets"])
 
@@ -103,6 +103,6 @@ def test_search_result_limit(client, db):
     for i in range(60):
         db.add(Subnet(name=f"Net{i:03d}", cidr=f"10.{i}.0.0/24", ip_version=4))
     db.commit()
-    r = client.get("/api/search?q=Net")
+    r = client.get("/api/v1/search?q=Net")
     assert r.status_code == 200
     assert len(r.json()["subnets"]) <= 50

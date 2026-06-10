@@ -380,20 +380,20 @@ def test_trigger_scan_returns_triggered(client, db):
 
     with patch("app.api.scan.threading.Thread") as mock_thread:
         mock_thread.return_value.start = lambda: None
-        r = client.post(f"/api/scan/subnets/{subnet.id}")
+        r = client.post(f"/api/v1/scan/subnets/{subnet.id}")
 
     assert r.status_code == 200
     assert r.json()["status"] == "triggered"
 
 
 def test_trigger_scan_404_for_missing_subnet(client):
-    r = client.post("/api/scan/subnets/9999")
+    r = client.post("/api/v1/scan/subnets/9999")
     assert r.status_code == 404
 
 
 def test_get_scan_status_never(client, db):
     subnet = _make_subnet(db, cidr="10.0.0.0/24")
-    r = client.get(f"/api/scan/subnets/{subnet.id}")
+    r = client.get(f"/api/v1/scan/subnets/{subnet.id}")
     assert r.status_code == 200
     assert r.json()["status"] == "never"
     assert r.json()["results"] == []
@@ -408,7 +408,7 @@ def test_get_scan_status_with_results(client, db):
     db.add(SyncStatus(key=f"scan:{subnet.id}", synced_at=now, status="ok"))
     db.commit()
 
-    r = client.get(f"/api/scan/subnets/{subnet.id}")
+    r = client.get(f"/api/v1/scan/subnets/{subnet.id}")
     assert r.status_code == 200
     data = r.json()
     assert data["status"] == "ok"

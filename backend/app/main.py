@@ -156,7 +156,7 @@ app.add_middleware(
 from app.core.deps import get_current_user, require_admin, require_operator, require_global_read  # noqa: E402
 
 # Public
-app.include_router(auth_router.router, prefix="/api/auth", tags=["auth"])
+app.include_router(auth_router.router, prefix="/api/v1/auth", tags=["auth"])
 app.include_router(metrics_router.router, tags=["ops"])
 
 # Read-only+ (any authenticated user, including scoped)
@@ -164,50 +164,50 @@ _ro = [Depends(get_current_user)]
 # Global-read (admin/operator/readonly only — scoped users are 403'd)
 _gr = [Depends(require_global_read)]
 # ro_router must be registered before addresses.router to avoid /{id} capture on /stale
-app.include_router(reclaim_router.ro_router, prefix="/api/addresses", tags=["reclaim"], dependencies=_gr)
-app.include_router(subnets.router,       prefix="/api/subnets",    tags=["subnets"],    dependencies=_ro)
-app.include_router(addresses.router,     prefix="/api/addresses",  tags=["addresses"],  dependencies=_ro)
-app.include_router(dns.router,           prefix="/api/dns",        tags=["dns"],        dependencies=_gr)
-app.include_router(dhcp.router,          prefix="/api/dhcp",       tags=["dhcp"],       dependencies=_gr)
-app.include_router(search_router.router, prefix="/api/search",     tags=["search"],     dependencies=_gr)
-app.include_router(stats_router.router,  prefix="/api/stats",      tags=["stats"],      dependencies=_gr)
-app.include_router(tools_router.router,  prefix="/api/tools",      tags=["tools"],      dependencies=_gr)
-app.include_router(audit_router.router,  prefix="/api/audit",      tags=["audit"],      dependencies=_gr)
-app.include_router(importexport_router.router, prefix="/api/importexport", tags=["importexport"], dependencies=_gr)
+app.include_router(reclaim_router.ro_router, prefix="/api/v1/addresses", tags=["reclaim"], dependencies=_gr)
+app.include_router(subnets.router,       prefix="/api/v1/subnets",    tags=["subnets"],    dependencies=_ro)
+app.include_router(addresses.router,     prefix="/api/v1/addresses",  tags=["addresses"],  dependencies=_ro)
+app.include_router(dns.router,           prefix="/api/v1/dns",        tags=["dns"],        dependencies=_gr)
+app.include_router(dhcp.router,          prefix="/api/v1/dhcp",       tags=["dhcp"],       dependencies=_gr)
+app.include_router(search_router.router, prefix="/api/v1/search",     tags=["search"],     dependencies=_gr)
+app.include_router(stats_router.router,  prefix="/api/v1/stats",      tags=["stats"],      dependencies=_gr)
+app.include_router(tools_router.router,  prefix="/api/v1/tools",      tags=["tools"],      dependencies=_gr)
+app.include_router(audit_router.router,  prefix="/api/v1/audit",      tags=["audit"],      dependencies=_gr)
+app.include_router(importexport_router.router, prefix="/api/v1/importexport", tags=["importexport"], dependencies=_gr)
 
 # Operator+
 _op = [Depends(require_operator)]
-app.include_router(sync_router.router,   prefix="/api/sync",  tags=["sync"],  dependencies=_op)
-app.include_router(scan_router.router,   prefix="/api/scan",  tags=["scan"],  dependencies=_op)
-app.include_router(drift_router.router,  prefix="/api/drift", tags=["drift"], dependencies=_ro)
-app.include_router(discovery_router.router, prefix="/api/discovery", tags=["discovery"], dependencies=_ro)
-app.include_router(security_router.router, prefix="/api/security", tags=["security"], dependencies=_ro)
-app.include_router(gitops_router.router, prefix="/api/gitops", tags=["gitops"], dependencies=_op)
-app.include_router(reclaim_router.router, prefix="/api/addresses", tags=["reclaim"], dependencies=_op)
+app.include_router(sync_router.router,   prefix="/api/v1/sync",  tags=["sync"],  dependencies=_op)
+app.include_router(scan_router.router,   prefix="/api/v1/scan",  tags=["scan"],  dependencies=_op)
+app.include_router(drift_router.router,  prefix="/api/v1/drift", tags=["drift"], dependencies=_ro)
+app.include_router(discovery_router.router, prefix="/api/v1/discovery", tags=["discovery"], dependencies=_ro)
+app.include_router(security_router.router, prefix="/api/v1/security", tags=["security"], dependencies=_ro)
+app.include_router(gitops_router.router, prefix="/api/v1/gitops", tags=["gitops"], dependencies=_op)
+app.include_router(reclaim_router.router, prefix="/api/v1/addresses", tags=["reclaim"], dependencies=_op)
 
 # Allocation: scoped users can reach it (later task adds per-subnet check)
-app.include_router(allocation_router.router, prefix="/api/subnets", tags=["allocation"], dependencies=_ro)
+app.include_router(allocation_router.router, prefix="/api/v1/subnets", tags=["allocation"], dependencies=_ro)
 
 # Admin only
 _adm = [Depends(require_admin)]
-app.include_router(settings_router.router,        prefix="/api/settings",         tags=["settings"],        dependencies=_adm)
-app.include_router(provider_configs_router.router, prefix="/api/provider-configs", tags=["provider-configs"], dependencies=_adm)
-app.include_router(cache_router.router,            prefix="/api/cache",            tags=["cache"],            dependencies=_adm)
-app.include_router(users_router.router,            prefix="/api/users",            tags=["users"],            dependencies=_adm)
-app.include_router(groups_router.router,           prefix="/api/groups",           tags=["groups"],           dependencies=_adm)
-app.include_router(subnet_grants_router.router,    prefix="/api/subnet-grants",    tags=["grants"],           dependencies=_adm)
-app.include_router(automation_router.router,       prefix="/api/automation",       tags=["automation"],       dependencies=_adm)
+app.include_router(settings_router.router,        prefix="/api/v1/settings",         tags=["settings"],        dependencies=_adm)
+app.include_router(provider_configs_router.router, prefix="/api/v1/provider-configs", tags=["provider-configs"], dependencies=_adm)
+app.include_router(cache_router.router,            prefix="/api/v1/cache",            tags=["cache"],            dependencies=_adm)
+app.include_router(users_router.router,            prefix="/api/v1/users",            tags=["users"],            dependencies=_adm)
+app.include_router(groups_router.router,           prefix="/api/v1/groups",           tags=["groups"],           dependencies=_adm)
+app.include_router(subnet_grants_router.router,    prefix="/api/v1/subnet-grants",    tags=["grants"],           dependencies=_adm)
+app.include_router(automation_router.router,       prefix="/api/v1/automation",       tags=["automation"],       dependencies=_adm)
 
 # IP requests (requester+ role; scoped blocked per-endpoint)
-app.include_router(ip_requests_router.router, prefix="/api/requests", tags=["ip-requests"])
+app.include_router(ip_requests_router.router, prefix="/api/v1/requests", tags=["ip-requests"])
 
 # VLANs (any authenticated user reads; operator+ writes — enforced per-endpoint)
-app.include_router(vlans_router.router, prefix="/api/vlans", tags=["vlans"], dependencies=_ro)
-app.include_router(custom_fields_router.router, prefix="/api/custom-fields", tags=["custom-fields"], dependencies=_ro)
-app.include_router(tags_router.router, prefix="/api/tags", tags=["tags"], dependencies=_ro)
+app.include_router(vlans_router.router, prefix="/api/v1/vlans", tags=["vlans"], dependencies=_ro)
+app.include_router(custom_fields_router.router, prefix="/api/v1/custom-fields", tags=["custom-fields"], dependencies=_ro)
+app.include_router(tags_router.router, prefix="/api/v1/tags", tags=["tags"], dependencies=_ro)
 
 # Alerting (channel/rule writes are admin-only; enforced per-endpoint via require_admin)
-app.include_router(alerting_api.router, prefix="/api/alerts", tags=["alerts"],
+app.include_router(alerting_api.router, prefix="/api/v1/alerts", tags=["alerts"],
                    dependencies=[Depends(get_current_user)])
 
 
@@ -216,7 +216,7 @@ def health():
     return {"status": "ok"}
 
 
-@app.get("/api/providers", tags=["settings"], dependencies=[Depends(get_current_user)])
+@app.get("/api/v1/providers", tags=["settings"], dependencies=[Depends(get_current_user)])
 def get_active_providers():
     from app.providers.registry import get_dns_providers, get_dhcp_providers
     return {

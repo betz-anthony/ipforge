@@ -5,7 +5,7 @@ def test_user_list_includes_auth_source(client, db):
     db.add(User(username="ldapuser", hashed_password="", role="readonly",
                 auth_source="ldap", enabled=True))
     db.commit()
-    r = client.get("/api/users")
+    r = client.get("/api/v1/users")
     assert r.status_code == 200
     users = r.json()
     ldap_user = next((u for u in users if u["username"] == "ldapuser"), None)

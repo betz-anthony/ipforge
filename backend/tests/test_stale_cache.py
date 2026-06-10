@@ -38,7 +38,7 @@ def test_purge_dns_cache_deletes_zones_and_records(client, db):
     _add_dns_cache(db, "msdns-prod")
     _add_dns_cache(db, "msdns-other")
 
-    r = client.delete("/api/cache/dns", params={"source": "msdns-prod"})
+    r = client.delete("/api/v1/cache/dns", params={"source": "msdns-prod"})
     assert r.status_code == 200
     data = r.json()
     assert data["deleted"] == 2  # 1 zone + 1 record
@@ -53,7 +53,7 @@ def test_purge_dns_cache_deletes_zones_and_records(client, db):
 def test_purge_dhcp_cache_deletes_scopes_and_leases(client, db):
     _add_dhcp_cache(db, "msdhcp-prod")
 
-    r = client.delete("/api/cache/dhcp", params={"source": "msdhcp-prod"})
+    r = client.delete("/api/v1/cache/dhcp", params={"source": "msdhcp-prod"})
     assert r.status_code == 200
     assert r.json()["deleted"] == 2  # 1 scope + 1 lease
 
@@ -62,18 +62,18 @@ def test_purge_dhcp_cache_deletes_scopes_and_leases(client, db):
 
 
 def test_purge_nonexistent_source_returns_zero(client, db):
-    r = client.delete("/api/cache/dns", params={"source": "ghost"})
+    r = client.delete("/api/v1/cache/dns", params={"source": "ghost"})
     assert r.status_code == 200
     assert r.json()["deleted"] == 0
 
 
 def test_purge_invalid_category_returns_400(client, db):
-    r = client.delete("/api/cache/foobar", params={"source": "x"})
+    r = client.delete("/api/v1/cache/foobar", params={"source": "x"})
     assert r.status_code == 400
 
 
 def test_purge_missing_source_returns_422(client, db):
-    r = client.delete("/api/cache/dns")
+    r = client.delete("/api/v1/cache/dns")
     assert r.status_code == 422
 
 
@@ -88,7 +88,7 @@ def test_delete_provider_config_purges_cache(client, db):
     db.add(row)
     db.commit()
 
-    r = client.delete(f"/api/provider-configs/{row.id}")
+    r = client.delete(f"/api/v1/provider-configs/{row.id}")
     assert r.status_code == 204
 
     assert db.query(CachedDNSZone).filter_by(source="msdns-todelete").count() == 0
@@ -104,7 +104,7 @@ def test_delete_dhcp_provider_config_purges_cache(client, db):
     db.add(row)
     db.commit()
 
-    r = client.delete(f"/api/provider-configs/{row.id}")
+    r = client.delete(f"/api/v1/provider-configs/{row.id}")
     assert r.status_code == 204
 
     assert db.query(CachedDHCPScope).filter_by(source="msdhcp-todelete").count() == 0
@@ -121,6 +121,6 @@ def test_delete_provider_config_only_purges_own_source(client, db):
     db.add(row)
     db.commit()
 
-    client.delete(f"/api/provider-configs/{row.id}")
+    client.delete(f"/api/v1/provider-configs/{row.id}")
 
     assert db.query(CachedDNSZone).filter_by(source="msdns-keep").count() == 1

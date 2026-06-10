@@ -17,7 +17,7 @@ def _subnet(db, cidr="10.0.1.0/24", name="test", **kwargs):
 
 def test_allocate_returns_lowest_available(client, db):
     s = _subnet(db)
-    r = client.post(f"/api/subnets/{s.id}/allocate", json={"hostname": "web-01"})
+    r = client.post(f"/api/v1/subnets/{s.id}/allocate", json={"hostname": "web-01"})
     assert r.status_code == 201
     body = r.json()
     assert body["address"] == "10.0.1.2"  # .1 skipped
@@ -29,7 +29,7 @@ def test_allocate_returns_lowest_available(client, db):
 
 def test_allocate_skips_dot_one(client, db):
     s = _subnet(db)
-    r = client.post(f"/api/subnets/{s.id}/allocate", json={"hostname": "h"})
+    r = client.post(f"/api/v1/subnets/{s.id}/allocate", json={"hostname": "h"})
     assert not r.json()["address"].endswith(".1")
 
 
@@ -39,7 +39,7 @@ def test_allocate_skips_dot_255(client, db):
     for b in range(2, 255):
         db.add(IPAddress(address=f"10.0.0.{b}", subnet_id=s.id, status=AddressStatus.reserved))
     db.commit()
-    r = client.post(f"/api/subnets/{s.id}/allocate", json={"hostname": "h"})
+    r = client.post(f"/api/v1/subnets/{s.id}/allocate", json={"hostname": "h"})
     assert r.status_code == 201
     # 10.0.0.255 is skipped; next candidate is 10.0.1.0
     assert r.json()["address"] == "10.0.1.0"
@@ -49,7 +49,7 @@ def test_allocate_skips_discovered(client, db):
     s = _subnet(db)
     db.add(IPAddress(address="10.0.1.2", subnet_id=s.id, status=AddressStatus.discovered))
     db.commit()
-    r = client.post(f"/api/subnets/{s.id}/allocate", json={"hostname": "h"})
+    r = client.post(f"/api/v1/subnets/{s.id}/allocate", json={"hostname": "h"})
     assert r.status_code == 201
     assert r.json()["address"] == "10.0.1.3"  # .1 and .2(discovered) skipped
 
@@ -58,7 +58,7 @@ def test_allocate_reuses_available_record(client, db):
     s = _subnet(db)
     db.add(IPAddress(address="10.0.1.2", subnet_id=s.id, status=AddressStatus.available))
     db.commit()
-    r = client.post(f"/api/subnets/{s.id}/allocate", json={"hostname": "h"})
+    r = client.post(f"/api/v1/subnets/{s.id}/allocate", json={"hostname": "h"})
     assert r.status_code == 201
     assert r.json()["address"] == "10.0.1.2"
     addr = db.query(IPAddress).filter_by(address="10.0.1.2").first()
@@ -67,7 +67,7 @@ def test_allocate_reuses_available_record(client, db):
 
 def test_allocate_hostname_stored_lowercase(client, db):
     s = _subnet(db)
-    r = client.post(f"/api/subnets/{s.id}/allocate", json={"hostname": "Web-01"})
+    r = client.post(f"/api/v1/subnets/{s.id}/allocate", json={"hostname": "Web-01"})
     assert r.json()["hostname"] == "web-01"
 
 
@@ -76,18 +76,18 @@ def test_allocate_subnet_exhausted(client, db):
     s = _subnet(db, cidr="10.0.0.0/30")
     db.add(IPAddress(address="10.0.0.2", subnet_id=s.id, status=AddressStatus.reserved))
     db.commit()
-    r = client.post(f"/api/subnets/{s.id}/allocate", json={"hostname": "new"})
+    r = client.post(f"/api/v1/subnets/{s.id}/allocate", json={"hostname": "new"})
     assert r.status_code == 409
 
 
 def test_allocate_subnet_not_found(client, db):
-    r = client.post("/api/subnets/9999/allocate", json={"hostname": "web-01"})
+    r = client.post("/api/v1/subnets/9999/allocate", json={"hostname": "web-01"})
     assert r.status_code == 404
 
 
 def test_allocate_missing_hostname(client, db):
     s = _subnet(db)
-    r = client.post(f"/api/subnets/{s.id}/allocate", json={"hostname": ""})
+    r = client.post(f"/api/v1/subnets/{s.id}/allocate", json={"hostname": ""})
     assert r.status_code == 422
 
 
@@ -95,8 +95,8 @@ def test_allocate_missing_hostname(client, db):
 
 def test_allocate_idempotent_returns_same_ip(client, db):
     s = _subnet(db)
-    r1 = client.post(f"/api/subnets/{s.id}/allocate", json={"hostname": "web-01"})
-    r2 = client.post(f"/api/subnets/{s.id}/allocate", json={"hostname": "web-01"})
+    r1 = client.post(f"/api/v1/subnets/{s.id}/allocate", json={"hostname": "web-01"})
+    r2 = client.post(f"/api/v1/subnets/{s.id}/allocate", json={"hostname": "web-01"})
     assert r1.status_code == 201
     assert r2.status_code == 200
     assert r1.json()["address"] == r2.json()["address"]
@@ -106,16 +106,16 @@ def test_allocate_idempotent_returns_same_ip(client, db):
 
 def test_allocate_idempotent_case_insensitive(client, db):
     s = _subnet(db)
-    r1 = client.post(f"/api/subnets/{s.id}/allocate", json={"hostname": "Web-01"})
-    r2 = client.post(f"/api/subnets/{s.id}/allocate", json={"hostname": "WEB-01"})
+    r1 = client.post(f"/api/v1/subnets/{s.id}/allocate", json={"hostname": "Web-01"})
+    r2 = client.post(f"/api/v1/subnets/{s.id}/allocate", json={"hostname": "WEB-01"})
     assert r1.json()["address"] == r2.json()["address"]
     assert db.query(IPAddress).filter_by(subnet_id=s.id).count() == 1
 
 
 def test_allocate_idempotent_updates_mac_if_blank(client, db):
     s = _subnet(db)
-    r1 = client.post(f"/api/subnets/{s.id}/allocate", json={"hostname": "web-01"})
-    client.post(f"/api/subnets/{s.id}/allocate",
+    r1 = client.post(f"/api/v1/subnets/{s.id}/allocate", json={"hostname": "web-01"})
+    client.post(f"/api/v1/subnets/{s.id}/allocate",
                 json={"hostname": "web-01", "mac_address": "aa:bb:cc:dd:ee:ff"})
     addr = db.query(IPAddress).filter_by(address=r1.json()["address"]).first()
     db.refresh(addr)
@@ -124,9 +124,9 @@ def test_allocate_idempotent_updates_mac_if_blank(client, db):
 
 def test_allocate_idempotent_does_not_overwrite_existing_mac(client, db):
     s = _subnet(db)
-    client.post(f"/api/subnets/{s.id}/allocate",
+    client.post(f"/api/v1/subnets/{s.id}/allocate",
                 json={"hostname": "web-01", "mac_address": "11:22:33:44:55:66"})
-    client.post(f"/api/subnets/{s.id}/allocate",
+    client.post(f"/api/v1/subnets/{s.id}/allocate",
                 json={"hostname": "web-01", "mac_address": "aa:bb:cc:dd:ee:ff"})
     addr = db.query(IPAddress).filter_by(hostname="web-01").first()
     db.refresh(addr)
@@ -138,7 +138,7 @@ def test_allocate_deprecated_hostname_gets_new_ip(client, db):
     db.add(IPAddress(address="10.0.1.2", subnet_id=s.id,
                      hostname="web-01", status=AddressStatus.deprecated))
     db.commit()
-    r = client.post(f"/api/subnets/{s.id}/allocate", json={"hostname": "web-01"})
+    r = client.post(f"/api/v1/subnets/{s.id}/allocate", json={"hostname": "web-01"})
     assert r.status_code == 201
     assert r.json()["is_new"] is True
     assert r.json()["address"] == "10.0.1.3"  # deprecated is in _INELIGIBLE, so .2 is skipped
@@ -148,7 +148,7 @@ def test_allocate_deprecated_hostname_gets_new_ip(client, db):
 
 def test_allocate_register_dns_missing_zone(client, db):
     s = _subnet(db)
-    r = client.post(f"/api/subnets/{s.id}/allocate",
+    r = client.post(f"/api/v1/subnets/{s.id}/allocate",
                     json={"hostname": "web-01", "register_dns": True})
     assert r.status_code == 422
     assert "dns_zone" in r.json()["detail"]
@@ -157,7 +157,7 @@ def test_allocate_register_dns_missing_zone(client, db):
 def test_allocate_register_dns_no_provider(client, db):
     s = _subnet(db)
     with patch("app.api.allocation.get_dns_providers", return_value=[]):
-        r = client.post(f"/api/subnets/{s.id}/allocate",
+        r = client.post(f"/api/v1/subnets/{s.id}/allocate",
                         json={"hostname": "web-01", "register_dns": True,
                               "dns_zone": "example.com"})
     assert r.status_code == 400
@@ -169,7 +169,7 @@ def test_allocate_register_dns_success(client, db):
     mock_dns.source = "msdns"
     mock_dns.add_record = MagicMock()
     with patch("app.api.allocation.get_dns_providers", return_value=[mock_dns]):
-        r = client.post(f"/api/subnets/{s.id}/allocate",
+        r = client.post(f"/api/v1/subnets/{s.id}/allocate",
                         json={"hostname": "web-01", "register_dns": True,
                               "dns_zone": "example.com"})
     assert r.status_code == 201
@@ -188,7 +188,7 @@ def test_allocate_register_dns_failure_rolls_back_ip(client, db):
     mock_dns.source = "msdns"
     mock_dns.add_record = MagicMock(side_effect=Exception("DNS timeout"))
     with patch("app.api.allocation.get_dns_providers", return_value=[mock_dns]):
-        r = client.post(f"/api/subnets/{s.id}/allocate",
+        r = client.post(f"/api/v1/subnets/{s.id}/allocate",
                         json={"hostname": "web-01", "register_dns": True,
                               "dns_zone": "example.com"})
     assert r.status_code == 502
@@ -199,12 +199,12 @@ def test_allocate_register_dns_failure_rolls_back_ip(client, db):
 def test_allocate_dns_failure_idempotent_hit_keeps_ip(client, db):
     # Idempotent hit: existing IP should NOT be deleted on DNS failure
     s = _subnet(db)
-    client.post(f"/api/subnets/{s.id}/allocate", json={"hostname": "web-01"})
+    client.post(f"/api/v1/subnets/{s.id}/allocate", json={"hostname": "web-01"})
     mock_dns = MagicMock()
     mock_dns.source = "msdns"
     mock_dns.add_record = MagicMock(side_effect=Exception("DNS timeout"))
     with patch("app.api.allocation.get_dns_providers", return_value=[mock_dns]):
-        r = client.post(f"/api/subnets/{s.id}/allocate",
+        r = client.post(f"/api/v1/subnets/{s.id}/allocate",
                         json={"hostname": "web-01", "register_dns": True,
                               "dns_zone": "example.com"})
     assert r.status_code == 502
@@ -220,7 +220,7 @@ def test_allocate_uses_subnet_dns_provider(client, db):
     mock_other.source = "other-dns"
     with patch("app.api.allocation.get_dns_providers",
                return_value=[mock_other, mock_preferred]):
-        r = client.post(f"/api/subnets/{s.id}/allocate",
+        r = client.post(f"/api/v1/subnets/{s.id}/allocate",
                         json={"hostname": "web-01", "register_dns": True,
                               "dns_zone": "example.com"})
     assert r.status_code == 201
@@ -237,7 +237,7 @@ def test_allocate_request_overrides_subnet_dns_provider(client, db):
     mock_default.source = "subnet-default"
     with patch("app.api.allocation.get_dns_providers",
                return_value=[mock_default, mock_override]):
-        r = client.post(f"/api/subnets/{s.id}/allocate",
+        r = client.post(f"/api/v1/subnets/{s.id}/allocate",
                         json={"hostname": "web-01", "register_dns": True,
                               "dns_zone": "example.com",
                               "dns_provider": "explicit-provider"})
@@ -266,7 +266,7 @@ def test_allocate_register_dhcp_missing_mac(client, db):
     s = _subnet(db)
     mock_dhcp = _mock_dhcp()
     with patch("app.api.allocation.get_dhcp_providers", return_value=[mock_dhcp]):
-        r = client.post(f"/api/subnets/{s.id}/allocate",
+        r = client.post(f"/api/v1/subnets/{s.id}/allocate",
                         json={"hostname": "web-01", "register_dhcp": True})
     assert r.status_code == 422
     assert "mac_address" in r.json()["detail"]
@@ -275,7 +275,7 @@ def test_allocate_register_dhcp_missing_mac(client, db):
 def test_allocate_register_dhcp_no_provider(client, db):
     s = _subnet(db)
     with patch("app.api.allocation.get_dhcp_providers", return_value=[]):
-        r = client.post(f"/api/subnets/{s.id}/allocate",
+        r = client.post(f"/api/v1/subnets/{s.id}/allocate",
                         json={"hostname": "web-01", "register_dhcp": True,
                               "mac_address": "aa:bb:cc:dd:ee:ff"})
     assert r.status_code == 400
@@ -285,7 +285,7 @@ def test_allocate_register_dhcp_success(client, db):
     s = _subnet(db)
     mock_dhcp = _mock_dhcp()
     with patch("app.api.allocation.get_dhcp_providers", return_value=[mock_dhcp]):
-        r = client.post(f"/api/subnets/{s.id}/allocate",
+        r = client.post(f"/api/v1/subnets/{s.id}/allocate",
                         json={"hostname": "web-01", "register_dhcp": True,
                               "mac_address": "aa:bb:cc:dd:ee:ff"})
     assert r.status_code == 201
@@ -302,7 +302,7 @@ def test_allocate_dhcp_no_matching_scope(client, db):
     s = _subnet(db)
     mock_dhcp = _mock_dhcp(scope_start="192.168.1.1", scope_end="192.168.1.254")
     with patch("app.api.allocation.get_dhcp_providers", return_value=[mock_dhcp]):
-        r = client.post(f"/api/subnets/{s.id}/allocate",
+        r = client.post(f"/api/v1/subnets/{s.id}/allocate",
                         json={"hostname": "web-01", "register_dhcp": True,
                               "mac_address": "aa:bb:cc:dd:ee:ff"})
     assert r.status_code == 400
@@ -314,7 +314,7 @@ def test_allocate_dhcp_failure_rolls_back_ip(client, db):
     mock_dhcp = _mock_dhcp()
     mock_dhcp.add_reservation = MagicMock(side_effect=Exception("DHCP error"))
     with patch("app.api.allocation.get_dhcp_providers", return_value=[mock_dhcp]):
-        r = client.post(f"/api/subnets/{s.id}/allocate",
+        r = client.post(f"/api/v1/subnets/{s.id}/allocate",
                         json={"hostname": "web-01", "register_dhcp": True,
                               "mac_address": "aa:bb:cc:dd:ee:ff"})
     assert r.status_code == 502
@@ -332,7 +332,7 @@ def test_allocate_dhcp_failure_rolls_back_ip_and_dns(client, db):
     mock_dhcp.add_reservation = MagicMock(side_effect=Exception("DHCP error"))
     with patch("app.api.allocation.get_dns_providers", return_value=[mock_dns]), \
          patch("app.api.allocation.get_dhcp_providers", return_value=[mock_dhcp]):
-        r = client.post(f"/api/subnets/{s.id}/allocate",
+        r = client.post(f"/api/v1/subnets/{s.id}/allocate",
                         json={"hostname": "web-01", "register_dns": True,
                               "dns_zone": "example.com", "register_dhcp": True,
                               "mac_address": "aa:bb:cc:dd:ee:ff"})
@@ -350,7 +350,7 @@ def test_allocate_uses_subnet_dhcp_provider(client, db):
     mock_other = _mock_dhcp(source="other-dhcp")
     with patch("app.api.allocation.get_dhcp_providers",
                return_value=[mock_other, mock_preferred]):
-        r = client.post(f"/api/subnets/{s.id}/allocate",
+        r = client.post(f"/api/v1/subnets/{s.id}/allocate",
                         json={"hostname": "web-01", "register_dhcp": True,
                               "mac_address": "aa:bb:cc:dd:ee:ff"})
     assert r.status_code == 201
@@ -363,7 +363,7 @@ def test_allocation_dns_failure_returns_envelope(client, db):
     mock_dns.source = "msdns"
     mock_dns.add_record = MagicMock(side_effect=Exception("401 Unauthorized"))
     with patch("app.api.allocation.get_dns_providers", return_value=[mock_dns]):
-        r = client.post(f"/api/subnets/{s.id}/allocate", json={
+        r = client.post(f"/api/v1/subnets/{s.id}/allocate", json={
             "hostname": "web01", "register_dns": True, "dns_zone": "example.com"})
     assert r.status_code == 502
     assert r.json()["detail"]["code"] == "provider_auth_failed"

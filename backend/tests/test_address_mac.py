@@ -11,7 +11,7 @@ def _subnet(db):
 
 def test_create_address_normalizes_mac(client, db):
     s = _subnet(db)
-    r = client.post("/api/addresses", json={
+    r = client.post("/api/v1/addresses", json={
         "address": "10.0.0.5", "subnet_id": s.id,
         "mac_address": "AA-BB-CC-DD-EE-FF",
     })
@@ -21,7 +21,7 @@ def test_create_address_normalizes_mac(client, db):
 
 def test_create_address_rejects_bad_mac(client, db):
     s = _subnet(db)
-    r = client.post("/api/addresses", json={
+    r = client.post("/api/v1/addresses", json={
         "address": "10.0.0.6", "subnet_id": s.id,
         "mac_address": "not-a-mac",
     })
@@ -33,14 +33,14 @@ def test_update_address_normalizes_mac(client, db):
     addr = IPAddress(address="10.0.0.7", subnet_id=s.id)
     db.add(addr)
     db.commit()
-    r = client.put(f"/api/addresses/{addr.id}", json={"mac_address": "aabb.ccdd.eeff"})
+    r = client.put(f"/api/v1/addresses/{addr.id}", json={"mac_address": "aabb.ccdd.eeff"})
     assert r.status_code == 200
     assert r.json()["mac_address"] == "aa:bb:cc:dd:ee:ff"
 
 
 def test_create_address_blank_mac_becomes_null(client, db):
     s = _subnet(db)
-    r = client.post("/api/addresses", json={
+    r = client.post("/api/v1/addresses", json={
         "address": "10.0.0.8", "subnet_id": s.id, "mac_address": "",
     })
     assert r.status_code == 201

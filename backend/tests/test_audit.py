@@ -44,7 +44,7 @@ def test_write_audit_delete_has_no_after(db):
 
 
 def test_create_subnet_writes_audit(client, db):
-    r = client.post("/api/subnets", json={"name": "Corp", "cidr": "10.0.0.0/24", "description": None, "vlan_id": None, "notes": None})
+    r = client.post("/api/v1/subnets", json={"name": "Corp", "cidr": "10.0.0.0/24", "description": None, "vlan_id": None, "notes": None})
     assert r.status_code == 201
     entries = db.query(AuditLog).all()
     assert len(entries) == 1
@@ -60,7 +60,7 @@ def test_update_subnet_writes_audit_with_before_after(client, db):
     db.add(Subnet(name="Old", cidr="10.1.0.0/24", ip_version=4))
     db.commit()
     sid = db.query(Subnet).first().id
-    client.put(f"/api/subnets/{sid}", json={"name": "New"})
+    client.put(f"/api/v1/subnets/{sid}", json={"name": "New"})
     e = db.query(AuditLog).first()
     assert e.action == "update"
     assert json.loads(e.before_state)["name"] == "Old"
@@ -71,7 +71,7 @@ def test_delete_subnet_writes_audit(client, db):
     db.add(Subnet(name="Gone", cidr="10.2.0.0/24", ip_version=4))
     db.commit()
     sid = db.query(Subnet).first().id
-    client.delete(f"/api/subnets/{sid}")
+    client.delete(f"/api/v1/subnets/{sid}")
     e = db.query(AuditLog).first()
     assert e.action == "delete"
     assert json.loads(e.before_state)["cidr"] == "10.2.0.0/24"
@@ -85,7 +85,7 @@ def test_create_address_writes_audit(client, db):
     subnet = Subnet(name="Net", cidr="10.0.0.0/24", ip_version=4)
     db.add(subnet)
     db.commit()
-    r = client.post("/api/addresses", json={
+    r = client.post("/api/v1/addresses", json={
         "address": "10.0.0.1", "subnet_id": subnet.id,
         "status": "assigned", "hostname": None, "mac_address": None,
         "description": None, "notes": None,
@@ -106,7 +106,7 @@ def test_update_address_writes_audit(client, db):
     addr = IPAddress(address="10.0.0.2", subnet_id=subnet.id, status=AddressStatus.available)
     db.add(addr)
     db.commit()
-    client.put(f"/api/addresses/{addr.id}", json={"status": "assigned"})
+    client.put(f"/api/v1/addresses/{addr.id}", json={"status": "assigned"})
     e = db.query(AuditLog).first()
     assert e.action == "update"
     assert json.loads(e.before_state)["status"] == "available"
@@ -120,7 +120,7 @@ def test_delete_address_writes_audit(client, db):
     addr = IPAddress(address="10.0.0.3", subnet_id=subnet.id, status=AddressStatus.available)
     db.add(addr)
     db.commit()
-    client.delete(f"/api/addresses/{addr.id}")
+    client.delete(f"/api/v1/addresses/{addr.id}")
     e = db.query(AuditLog).first()
     assert e.action == "delete"
     assert e.resource_type == "address"
@@ -135,7 +135,7 @@ def test_audit_list_returns_entries(client, db):
     write_audit(db, "alice", "create", "subnet", "1", "10.0.0.0/24", after={"id": 1})
     write_audit(db, "bob",   "delete", "address", "5", "10.0.0.1",   before={"id": 5})
     db.commit()
-    r = client.get("/api/audit")
+    r = client.get("/api/v1/audit")
     assert r.status_code == 200
     data = r.json()["items"]
     assert len(data) == 2
@@ -146,7 +146,7 @@ def test_audit_filter_by_resource_type(client, db):
     write_audit(db, "alice", "create", "subnet",  "1", "10.0.0.0/24")
     write_audit(db, "alice", "create", "address", "2", "10.0.0.1")
     db.commit()
-    r = client.get("/api/audit?resource_type=subnet")
+    r = client.get("/api/v1/audit?resource_type=subnet")
     data = r.json()["items"]
     assert len(data) == 1
     assert data[0]["resource_type"] == "subnet"
@@ -156,7 +156,7 @@ def test_audit_filter_by_username(client, db):
     write_audit(db, "alice", "create", "subnet", "1", "10.0.0.0/24")
     write_audit(db, "bob",   "create", "subnet", "2", "10.1.0.0/24")
     db.commit()
-    r = client.get("/api/audit?username=alice")
+    r = client.get("/api/v1/audit?username=alice")
     data = r.json()["items"]
     assert len(data) == 1
     assert data[0]["username"] == "alice"
@@ -166,7 +166,7 @@ def test_audit_limit(client, db):
     for i in range(10):
         write_audit(db, "alice", "create", "subnet", str(i), f"10.{i}.0.0/24")
     db.commit()
-    r = client.get("/api/audit?limit=3")
+    r = client.get("/api/v1/audit?limit=3")
     assert len(r.json()["items"]) == 3
 
 
@@ -179,7 +179,7 @@ def test_audit_ordered_newest_first(client, db):
     db.add(AuditLog(timestamp=t2, username="a", action="create", resource_type="subnet",
                     resource_id="2", summary="new"))
     db.commit()
-    r = client.get("/api/audit")
+    r = client.get("/api/v1/audit")
     data = r.json()["items"]
     assert data[0]["summary"] == "new"
     assert data[1]["summary"] == "old"
@@ -191,7 +191,7 @@ def test_audit_ordered_newest_first(client, db):
 def test_audit_list_returns_cursor_envelope(client, db):
     write_audit(db, "alice", "create", "subnet", "1", "10.0.0.0/24", after={"id": 1})
     db.commit()
-    r = client.get("/api/audit")
+    r = client.get("/api/v1/audit")
     assert r.status_code == 200
     body = r.json()
     assert "items" in body
@@ -208,15 +208,15 @@ def test_audit_keyset_no_duplicates_no_gaps(client, db):
                         resource_type="subnet", resource_id=str(i), summary=f"s{i}"))
     db.commit()
 
-    page1 = client.get("/api/audit?limit=3").json()
+    page1 = client.get("/api/v1/audit?limit=3").json()
     assert len(page1["items"]) == 3
     assert page1["next_cursor"] is not None
 
-    page2 = client.get(f"/api/audit?limit=3&cursor={page1['next_cursor']}").json()
+    page2 = client.get(f"/api/v1/audit?limit=3&cursor={page1['next_cursor']}").json()
     assert len(page2["items"]) == 3
     assert page2["next_cursor"] is not None
 
-    page3 = client.get(f"/api/audit?limit=3&cursor={page2['next_cursor']}").json()
+    page3 = client.get(f"/api/v1/audit?limit=3&cursor={page2['next_cursor']}").json()
     assert len(page3["items"]) == 1
     assert page3["next_cursor"] is None
 
@@ -232,7 +232,7 @@ def test_audit_keyset_no_duplicates_no_gaps(client, db):
 def test_audit_keyset_null_cursor_on_last_page(client, db):
     write_audit(db, "a", "create", "subnet", "1", "x")
     db.commit()
-    body = client.get("/api/audit?limit=50").json()
+    body = client.get("/api/v1/audit?limit=50").json()
     assert body["next_cursor"] is None
 
 
@@ -240,6 +240,6 @@ def test_audit_keyset_filters_still_apply(client, db):
     write_audit(db, "alice", "create", "subnet", "1", "x")
     write_audit(db, "bob", "create", "subnet", "2", "y")
     db.commit()
-    body = client.get("/api/audit?username=alice").json()
+    body = client.get("/api/v1/audit?username=alice").json()
     assert len(body["items"]) == 1
     assert body["items"][0]["username"] == "alice"

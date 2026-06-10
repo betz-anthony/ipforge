@@ -6,13 +6,13 @@ from fastapi.testclient import TestClient
 def test_unhandled_exception_returns_generic_envelope():
     router = APIRouter()
 
-    @router.get("/api/_boom")
+    @router.get("/api/v1/_boom")
     def _boom():
         raise RuntimeError("secret internal detail dc01\nstack trace line")
 
     app.include_router(router)
     client = TestClient(app, raise_server_exceptions=False)
-    r = client.get("/api/_boom")
+    r = client.get("/api/v1/_boom")
     assert r.status_code == 500
     body = r.json()
     assert body["detail"]["code"] == "internal_error"

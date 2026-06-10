@@ -78,7 +78,7 @@ def test_wrong_key_decrypt_returns_as_is():
 def test_create_provider_config_encrypts_secret(client, db):
     key = _test_key()
     with patch("app.core.crypto._fernet", return_value=Fernet(key.encode())):
-        r = client.post("/api/provider-configs", json={
+        r = client.post("/api/v1/provider-configs", json={
             "category": "dns",
             "provider_type": "msdns",
             "name": "test-msdns",
@@ -95,7 +95,7 @@ def test_create_provider_config_encrypts_secret(client, db):
 
 def test_create_provider_config_no_key_stores_plaintext(client, db):
     with patch("app.core.crypto._fernet", return_value=None):
-        r = client.post("/api/provider-configs", json={
+        r = client.post("/api/v1/provider-configs", json={
             "category": "dns",
             "provider_type": "msdns",
             "name": "test-msdns-plain",
@@ -111,7 +111,7 @@ def test_update_provider_config_blank_secret_keeps_existing(client, db):
     key = _test_key()
     f = Fernet(key.encode())
     with patch("app.core.crypto._fernet", return_value=f):
-        r = client.post("/api/provider-configs", json={
+        r = client.post("/api/v1/provider-configs", json={
             "category": "dns",
             "provider_type": "msdns",
             "name": "test-update",
@@ -121,7 +121,7 @@ def test_update_provider_config_blank_secret_keeps_existing(client, db):
     config_id = r.json()["id"]
 
     with patch("app.core.crypto._fernet", return_value=f):
-        r2 = client.put(f"/api/provider-configs/{config_id}", json={
+        r2 = client.put(f"/api/v1/provider-configs/{config_id}", json={
             "config": {"winrm_host": "dc2", "winrm_password": ""},
         })
     assert r2.status_code == 200
@@ -135,7 +135,7 @@ def test_update_provider_config_blank_secret_keeps_existing(client, db):
 def test_api_response_masks_secret(client, db):
     key = _test_key()
     with patch("app.core.crypto._fernet", return_value=Fernet(key.encode())):
-        r = client.post("/api/provider-configs", json={
+        r = client.post("/api/v1/provider-configs", json={
             "category": "dns",
             "provider_type": "msdns",
             "name": "test-masked",

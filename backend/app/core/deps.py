@@ -11,7 +11,7 @@ from app.database import get_db
 from app.models.api_token import ApiToken
 from app.models.user import User
 
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login")
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login")
 
 _SAFE_METHODS = {"GET", "HEAD", "OPTIONS"}
 _LAST_USED_THROTTLE = timedelta(minutes=5)

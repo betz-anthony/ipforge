@@ -1,5 +1,5 @@
 def test_create_channel_admin(client_admin):
-    r = client_admin.post("/api/alerts/channels", json={
+    r = client_admin.post("/api/v1/alerts/channels", json={
         "name": "ops-slack", "kind": "slack",
         "config": {"url": "https://hooks.example/x"}, "secret": None, "enabled": True,
     })
@@ -16,7 +16,7 @@ def test_create_channel_encrypts_secret(client_admin, db):
     test_key = Fernet.generate_key()
     fernet = Fernet(test_key)
     with patch("app.core.crypto._fernet", return_value=fernet):
-        r = client_admin.post("/api/alerts/channels", json={
+        r = client_admin.post("/api/v1/alerts/channels", json={
             "name": "ops-smtp", "kind": "smtp",
             "config": {"host": "h", "port": 25, "tls": False, "user": "u", "from": "x@y"},
             "secret": "supersecret", "enabled": True,
@@ -30,62 +30,62 @@ def test_create_channel_encrypts_secret(client_admin, db):
 
 
 def test_list_channels(client_admin):
-    client_admin.post("/api/alerts/channels", json={"name": "c1", "kind": "generic",
+    client_admin.post("/api/v1/alerts/channels", json={"name": "c1", "kind": "generic",
                                                     "config": {"url": "u"}, "enabled": True})
-    r = client_admin.get("/api/alerts/channels")
+    r = client_admin.get("/api/v1/alerts/channels")
     assert r.status_code == 200
     assert len(r.json()) >= 1
 
 
 def test_update_channel(client_admin):
-    rid = client_admin.post("/api/alerts/channels", json={"name": "c", "kind": "generic",
+    rid = client_admin.post("/api/v1/alerts/channels", json={"name": "c", "kind": "generic",
                                                           "config": {"url": "u"}}).json()["id"]
-    r = client_admin.put(f"/api/alerts/channels/{rid}", json={"name": "c2", "kind": "generic",
+    r = client_admin.put(f"/api/v1/alerts/channels/{rid}", json={"name": "c2", "kind": "generic",
                                                               "config": {"url": "u"}, "enabled": False})
     assert r.status_code == 200
     assert r.json()["enabled"] is False
 
 
 def test_delete_channel(client_admin):
-    rid = client_admin.post("/api/alerts/channels", json={"name": "c", "kind": "generic",
+    rid = client_admin.post("/api/v1/alerts/channels", json={"name": "c", "kind": "generic",
                                                           "config": {"url": "u"}}).json()["id"]
-    r = client_admin.delete(f"/api/alerts/channels/{rid}")
+    r = client_admin.delete(f"/api/v1/alerts/channels/{rid}")
     assert r.status_code == 204
 
 
 def test_non_admin_forbidden(client_operator):
-    r = client_operator.post("/api/alerts/channels", json={"name": "n", "kind": "generic",
+    r = client_operator.post("/api/v1/alerts/channels", json={"name": "n", "kind": "generic",
                                                             "config": {"url": "u"}})
     assert r.status_code == 403
 
 
 def test_list_channels_operator_403(client_operator):
-    assert client_operator.get("/api/alerts/channels").status_code == 403
+    assert client_operator.get("/api/v1/alerts/channels").status_code == 403
 
 
 def test_list_channels_readonly_403(client_gr):
-    assert client_gr.get("/api/alerts/channels").status_code == 403
+    assert client_gr.get("/api/v1/alerts/channels").status_code == 403
 
 
 def test_list_channels_scoped_403(client_scoped):
-    assert client_scoped.get("/api/alerts/channels").status_code == 403
+    assert client_scoped.get("/api/v1/alerts/channels").status_code == 403
 
 
 def test_update_channel_rejects_rename_to_existing_name(client_admin):
-    a = client_admin.post("/api/alerts/channels", json={"name": "a", "kind": "generic",
+    a = client_admin.post("/api/v1/alerts/channels", json={"name": "a", "kind": "generic",
                                                         "config": {"url": "u"}}).json()
-    b = client_admin.post("/api/alerts/channels", json={"name": "b", "kind": "generic",
+    b = client_admin.post("/api/v1/alerts/channels", json={"name": "b", "kind": "generic",
                                                         "config": {"url": "u"}}).json()
-    r = client_admin.put(f"/api/alerts/channels/{b['id']}", json={
+    r = client_admin.put(f"/api/v1/alerts/channels/{b['id']}", json={
         "name": "a", "kind": "generic", "config": {"url": "u"}, "enabled": True,
     })
     assert r.status_code == 409
 
 
 def test_update_channel_allows_same_name(client_admin):
-    a = client_admin.post("/api/alerts/channels", json={"name": "x", "kind": "generic",
+    a = client_admin.post("/api/v1/alerts/channels", json={"name": "x", "kind": "generic",
                                                         "config": {"url": "u"}}).json()
-    r = client_admin.put(f"/api/alerts/channels/{a['id']}", json={
+    r = client_admin.put(f"/api/v1/alerts/channels/{a['id']}", json={
         "name": "x", "kind": "generic", "config": {"url": "u"}, "enabled": False,
     })
     assert r.status_code == 200
@@ -93,10 +93,10 @@ def test_update_channel_allows_same_name(client_admin):
 
 def test_test_channel_endpoint_calls_transport(client_admin):
     from unittest.mock import patch, MagicMock
-    rid = client_admin.post("/api/alerts/channels", json={"name": "c", "kind": "generic",
+    rid = client_admin.post("/api/v1/alerts/channels", json={"name": "c", "kind": "generic",
                                                           "config": {"url": "u"}}).json()["id"]
     with patch("app.alerting.api.send_webhook") as sw:
         sw.return_value = MagicMock(status="sent", error=None, attempted_at="t")
-        r = client_admin.post(f"/api/alerts/channels/{rid}/test")
+        r = client_admin.post(f"/api/v1/alerts/channels/{rid}/test")
     assert r.status_code == 200
     assert r.json()["status"] == "sent"
