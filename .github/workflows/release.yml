@@ -20,16 +20,7 @@ jobs:
       - name: Extract changelog section
         run: |
           VERSION="${GITHUB_REF_NAME#v}"
-          awk -v v="$VERSION" '
-            $0 ~ "^## \\[" v "\\]" {flag=1; next}
-            flag && (/^## \[/ || /^\[[^]]+\]: /) {flag=0}
-            flag {print}
-          ' CHANGELOG.md > release-notes.md
-          # Trim leading/trailing blank lines; fall back to a generic note.
-          sed -i -e '/./,$!d' release-notes.md
-          if [ ! -s release-notes.md ]; then
-            echo "Release ${GITHUB_REF_NAME}." > release-notes.md
-          fi
+          ./scripts/extract-changelog.sh "$VERSION" > release-notes.md
           echo "----- notes -----"; cat release-notes.md
 
       - name: Create release
