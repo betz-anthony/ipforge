@@ -54,6 +54,11 @@ cp .env.example .env        # set DB_PASSWORD; JWT_SECRET_KEY/SECRET_KEY auto-ge
 docker compose up --build
 ```
 
+> The Compose file references prebuilt images on GHCR
+> (`ghcr.io/betz-anthony/ipforge/{api,web}`). Plain `docker compose up` pulls
+> them — no local build required. Use `--build` only when developing against
+> local source.
+
 Web UI: <http://localhost> · API docs: <http://localhost:8000/docs>
 
 Default login is `admin` / `admin` — change it immediately. DNS/DHCP providers are added afterward in the UI under **Settings → Providers** (no provider env vars).
