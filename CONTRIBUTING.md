@@ -45,6 +45,31 @@ A PR that does not pass these will not be merged.
 - Update `CHANGELOG.md` under `[Unreleased]` in the same PR.
 - Update user-facing docs when behavior changes.
 
+## Versioning
+
+IPForge follows [Semantic Versioning](https://semver.org/). The version bump for
+a release is derived from the Conventional Commit types since the last tag — it
+is not chosen by hand:
+
+| Highest-severity change since last tag | Bump |
+|---|---|
+| Any `!` suffix or `BREAKING CHANGE:` footer | **MAJOR** (`x.0.0`) |
+| Any `feat:` (no breaking change) | **MINOR** (`x.y.0`) |
+| Only `fix:` / `perf:` / `refactor:` / `docs:` / `chore:` | **PATCH** (`x.y.z`) |
+
+Run `scripts/suggest-bump.sh` to print the recommended bump and next version
+from the commits since the last `v*` tag. The `[Unreleased]` section of
+`CHANGELOG.md` is the human-readable mirror of the same signal.
+
+**The REST API is versioned separately by its URL path (`/api/vN`).** That path
+is the API compatibility boundary, not the application version. A
+backward-incompatible API change ships as a **new `/api/vN`** (a `feat:`, which
+bumps the app MINOR) — it does **not** force an app MAJOR bump, and it is **not**
+marked `!`. Reserve `!` / `BREAKING CHANGE:` for application-level
+incompatibilities: removing a feature or endpoint version, an irreversible DB
+migration, or a breaking change to config/env/CLI. This keeps app releases
+readable while the `/api/vN` path carries API compatibility.
+
 ## Documentation layout
 
 - Public docs live under `docs/` (`user-guide.html`, `examples/`).
