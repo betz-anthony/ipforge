@@ -1,6 +1,6 @@
 import axios from 'axios'
 
-const api = axios.create({ baseURL: '/api' })
+const api = axios.create({ baseURL: '/api/v1' })
 
 // Attach JWT from localStorage
 api.interceptors.request.use(cfg => {
@@ -866,8 +866,8 @@ export interface ImportResult {
 }
 
 export const importExportApi = {
-  exportSubnetsUrl: () => '/api/importexport/subnets.csv',
-  exportAddressesUrl: () => '/api/importexport/addresses.csv',
+  exportSubnetsUrl: () => '/api/v1/importexport/subnets.csv',
+  exportAddressesUrl: () => '/api/v1/importexport/addresses.csv',
   importSubnets: (file: File) => {
     const form = new FormData()
     form.append('file', file)

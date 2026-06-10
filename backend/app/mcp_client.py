@@ -14,7 +14,7 @@ class IPForgeClient:
 
     def _req(self, method: str, path: str, params: dict | None = None, json: dict | None = None):
         r = requests.request(
-            method, f"{self._base}/api{path}",
+            method, f"{self._base}/api/v1{path}",
             headers={"Authorization": f"Bearer {self._token}"},
             params=params, json=json, timeout=30,
         )
