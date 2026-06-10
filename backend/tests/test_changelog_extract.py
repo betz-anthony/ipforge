@@ -21,3 +21,10 @@ def test_extract_known_version_returns_body():
 def test_extract_missing_version_returns_fallback():
     out = _extract("9.9.9")
     assert out.strip() == "Release v9.9.9."
+
+
+def test_extract_1_1_0_is_not_fallback():
+    out = _extract("1.1.0")
+    assert out.strip()
+    assert out.strip() != "Release v1.1.0."
+    assert "/api/v1" in out

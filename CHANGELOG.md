@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-06-10
+
+### Added
+- Server-side table pagination for addresses, DNS, DHCP, and audit (WCAG AA:
+  bounded, navigable tables).
+- `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md` (Contributor Covenant 2.1), and a pull
+  request template.
+
+### Changed
+- **Breaking:** API paths are now served under `/api/v1/*` (was `/api/*`).
+  Update any external API or token clients. The bundled frontend and MCP client
+  are already updated.
+
 ## [1.0.0] - 2026-06-01
 
 First public release.
@@ -67,5 +80,6 @@ Fernet-encrypted at rest)
 - Docker Compose (prod images from `backend/Dockerfile.prod` +
   `frontend/Dockerfile`), Kubernetes/Kustomize manifests, public images on GHCR.
 
-[Unreleased]: https://github.com/betz-anthony/ipforge/compare/v1.0.0...HEAD
+[Unreleased]: https://github.com/betz-anthony/ipforge/compare/v1.1.0...HEAD
+[1.1.0]: https://github.com/betz-anthony/ipforge/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/betz-anthony/ipforge/releases/tag/v1.0.0
