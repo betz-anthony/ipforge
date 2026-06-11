@@ -50,6 +50,8 @@ from app.models.provider_config import ProviderConfig  # noqa: E402
 from app.models.cache import (  # noqa: E402
     CachedDNSZone, CachedDNSRecord, CachedDHCPScope, CachedDHCPLease, SyncStatus,
 )
+from app.models.audit_log import AuditLog  # noqa: E402
+from app.models.network_device import NetworkDevice, DiscoveredEndpoint  # noqa: E402
 
 random.seed(42)
 NOW = utcnow()
@@ -324,6 +326,56 @@ def seed(db):
                        config=json.dumps({"ctrl_agent_url": "http://10.20.0.6:8000"}),
                        enabled=False, sort_order=1),
     ])
+
+    # ── audit log (so the Audit page is populated for demos/screenshots) ────────
+    db.flush()  # give earlier rows ids before we reference/query them
+    audit_actors = ["admin", "operator", "jdoe", "svc-terraform"]
+    audit_events = [
+        ("create", "subnet",           "10.30.0.0/24",            "Created subnet 10.30.0.0/24 (lab-dmz)"),
+        ("create", "address",          "10.20.0.10",              "Allocated 10.20.0.10 (vcenter)"),
+        ("update", "address",          "10.20.0.42",              "Changed status assigned -> reserved"),
+        ("create", "dns_record",       "web01.corp.example.com",  "Added A web01 -> 10.20.0.55"),
+        ("delete", "dhcp_reservation", "10.21.0.80",              "Removed reservation 10.21.0.80"),
+        ("update", "subnet",           "10.21.0.0/24",            "Set scan interval to 15m"),
+        ("create", "vlan",             "30",                      "Created VLAN 30 (dmz)"),
+        ("create", "address",          "10.20.0.61",              "Allocated 10.20.0.61 (build-runner)"),
+        ("delete", "address",          "10.22.0.13",              "Reclaimed stale address 10.22.0.13"),
+        ("update", "dns_record",       "db01.corp.example.com",   "Updated A db01 -> 10.20.0.31"),
+        ("create", "dhcp_reservation", "10.21.0.50",              "Reserved 10.21.0.50 (printer-2f)"),
+        ("update", "address",          "10.20.0.10",              "Updated MAC and hostname"),
+    ]
+    for action, rtype, rid, summary in audit_events:
+        ts = NOW - timedelta(days=random.randint(0, 12), hours=random.randint(0, 23),
+                             minutes=random.randint(0, 59))
+        before = after = None
+        if action == "update":
+            before, after = json.dumps({"status": "assigned"}), json.dumps({"status": "reserved"})
+        elif action == "create":
+            after = json.dumps({"id": rid})
+        else:  # delete
+            before = json.dumps({"id": rid})
+        db.add(AuditLog(timestamp=ts, username=random.choice(audit_actors), action=action,
+                        resource_type=rtype, resource_id=rid, summary=summary,
+                        before_state=before, after_state=after))
+
+    # ── SNMP discovery: switches + endpoints (Discovery page) ───────────────────
+    sw_core = NetworkDevice(name="core-sw01", host="10.20.0.2", snmp_version="2c",
+                            community="public", enabled=True, poll_interval_minutes=30)
+    sw_acc = NetworkDevice(name="access-sw02", host="10.20.0.3", snmp_version="2c",
+                           community="public", enabled=True, poll_interval_minutes=60)
+    db.add_all([sw_core, sw_acc])
+    db.flush()  # device ids
+
+    endpoints_src = db.query(IPAddress).filter(IPAddress.mac_address.isnot(None)).limit(16).all()
+    for n, addr in enumerate(endpoints_src):
+        dev = sw_core if n % 2 == 0 else sw_acc
+        db.add(DiscoveredEndpoint(
+            device_id=dev.id, ip=addr.address, mac=addr.mac_address,
+            ifindex=10001 + n, port_name=f"Gi1/0/{n + 1}",
+            vlan=random.choice([10, 20, 30, 99]),
+            last_seen=NOW - timedelta(minutes=random.randint(1, 240)),
+            source=dev.name,
+        ))
 
     db.commit()
 
