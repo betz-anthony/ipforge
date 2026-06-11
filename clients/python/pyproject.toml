@@ -1,0 +1,19 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "ipforge-client"
+version = "0.1.0"
+description = "Official Python client for IPForge (IPAM that pushes DNS/DHCP config)."
+readme = "README.md"
+requires-python = ">=3.9"
+license = "GPL-3.0-or-later"
+authors = [{ name = "Anthony Betz" }]
+dependencies = ["requests>=2.28"]
+
+[project.urls]
+Homepage = "https://github.com/betz-anthony/ipforge"
+
+[tool.hatch.build.targets.wheel]
+packages = ["ipforge_client"]
