@@ -43,7 +43,12 @@ class _Transport:
     @staticmethod
     def _handle(resp):
         if resp.status_code < 400:
-            return resp.json() if resp.content else {}
+            if not resp.content:
+                return {}
+            try:
+                return resp.json()
+            except ValueError:
+                return {}
         detail = None
         try:
             body = resp.json()
