@@ -1,50 +1,40 @@
 terraform {
   required_providers {
-    restapi = {
-      source  = "Mastercard/restapi"
-      version = "~> 1.19"
+    ipforge = {
+      source  = "betz-anthony/ipforge"
+      version = "~> 0.1"
     }
   }
 }
 
-variable "ipam_token" {
-  description = "IPForge JWT token (generate via POST /api/auth/login)"
+variable "ipforge_token" {
+  description = "IPForge API token (ipfg_...). Or set the IPFORGE_TOKEN env var."
+  type        = string
   sensitive   = true
 }
 
-provider "restapi" {
-  uri                  = "https://ipam.example.com/api"
-  write_returns_object = true
-  headers = {
-    Authorization = "Bearer ${var.ipam_token}"
-  }
+provider "ipforge" {
+  url   = "https://ipforge.example.com" # or set IPFORGE_URL
+  token = var.ipforge_token             # or set IPFORGE_TOKEN
 }
 
-# Look up the subnet by CIDR
-data "restapi_object" "subnet" {
-  path         = "/subnets"
-  search_key   = "cidr"
-  search_value = "10.0.1.0/24"
+# Look up an existing subnet by CIDR.
+data "ipforge_subnet" "app" {
+  cidr = "10.0.1.0/24"
 }
 
-# Allocate next free IP, register DNS A record and DHCP reservation.
-# Re-running terraform apply is safe: hostname "web-01" is the idempotency key.
-resource "restapi_object" "web01_ip" {
-  path         = "/subnets/${data.restapi_object.subnet.id}/allocate"
-  read_path    = "/addresses/{id}"
-  destroy_path = "/addresses/{id}"
-  id_attribute = "id"
-
-  data = jsonencode({
-    hostname      = "web-01"
-    mac_address   = "aa:bb:cc:dd:ee:ff"
-    register_dns  = true
-    dns_zone      = "example.com"
-    register_dhcp = true
-  })
+# Allocate the next free IP for web-01, registering a DNS A record and a DHCP
+# reservation. Idempotent by hostname — re-running `terraform apply` is safe.
+resource "ipforge_allocation" "web01" {
+  subnet_id     = data.ipforge_subnet.app.id
+  hostname      = "web-01"
+  mac_address   = "aa:bb:cc:dd:ee:ff"
+  register_dns  = true
+  dns_zone      = "example.com"
+  register_dhcp = true
 }
 
 output "web01_address" {
   description = "Allocated IP address for web-01"
-  value       = jsondecode(restapi_object.web01_ip.api_data).address
+  value       = ipforge_allocation.web01.address
 }
