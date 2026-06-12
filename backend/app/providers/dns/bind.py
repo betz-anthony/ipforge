@@ -1,3 +1,4 @@
+import socket
 import dns.query
 import dns.zone
 import dns.update
@@ -23,6 +24,15 @@ class BINDDNSProvider(DNSProvider):
         self._tsig_algorithm = cfg.get("tsig_algorithm", "hmac-sha256")
         self._zones = cfg.get("zones", "")
 
+    def _addr(self) -> str:
+        # dnspython's query.tcp/xfr require an IP literal — they do NOT resolve
+        # hostnames. Resolve here so a hostname in the provider config works
+        # (an IP passes through getaddrinfo unchanged).
+        try:
+            return socket.getaddrinfo(self._host, self._port, proto=socket.IPPROTO_TCP)[0][4][0]
+        except socket.gaierror as e:
+            raise RuntimeError(f"BIND host '{self._host}' did not resolve: {e}")
+
     def _keyring(self):
         if not self._tsig_key_name:
             return None, None
@@ -40,7 +50,7 @@ class BINDDNSProvider(DNSProvider):
         if keyring:
             xfr_kwargs = {"keyring": keyring, "keyalgorithm": algo}
 
-        xfr = dns.query.xfr(self._host, zone, port=self._port, **xfr_kwargs)
+        xfr = dns.query.xfr(self._addr(), zone, port=self._port, **xfr_kwargs)
         zone_obj = dns.zone.from_xfr(xfr)
 
         records: list[DNSRecord] = []
@@ -66,7 +76,7 @@ class BINDDNSProvider(DNSProvider):
         return dns.update.Update(zone, **kwargs)
 
     def _send_update(self, update) -> None:
-        resp = dns.query.tcp(update, self._host, port=self._port)
+        resp = dns.query.tcp(update, self._addr(), port=self._port)
         rc = resp.rcode()
         if rc != dns.rcode.NOERROR:
             raise RuntimeError(f"BIND RFC 2136 update rejected: {dns.rcode.to_text(rc)}")
