@@ -21,15 +21,16 @@ Three backends, ranked by setup friction:
 |---|---|---|---|
 | **Pi-hole** | DNS **and** DHCP, one container | none | fastest end-to-end demo |
 | **BIND9** | authoritative DNS (RFC2136) | low | credible "real DNS" proof |
-| **Kea** | ISC DHCP (control-agent API) | read-only (free) | scopes/leases read; **push needs ISC premium hook** |
+| **Kea** | ISC DHCP (control-agent API) | medium (one-time `build`) | authoritative-DHCP push (Kea 3.0) |
 
-Recommended recording path: **BIND9 for DNS + Pi-hole for DHCP** (both verified,
-both free), or **Pi-hole for everything** (simplest). Kea's reservation *push*
-(`reservation-add`) requires ISC's premium `host_cmds` hook (see C) — use Pi-hole
-for the free DHCP money shot.
+Recommended recording path: **BIND9 for DNS + Kea or Pi-hole for DHCP** — all
+three are free and verified. Pi-hole is the one-container quick path; Kea 3.0 is
+the credible "real DHCP server" story.
 
-> **Verified (2026-06-11):** BIND accepts IPForge's exact TSIG/RFC2136 update and
-> serves it over AXFR; Pi-hole's API auth works. Use these two.
+> **Verified live (2026-06-12):** BIND accepts IPForge's exact TSIG/RFC2136
+> update and serves it over AXFR; Pi-hole's API auth works; **Kea 3.0
+> `reservation-add` → `reservation-get-all` round-trips** (host_cmds is open
+> source in Kea 3.0 — no subscription).
 
 > Throwaway only. The TSIG key and passwords here are committed demo values —
 > never reuse them anywhere real. `docker compose ... down -v` wipes everything.
@@ -82,32 +83,30 @@ dig @127.0.0.1 -p 15353 demo.lab AXFR \
   -y "hmac-sha256:ipforge-key:MTIzNDU2Nzg5MGFiY2RlZmdoaWprbG1ub3BxcnN0dXY="
 ```
 
-## C. ISC Kea (DHCP control agent) — read-only on the free tier
+## C. ISC Kea 3.0 (DHCP control agent) — free reservation push
 
-Built from `./kea/Dockerfile` (Kea 2.7 from ISC's public apt repo). Runs
-`kea-dhcp4` + `kea-ctrl-agent`, so IPForge can **read** scopes and leases.
+Built from `./kea/Dockerfile` (Kea **3.0** from ISC's `kea-3-0` apt repo, where
+ISC open-sourced all hooks). Runs `kea-dhcp4` + `kea-ctrl-agent` with the
+`host_cmds` + `pgsql` hooks and a Postgres host backend, so IPForge can add and
+remove reservations at runtime. First run builds it (`build kea`, ~2 min); the
+build fails if `libdhcp_host_cmds.so` is missing.
 
-> **Reservation push is not free.** IPForge's `add_reservation` uses
-> `reservation-add`, a command from the **`host_cmds` hook** — which is **ISC
-> premium (subscriber-only)** and is **not** in the public repo (verified
-> 2026-06-11: the open repo ships `lease_cmds`, `ha`, `stat_cmds`, … but not
-> `host_cmds`). So free Kea answers "command not supported" on `reservation-add`.
-> **For the DHCP money shot, use Pi-hole (A).** If you have an ISC subscription,
-> drop `libdhcp_host_cmds.so` into the image and uncomment the `hooks-libraries`
-> + `hosts-database` block in `kea/kea-dhcp4.conf` (the `kea-db` Postgres service
-> is already provided for the host backend).
+> Two Kea-3.0 specifics already handled here, in case you adapt this: control
+> sockets must live under `/var/run/kea` (not `/tmp`), and hook libraries must be
+> referenced by their real arch path (`/usr/lib/x86_64-linux-gnu/kea/hooks/…`),
+> which is why the `kea` service pins `platform: linux/amd64`. The Postgres host
+> backend is itself a hook in 3.0 (`libdhcp_pgsql.so`) and is loaded alongside
+> `host_cmds`.
 
 **Add as a provider** (Settings → Providers → Add → DHCP):
 - type `keadhcp`, name `kea-demo`, `url` = `http://kea:8000`, `secret` = (blank)
 
-**Read proof (works on the free tier):**
+**Prove on camera (after an IPForge allocation with register_dhcp):**
 ```bash
-# Kea's configured scopes, straight from the control agent:
+# The reservation IPForge just added, straight from Kea's host backend:
 curl -s http://localhost:18000/ -H 'Content-Type: application/json' \
-  -d '{"command":"config-get","service":["dhcp4"]}' | jq '.[0].arguments.Dhcp4.subnet4'
-# Dynamic leases (lease_cmds, open source):
-curl -s http://localhost:18000/ -H 'Content-Type: application/json' \
-  -d '{"command":"lease4-get-all","service":["dhcp4"],"arguments":{"subnets":[1]}}' | jq
+  -d '{"command":"reservation-get-all","service":["dhcp4"],"arguments":{"subnet-id":1}}' \
+  | jq '.[0].arguments.hosts'
 ```
 
 ---
