@@ -1,0 +1,10 @@
+$TTL 60
+@       IN      SOA     ns1.demo.lab. admin.demo.lab. (
+                        1          ; serial (bumped automatically on dynamic update)
+                        3600       ; refresh
+                        600        ; retry
+                        86400      ; expire
+                        60 )       ; minimum TTL
+@       IN      NS      ns1.demo.lab.
+ns1     IN      A       127.0.0.1
+; Records below this point are created/removed by IPForge via RFC2136.
