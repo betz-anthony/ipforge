@@ -101,9 +101,15 @@ build fails if `libdhcp_host_cmds.so` is missing.
 **Add as a provider** (Settings → Providers → Add → DHCP):
 - type `keadhcp`, name `kea-demo`, `url` = `http://kea:8000`, `secret` = (blank)
 
-**Prove on camera (after an IPForge allocation with register_dhcp):**
+**Prove on camera (after an IPForge allocation with register_dhcp)** — the
+DHCP analog of `dig`: query Kea's control agent for its live reservation state.
+
 ```bash
-# The reservation IPForge just added, straight from Kea's host backend:
+# Convenience wrapper (host-side, needs curl + jq):
+./examples/demo-backends/kea-query.sh              # reservations in subnet 1
+./examples/demo-backends/kea-query.sh leases       # dynamic leases
+
+# Or the raw control-agent call it wraps:
 curl -s http://localhost:18000/ -H 'Content-Type: application/json' \
   -d '{"command":"reservation-get-all","service":["dhcp4"],"arguments":{"subnet-id":1}}' \
   | jq '.[0].arguments.hosts'
