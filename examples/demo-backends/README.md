@@ -21,7 +21,7 @@ Three backends, ranked by setup friction:
 |---|---|---|---|
 | **Pi-hole** | DNS **and** DHCP, one container | none | fastest end-to-end demo |
 | **BIND9** | authoritative DNS (RFC2136) | low | credible "real DNS" proof |
-| **Kea** | ISC DHCP (control-agent API) | **high** (needs `host_cmds` hook) | authoritative-DHCP story |
+| **Kea** | ISC DHCP (control-agent API) | medium (one-time `build`; hook guaranteed) | authoritative-DHCP story |
 
 Recommended recording path: **BIND9 for DNS + Pi-hole for DHCP** (both reliable),
 or **Pi-hole for everything** (simplest). Kea is included for completeness — see
@@ -82,13 +82,15 @@ dig @127.0.0.1 -p 5353 demo.lab AXFR \
 
 IPForge's `keadhcp` provider uses `reservation-add` / `reservation-del`, which
 require Kea's **`host_cmds` hook library** plus a **writable host backend**
-(Postgres here). The bundled config wires that up, but:
+(Postgres here). Both are wired up, and the hook is **guaranteed**:
 
-> **Confirm on the day:** your Kea image must ship `libdhcp_host_cmds.so`. ISC's
-> own Kea images include the hooks; some slim community images do NOT. If
-> `reservation-add` returns "command not supported", the image lacks the hook —
-> switch the DHCP demo to Pi-hole (A). The image tag in the compose file is a
-> placeholder marked `# VERIFY`.
+> The `kea` service is **built from `./kea/Dockerfile`**, which installs Kea 2.7+
+> (where ISC open-sourced the hooks — `host_cmds` is premium-only in 2.6 and
+> earlier) and **fails the build if `libdhcp_host_cmds.so` is absent**. So you
+> can't end up recording against a Kea that silently rejects `reservation-add`.
+> First run builds it: `docker compose ... build kea` (a minute or two). If
+> ISC's apt package names drift, the build errors at `apt-get install` with a
+> clear message — adjust `KEA_REPO` / the package list in the Dockerfile.
 
 **Add as a provider** (Settings → Providers → Add → DHCP):
 - type `keadhcp`, name `kea-demo`
