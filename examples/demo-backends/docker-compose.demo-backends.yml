@@ -15,11 +15,17 @@ services:
   bind9:
     image: internetsystemsconsortium/bind9:9.20
     container_name: ipforge-demo-bind9
-    # image entrypoint is already `named`; pass only flags
-    command: ["-g", "-c", "/etc/bind/named.conf"]
+    # Seed the zone into the writable volume, then run named. Config stays ro so
+    # the committed seed file is never mutated; named writes zone+journal to the
+    # volume (wiped by `down -v`, so the demo always starts from an empty zone).
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - "cp -n /etc/bind/db.demo.lab /var/lib/bind/db.demo.lab;
+         chmod -R 0777 /var/lib/bind;
+         exec named -g -c /etc/bind/named.conf"
     volumes:
-      # rw: named writes the zone journal (.jnl) on dynamic update
-      - ./bind:/etc/bind
+      - ./bind:/etc/bind:ro
+      - bind_data:/var/lib/bind
     ports:
       # 5353 is taken by macOS mDNS (Bonjour); use a high host port.
       - "15353:53/udp"  # query from your laptop: dig @127.0.0.1 -p 15353
@@ -43,8 +49,11 @@ services:
     build: ./kea
     container_name: ipforge-demo-kea
     depends_on: [kea-db]
+    # Free tier runs dhcp4 + ctrl-agent for the read demo (no host_cmds).
+    # ISC subscribers: also run `kea-admin db-init pgsql -u kea -p kea -n kea
+    # -h kea-db` once and enable the hooks block in kea-dhcp4.conf.
     command: >
-      sh -c "kea-admin db-init pgsql -u kea -p kea -n kea -h kea-db || true;
+      sh -c "mkdir -p /run/kea /var/lib/kea;
              kea-dhcp4 -c /etc/kea/kea-dhcp4.conf &
              exec kea-ctrl-agent -c /etc/kea/kea-ctrl-agent.conf"
     volumes:
@@ -69,3 +78,4 @@ services:
 
 volumes:
   kea_db:
+  bind_data:
