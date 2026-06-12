@@ -1,0 +1,68 @@
+# Disposable, REAL DNS/DHCP backends for the IPForge demo/screencast.
+# Run alongside the main stack so IPForge's providers push to them for real:
+#
+#   docker compose -f docker-compose.yml \
+#     -f examples/demo-backends/docker-compose.demo-backends.yml up -d
+#
+# Services join the main compose's default network, so the `api` container
+# reaches them by name: bind9:53, kea:8000, pihole:80.
+# See README.md for the IPForge provider settings + on-camera proof commands.
+#
+# THROWAWAY ONLY — committed demo creds. `down -v` wipes all state.
+
+services:
+  # ── DNS: BIND9, authoritative for demo.lab, TSIG-signed RFC2136 + AXFR ──
+  bind9:
+    image: internetsystemsconsortium/bind9:9.20
+    container_name: ipforge-demo-bind9
+    command: ["named", "-g", "-c", "/etc/bind/named.conf"]
+    volumes:
+      # rw: named writes the zone journal (.jnl) on dynamic update
+      - ./bind:/etc/bind
+    ports:
+      - "5353:53/udp"   # query from your laptop: dig @127.0.0.1 -p 5353
+      - "5353:53/tcp"
+
+  # ── DHCP: ISC Kea (control agent API). Needs host_cmds hook (see README C). ──
+  kea-db:
+    image: postgres:16-alpine
+    container_name: ipforge-demo-kea-db
+    environment:
+      POSTGRES_DB: kea
+      POSTGRES_USER: kea
+      POSTGRES_PASSWORD: kea
+    volumes:
+      - kea_db:/var/lib/postgresql/data
+
+  kea:
+    # VERIFY: image must include libdhcp_host_cmds.so + run dhcp4 + ctrl-agent.
+    # ISC's official Kea images ship the hooks. Adjust the tag to a build you trust.
+    image: internetsystemsconsortium/kea:2.6
+    container_name: ipforge-demo-kea
+    depends_on: [kea-db]
+    command: >
+      sh -c "kea-admin db-init pgsql -u kea -p kea -n kea -h kea-db || true;
+             kea-dhcp4 -c /etc/kea/kea-dhcp4.conf &
+             exec kea-ctrl-agent -c /etc/kea/kea-ctrl-agent.conf"
+    volumes:
+      - ./kea:/etc/kea:ro
+    # ctrl-agent listens on 8000; reachable from api as http://kea:8000
+    ports:
+      - "8000:8000"     # prove from your laptop: curl http://127.0.0.1:8000
+
+  # ── All-in-one alternative: Pi-hole (DNS + DHCP via one HTTP API) ──
+  pihole:
+    image: pihole/pihole:latest
+    container_name: ipforge-demo-pihole
+    environment:
+      FTLCONF_webserver_api_password: "demodemo"
+      FTLCONF_dns_listeningMode: "all"
+      FTLCONF_dns_upstreams: "1.1.1.1"
+    ports:
+      - "8081:80"       # admin UI: http://localhost:8081/admin
+      - "5354:53/udp"   # dig @127.0.0.1 -p 5354
+    cap_add:
+      - NET_ADMIN       # required for Pi-hole's DHCP server
+
+volumes:
+  kea_db:
