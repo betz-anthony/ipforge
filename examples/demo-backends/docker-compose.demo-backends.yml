@@ -24,7 +24,7 @@ services:
          chmod -R 0777 /var/lib/bind;
          exec named -g -c /etc/bind/named.conf"
     volumes:
-      - ./bind:/etc/bind:ro
+      - ./examples/demo-backends/bind:/etc/bind:ro
       - bind_data:/var/lib/bind
     ports:
       # 5353 is taken by macOS mDNS (Bonjour); use a high host port.
@@ -41,15 +41,22 @@ services:
       POSTGRES_PASSWORD: kea
     volumes:
       - kea_db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U kea -d kea"]
+      interval: 3s
+      timeout: 3s
+      retries: 30
 
   kea:
-    # Built from ./kea/Dockerfile, which installs Kea 2.7+ (open-source hooks)
-    # and FAILS THE BUILD if libdhcp_host_cmds.so is missing — so the hook
-    # reservation-add needs is guaranteed present. Runs dhcp4 + ctrl-agent.
-    build: ./kea
+    # Built from ./examples/demo-backends/kea/Dockerfile (Kea 3.0 from ISC, where
+    # hooks are open source). The build fails if libdhcp_host_cmds.so is missing.
+    # Runs dhcp4 (host_cmds + pgsql hooks) + ctrl-agent.
+    build: ./examples/demo-backends/kea
     platform: linux/amd64   # stable hooks path (/usr/lib/x86_64-linux-gnu/...)
     container_name: ipforge-demo-kea
-    depends_on: [kea-db]
+    depends_on:
+      kea-db:
+        condition: service_healthy   # wait for Postgres to accept connections
     # Init the Postgres host schema (idempotent), then run dhcp4 (with the
     # host_cmds hook) + the control agent. Kea 3.0 hooks are open source.
     command: >
@@ -58,7 +65,7 @@ services:
              kea-dhcp4 -c /etc/kea/kea-dhcp4.conf &
              exec kea-ctrl-agent -c /etc/kea/kea-ctrl-agent.conf"
     volumes:
-      - ./kea:/etc/kea:ro
+      - ./examples/demo-backends/kea:/etc/kea:ro
     # ctrl-agent listens on 8000; reachable from api as http://kea:8000
     ports:
       - "18000:8000"     # prove from your laptop: curl http://127.0.0.1:8000
