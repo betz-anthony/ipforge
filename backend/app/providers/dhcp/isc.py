@@ -1,5 +1,8 @@
+import logging
 import requests
 from app.providers.dhcp.base import DHCPProvider, DHCPScope, DHCPReservation
+
+logger = logging.getLogger(__name__)
 
 # ISC Kea DHCP provider via Kea Control Agent REST API.
 # Requires: Kea Control Agent running (default port 8000).
@@ -66,8 +69,12 @@ class KeaDHCPProvider(DHCPProvider):
             pools = s.get("pools", [])
             pool_str = pools[0].get("pool", "") if pools else ""
             start = end = ""
-            if " - " in pool_str:
-                start, end = [p.strip() for p in pool_str.split(" - ", 1)]
+            # Kea's config-get returns pools as "a-b" (no spaces); older/manual
+            # configs may use "a - b". Split on the hyphen either way (IPs never
+            # contain one). Without this, start/end come back empty and DHCP
+            # scope matching fails for every Kea scope.
+            if "-" in pool_str:
+                start, end = [p.strip() for p in pool_str.split("-", 1)]
             cidr = s["subnet"]
             mask = ""
             if v6 and "/" in cidr:
@@ -85,7 +92,16 @@ class KeaDHCPProvider(DHCPProvider):
         return scopes
 
     def get_scopes(self) -> list[DHCPScope]:
-        return self._scopes_for_service("dhcp4") + self._scopes_for_service("dhcp6")
+        # Query each service independently: many Kea deployments run only dhcp4
+        # (no dhcp6 daemon / control socket). A missing service must not break
+        # scope enumeration for the one that IS configured.
+        scopes: list[DHCPScope] = []
+        for service in ("dhcp4", "dhcp6"):
+            try:
+                scopes += self._scopes_for_service(service)
+            except Exception as exc:
+                logger.debug("kea get_scopes: skipping %s (%s)", service, exc)
+        return scopes
 
     def get_leases(self, scope_id: str) -> list[DHCPReservation]:
         service = self._service_for(scope_id)
