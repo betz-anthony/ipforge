@@ -50,20 +50,28 @@ services:
   kea:
     # Built from ./examples/demo-backends/kea/Dockerfile (Kea 3.0 from ISC, where
     # hooks are open source). The build fails if libdhcp_host_cmds.so is missing.
-    # Runs dhcp4 (host_cmds + pgsql hooks) + ctrl-agent.
+    # Runs dhcp4 (host_cmds + pgsql hooks) + ctrl-agent. Arch-agnostic: the
+    # entrypoint detects the real hooks dir (x86_64 or aarch64) at runtime, so
+    # it runs native on both amd64 and arm64 — no platform pin, no emulation.
     build: ./examples/demo-backends/kea
-    platform: linux/amd64   # stable hooks path (/usr/lib/x86_64-linux-gnu/...)
     container_name: ipforge-demo-kea
     depends_on:
       kea-db:
         condition: service_healthy   # wait for Postgres to accept connections
-    # Init the Postgres host schema (idempotent), then run dhcp4 (with the
-    # host_cmds hook) + the control agent. Kea 3.0 hooks are open source.
+    # Detect the arch hooks dir, render the config (sub __HOOKS_DIR__), init the
+    # Postgres host schema (idempotent), then run dhcp4 + the control agent.
+    # $$ escapes compose interpolation so the container shell evaluates it.
     command: >
-      sh -c "mkdir -p /run/kea /var/lib/kea;
-             PGPASSWORD=kea kea-admin db-init pgsql -u kea -p kea -n kea -h kea-db 2>/dev/null || true;
-             kea-dhcp4 -c /etc/kea/kea-dhcp4.conf &
-             exec kea-ctrl-agent -c /etc/kea/kea-ctrl-agent.conf"
+      sh -ec '
+        mkdir -p /run/kea /var/lib/kea;
+        HOOKDIR=$$(dirname "$$(find /usr/lib -name libdhcp_host_cmds.so 2>/dev/null | head -1)");
+        [ -n "$$HOOKDIR" ] || { echo "FATAL: host_cmds hook not found"; exit 1; };
+        echo "kea hooks dir: $$HOOKDIR";
+        sed "s#__HOOKS_DIR__#$$HOOKDIR#g" /etc/kea/kea-dhcp4.conf > /run/kea/kea-dhcp4.conf;
+        PGPASSWORD=kea kea-admin db-init pgsql -u kea -p kea -n kea -h kea-db 2>/dev/null || true;
+        kea-dhcp4 -c /run/kea/kea-dhcp4.conf &
+        exec kea-ctrl-agent -c /etc/kea/kea-ctrl-agent.conf
+      '
     volumes:
       - ./examples/demo-backends/kea:/etc/kea:ro
     # ctrl-agent listens on 8000; reachable from api as http://kea:8000
