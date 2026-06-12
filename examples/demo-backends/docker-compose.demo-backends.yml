@@ -15,13 +15,15 @@ services:
   bind9:
     image: internetsystemsconsortium/bind9:9.20
     container_name: ipforge-demo-bind9
-    command: ["named", "-g", "-c", "/etc/bind/named.conf"]
+    # image entrypoint is already `named`; pass only flags
+    command: ["-g", "-c", "/etc/bind/named.conf"]
     volumes:
       # rw: named writes the zone journal (.jnl) on dynamic update
       - ./bind:/etc/bind
     ports:
-      - "5353:53/udp"   # query from your laptop: dig @127.0.0.1 -p 5353
-      - "5353:53/tcp"
+      # 5353 is taken by macOS mDNS (Bonjour); use a high host port.
+      - "15353:53/udp"  # query from your laptop: dig @127.0.0.1 -p 15353
+      - "15353:53/tcp"
 
   # ── DHCP: ISC Kea (control agent API). Needs host_cmds hook (see README C). ──
   kea-db:
@@ -49,7 +51,7 @@ services:
       - ./kea:/etc/kea:ro
     # ctrl-agent listens on 8000; reachable from api as http://kea:8000
     ports:
-      - "8000:8000"     # prove from your laptop: curl http://127.0.0.1:8000
+      - "18000:8000"     # prove from your laptop: curl http://127.0.0.1:8000
 
   # ── All-in-one alternative: Pi-hole (DNS + DHCP via one HTTP API) ──
   pihole:
@@ -61,7 +63,7 @@ services:
       FTLCONF_dns_upstreams: "1.1.1.1"
     ports:
       - "8081:80"       # admin UI: http://localhost:8081/admin
-      - "5354:53/udp"   # dig @127.0.0.1 -p 5354
+      - "15354:53/udp"  # dig @127.0.0.1 -p 15354
     cap_add:
       - NET_ADMIN       # required for Pi-hole's DHCP server
 

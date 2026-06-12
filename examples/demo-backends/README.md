@@ -46,7 +46,7 @@ Admin UI: <http://localhost:8081/admin> (password `demodemo`).
 **Prove on camera (after an allocation with register_dns/register_dhcp):**
 ```bash
 # DNS — Pi-hole answers for the name IPForge just created:
-dig @127.0.0.1 -p 5354 web01.demo.lab +short
+dig @127.0.0.1 -p 15354 web01.demo.lab +short
 # DHCP — the reservation shows in the admin UI (Settings → DHCP → static leases),
 # or via the API:
 curl -s "http://localhost:8081/api/dhcp/leases" -H "X-FTL-SID: <sid>"
@@ -69,12 +69,12 @@ Serves the `demo.lab` zone; accepts TSIG-signed dynamic updates (what IPForge's
 **Prove on camera:**
 ```bash
 # Before: name doesn't resolve
-dig @127.0.0.1 -p 5353 web01.demo.lab A +short        # (empty)
+dig @127.0.0.1 -p 15353 web01.demo.lab A +short        # (empty)
 # Allocate web01 in IPForge with register_dns + dns_zone=demo.lab
 # After: the A record IPForge just wrote, live on BIND:
-dig @127.0.0.1 -p 5353 web01.demo.lab A +short        # 10.99.0.x
+dig @127.0.0.1 -p 15353 web01.demo.lab A +short        # 10.99.0.x
 # Full record + the zone:
-dig @127.0.0.1 -p 5353 demo.lab AXFR \
+dig @127.0.0.1 -p 15353 demo.lab AXFR \
   -y "hmac-sha256:ipforge-key:MTIzNDU2Nzg5MGFiY2RlZmdoaWprbG1ub3BxcnN0dXY="
 ```
 
@@ -100,7 +100,7 @@ require Kea's **`host_cmds` hook library** plus a **writable host backend**
 **Prove on camera:**
 ```bash
 # The reservation IPForge just made, straight from Kea's control agent:
-curl -s http://localhost:8000/ \
+curl -s http://localhost:18000/ \
   -H 'Content-Type: application/json' \
   -d '{"command":"reservation-get-all","service":["dhcp4"],"arguments":{"subnet-id":1}}' | jq
 ```
@@ -110,7 +110,7 @@ curl -s http://localhost:8000/ \
 ## Screencast wiring (maps to the script in `marketing.md`)
 
 Beat 3 (the money shot): split-screen IPForge UI + a terminal.
-1. Terminal: `dig @127.0.0.1 -p 5353 web01.demo.lab A +short` → empty.
+1. Terminal: `dig @127.0.0.1 -p 15353 web01.demo.lab A +short` → empty.
 2. UI: allocate next-free IP in a subnet → hostname `web01`, MAC set,
    `register_dns` (zone `demo.lab`) + `register_dhcp` on → submit.
 3. Terminal: re-run the `dig` → the A record appears. Run the Kea/Pi-hole proof →
