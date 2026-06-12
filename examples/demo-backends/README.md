@@ -119,15 +119,24 @@ curl -s http://localhost:18000/ -H 'Content-Type: application/json' \
 
 ## Screencast wiring (maps to the script in `marketing.md`)
 
-Beat 3 (the money shot): split-screen IPForge UI + a terminal.
-1. Terminal: `dig @127.0.0.1 -p 15353 web01.demo.lab A +short` → empty.
-2. UI: allocate next-free IP in a subnet → hostname `web01`, MAC set,
-   `register_dns` (zone `demo.lab`) + `register_dhcp` on → submit.
-3. Terminal: re-run the `dig` → the A record appears. Run the Kea/Pi-hole proof →
-   the reservation appears. **That's the differentiator** — config landed on the
-   real server, not just IPForge.
+Where the `register_dns`/`register_dhcp` toggles live: the **Requests → Approve
++ Allocate** dialog (NOT Subnets/Addresses — those just record an address).
+`scripts/demo-up.sh` makes `demo-lab` request-eligible and seeds a pending
+`web01` request so the UI path is a clean approve.
 
-Beat 5 (IaC): same thing via Terraform —
+Beat 3 (the money shot): split-screen IPForge UI + a terminal.
+1. Terminal: `dig @127.0.0.1 -p 15353 web01.demo.lab A +short` → empty;
+   `./examples/demo-backends/kea-query.sh` → `[]`.
+2. Do the allocation, either path:
+   - **UI:** Requests → the `web01` request → **Approve + Allocate** → check
+     Register DNS (zone `demo.lab`) + Register DHCP → Approve.
+   - **Terminal/IaC:** the `curl .../allocate` (printed by `demo-up.sh`) or the
+     Terraform `ipforge_allocation` below.
+3. Terminal: re-run `dig` → the A record appears; re-run `kea-query.sh` → the
+   reservation appears. **That's the differentiator** — config landed on the real
+   servers, not just IPForge.
+
+Beat 5 (IaC): same allocation via Terraform —
 ```hcl
 resource "ipforge_allocation" "web01" {
   subnet_id    = data.ipforge_subnet.app.id
@@ -136,7 +145,7 @@ resource "ipforge_allocation" "web01" {
   dns_zone     = "demo.lab"
 }
 ```
-`terraform apply`, then the same `dig` proof.
+`terraform apply`, then the same `dig` + `kea-query.sh` proofs.
 
 ## Teardown
 

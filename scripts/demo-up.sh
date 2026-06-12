@@ -55,11 +55,20 @@ mkprov "bind-demo (DNS)"  "{\"category\":\"dns\",\"provider_type\":\"bind\",\"na
 mkprov "kea-demo (DHCP)"  '{"category":"dhcp","provider_type":"keadhcp","name":"kea-demo","config":{"url":"http://kea:8000","secret":""},"enabled":true}'
 mkprov "pihole-demo (off)" '{"category":"dns","provider_type":"pihole","name":"pihole-demo","config":{"url":"http://pihole","password":"demodemo"},"enabled":false}'
 
-echo "==> Creating demo subnet 10.99.0.0/24 (pinned to bind-demo + kea-demo)..."
+echo "==> Creating demo subnet 10.99.0.0/24 (request-eligible, pinned to bind-demo + kea-demo)..."
 SID="$(curl -s -X POST "$API/subnets" "${AUTH[@]}" \
-  -d '{"name":"demo-lab","cidr":"10.99.0.0/24","dns_provider_name":"bind-demo","dhcp_provider_name":"kea-demo"}' \
+  -d '{"name":"demo-lab","cidr":"10.99.0.0/24","dns_provider_name":"bind-demo","dhcp_provider_name":"kea-demo","request_eligible":true}' \
   | jq -r '.id // empty')"
 [ -n "$SID" ] && echo "   - subnet id $SID" || echo "   - (subnet may already exist; check the UI)"
+
+# Seed a pending IP request so the UI money-shot is a clean "Approve + Allocate"
+# (the Register DNS/DHCP toggles live in the Requests approval dialog).
+if [ -n "$SID" ]; then
+  echo "==> Seeding a pending IP request for web01 (for the UI Approve+Allocate flow)..."
+  RC="$(curl -s -o /dev/null -w '%{http_code}' -X POST "$API/requests" "${AUTH[@]}" \
+    -d "{\"subnet_id\":$SID,\"hostname\":\"web01\",\"mac_address\":\"aa:bb:cc:dd:ee:01\",\"purpose\":\"Demo web server allocation\"}")"
+  echo "   - request POST: $RC"
+fi
 
 cat <<EOF
 
@@ -68,14 +77,24 @@ cat <<EOF
    UI:     http://localhost:3000     (login: admin / admin)
    Subnet: demo-lab  10.99.0.0/24    (id ${SID:-?})
 
- Money shot — in the UI, allocate the next free IP in demo-lab:
-   hostname = web01, enable Register DNS (zone demo.lab) + Register DHCP.
+ The Register-DNS/Register-DHCP toggles live in the REQUESTS approval dialog
+ (not the Subnets/Addresses pages). Two ways to do the money shot:
+
+ A) UI (clickable) — a pending "web01" request is already seeded:
+    Requests page -> the web01 request -> "Approve + Allocate"
+      -> check Register DNS (zone: demo.lab) + Register DHCP -> Approve.
+
+ B) Terminal/IaC (what's tested end-to-end) — allocate directly:
+    TOKEN=\$(curl -s -X POST http://localhost:8000/api/v1/auth/login \\
+      -H 'Content-Type: application/x-www-form-urlencoded' \\
+      -d 'username=admin&password=admin' | jq -r .access_token)
+    curl -s -X POST http://localhost:8000/api/v1/subnets/${SID:-1}/allocate \\
+      -H "Authorization: Bearer \$TOKEN" -H 'Content-Type: application/json' \\
+      -d '{"hostname":"web01","mac_address":"aa:bb:cc:dd:ee:01","register_dns":true,"dns_zone":"demo.lab","register_dhcp":true}'
 
  Prove it on the real servers (split-screen with the UI):
-   dig @127.0.0.1 -p 15353 web01.demo.lab A +short
-   curl -s http://localhost:18000/ -H 'Content-Type: application/json' \\
-     -d '{"command":"reservation-get-all","service":["dhcp4"],"arguments":{"subnet-id":1}}' \\
-     | jq '.[0].arguments.hosts'
+   dig @127.0.0.1 -p 15353 web01.demo.lab A +short        # DNS
+   ./examples/demo-backends/kea-query.sh                  # DHCP reservation
 
  Tear it all down (wipes state):  scripts/demo-down.sh
 ────────────────────────────────────────────────────────────────────
