@@ -47,13 +47,14 @@ services:
     # and FAILS THE BUILD if libdhcp_host_cmds.so is missing — so the hook
     # reservation-add needs is guaranteed present. Runs dhcp4 + ctrl-agent.
     build: ./kea
+    platform: linux/amd64   # stable hooks path (/usr/lib/x86_64-linux-gnu/...)
     container_name: ipforge-demo-kea
     depends_on: [kea-db]
-    # Free tier runs dhcp4 + ctrl-agent for the read demo (no host_cmds).
-    # ISC subscribers: also run `kea-admin db-init pgsql -u kea -p kea -n kea
-    # -h kea-db` once and enable the hooks block in kea-dhcp4.conf.
+    # Init the Postgres host schema (idempotent), then run dhcp4 (with the
+    # host_cmds hook) + the control agent. Kea 3.0 hooks are open source.
     command: >
       sh -c "mkdir -p /run/kea /var/lib/kea;
+             PGPASSWORD=kea kea-admin db-init pgsql -u kea -p kea -n kea -h kea-db 2>/dev/null || true;
              kea-dhcp4 -c /etc/kea/kea-dhcp4.conf &
              exec kea-ctrl-agent -c /etc/kea/kea-ctrl-agent.conf"
     volumes:
