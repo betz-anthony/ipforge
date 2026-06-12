@@ -35,9 +35,10 @@ services:
       - kea_db:/var/lib/postgresql/data
 
   kea:
-    # VERIFY: image must include libdhcp_host_cmds.so + run dhcp4 + ctrl-agent.
-    # ISC's official Kea images ship the hooks. Adjust the tag to a build you trust.
-    image: internetsystemsconsortium/kea:2.6
+    # Built from ./kea/Dockerfile, which installs Kea 2.7+ (open-source hooks)
+    # and FAILS THE BUILD if libdhcp_host_cmds.so is missing — so the hook
+    # reservation-add needs is guaranteed present. Runs dhcp4 + ctrl-agent.
+    build: ./kea
     container_name: ipforge-demo-kea
     depends_on: [kea-db]
     command: >
