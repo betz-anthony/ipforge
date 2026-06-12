@@ -248,12 +248,13 @@ def test_allocate_request_overrides_subnet_dns_provider(client, db):
 
 # ── DHCP registration ─────────────────────────────────────────────────────────
 
-def _mock_dhcp(source="msdhcp", scope_start="10.0.1.1", scope_end="10.0.1.254"):
+def _mock_dhcp(source="msdhcp", scope_start="10.0.1.1", scope_end="10.0.1.254",
+               scope_id="10.0.1.0", subnet_mask="/24"):
     mock = MagicMock()
     mock.source = source
     mock.get_scopes.return_value = [
         DHCPScope(
-            scope_id="10.0.1.0", name="test", subnet_mask="/24",
+            scope_id=scope_id, name="test", subnet_mask=subnet_mask,
             start_range=scope_start, end_range=scope_end,
         )
     ]
@@ -298,9 +299,10 @@ def test_allocate_register_dhcp_success(client, db):
 
 
 def test_allocate_dhcp_no_matching_scope(client, db):
-    # Scope doesn't contain the allocated IP → 400, IP rolled back
-    s = _subnet(db)
-    mock_dhcp = _mock_dhcp(scope_start="192.168.1.1", scope_end="192.168.1.254")
+    # Scope is a different network than the allocated IP → 400, IP rolled back
+    s = _subnet(db)  # 10.0.1.0/24
+    mock_dhcp = _mock_dhcp(scope_id="192.168.1.0", subnet_mask="/24",
+                           scope_start="192.168.1.1", scope_end="192.168.1.254")
     with patch("app.api.allocation.get_dhcp_providers", return_value=[mock_dhcp]):
         r = client.post(f"/api/v1/subnets/{s.id}/allocate",
                         json={"hostname": "web-01", "register_dhcp": True,
@@ -367,3 +369,36 @@ def test_allocation_dns_failure_returns_envelope(client, db):
             "hostname": "web01", "register_dns": True, "dns_zone": "example.com"})
     assert r.status_code == 502
     assert r.json()["detail"]["code"] == "provider_auth_failed"
+
+
+# ── DHCP scope matching (regression: reservations outside the dynamic pool) ──
+def test_scope_contains_cidr_outside_pool():
+    import ipaddress
+    from app.api.allocation import _scope_contains
+    # kea-style: scope_id is a CIDR, narrow pool. A reservation OUTSIDE the pool
+    # but inside the subnet must still match (static reservations are normal).
+    s = DHCPScope(scope_id="10.99.0.0/24", name="x", subnet_mask="",
+                  start_range="10.99.0.100", end_range="10.99.0.150")
+    assert _scope_contains(s, ipaddress.ip_address("10.99.0.5"))      # outside pool, in CIDR
+    assert _scope_contains(s, ipaddress.ip_address("10.99.0.120"))    # in pool
+    assert not _scope_contains(s, ipaddress.ip_address("10.88.0.5"))  # other subnet
+
+
+def test_scope_contains_msdhcp_network_plus_mask():
+    import ipaddress
+    from app.api.allocation import _scope_contains
+    # MS DHCP v4: bare network + dotted mask.
+    s = DHCPScope(scope_id="10.0.1.0", name="x", subnet_mask="255.255.255.0",
+                  start_range="10.0.1.100", end_range="10.0.1.150")
+    assert _scope_contains(s, ipaddress.ip_address("10.0.1.5"))
+    assert not _scope_contains(s, ipaddress.ip_address("10.0.2.5"))
+
+
+def test_scope_contains_range_fallback_for_non_network_scope():
+    import ipaddress
+    from app.api.allocation import _scope_contains
+    # Pi-hole-style: scope_id is not a network -> fall back to the pool range.
+    s = DHCPScope(scope_id="pihole", name="x", subnet_mask="",
+                  start_range="10.5.0.10", end_range="10.5.0.20")
+    assert _scope_contains(s, ipaddress.ip_address("10.5.0.15"))
+    assert not _scope_contains(s, ipaddress.ip_address("10.5.0.99"))

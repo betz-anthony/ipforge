@@ -95,16 +95,34 @@ def _resolve_provider(request_name: str | None, subnet_default: str | None, prov
     return providers[0] if providers else None
 
 
+def _scope_contains(scope, target) -> bool:
+    """True if `target` belongs to `scope`. Prefer the scope's network (so a
+    reservation OUTSIDE the dynamic pool still matches — the normal case for
+    static reservations); fall back to the pool start/end range for providers
+    whose scope_id is not a network (e.g. Pi-hole)."""
+    sid = (scope.scope_id or "").strip()
+    mask = (scope.subnet_mask or "").strip()
+    network = None
+    if "/" in sid:                      # CIDR, e.g. kea "10.99.0.0/24"
+        network = sid
+    elif sid and mask:                  # bare network + mask, e.g. MS DHCP
+        network = f"{sid}{mask}" if mask.startswith("/") else f"{sid}/{mask}"
+    if network is not None:
+        try:
+            return target in ipaddress.ip_network(network, strict=False)
+        except ValueError:
+            pass
+    try:                                # pool-range fallback
+        return ipaddress.ip_address(scope.start_range) <= target <= ipaddress.ip_address(scope.end_range)
+    except ValueError:
+        return False
+
+
 def _find_dhcp_scope(provider, ip_address: str) -> str | None:
     target = ipaddress.ip_address(ip_address)  # ValueError if bad IP
     for scope in provider.get_scopes():
-        try:
-            start = ipaddress.ip_address(scope.start_range)
-            end   = ipaddress.ip_address(scope.end_range)
-            if start <= target <= end:
-                return scope.scope_id
-        except ValueError:
-            continue
+        if _scope_contains(scope, target):
+            return scope.scope_id
     return None
 
 
