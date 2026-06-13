@@ -81,6 +81,9 @@ dig @127.0.0.1 -p 15353 web01.demo.lab A +short        # 10.99.0.x
 # Full record + the zone:
 dig @127.0.0.1 -p 15353 demo.lab AXFR \
   -y "hmac-sha256:ipforge-key:MTIzNDU2Nzg5MGFiY2RlZmdoaWprbG1ub3BxcnN0dXY="
+# Dual-stack: allocate web6 in the 2001:db8:da::/64 subnet (register_dns) — same
+# flow writes an AAAA, live on BIND:
+dig @127.0.0.1 -p 15353 web6.demo.lab AAAA +short      # 2001:db8:da::1
 ```
 
 ## C. ISC Kea 3.0 (DHCP control agent) — free reservation push
