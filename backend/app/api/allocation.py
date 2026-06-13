@@ -22,6 +22,8 @@ from app.models.user import User
 from app.providers.registry import get_dns_providers, get_dhcp_providers
 from app.providers.dns.base import DNSRecord
 from app.providers.dhcp.base import DHCPReservation
+from app.models.cache import CachedDNSRecord, CachedDNSZone, CachedDHCPLease
+from app.core.time import utcnow
 
 router = APIRouter()
 
@@ -286,6 +288,33 @@ def _do_allocate(
         except Exception as exc:
             _rollback()
             raise_provider_error(exc, step="dhcp", user=current_user)
+
+    # Reflect successful provider writes into the cache immediately so the DNS and
+    # DHCP pages show the new records right after allocation, without waiting for
+    # the next background sync. The sync reconciles these rows on its next pass.
+    now = utcnow()
+
+    def _cache_record(rec: DNSRecord, rtype: str) -> None:
+        # Idempotent: drop any prior cache row for this name/type/zone/source first.
+        db.query(CachedDNSRecord).filter_by(
+            name=rec.name, record_type=rtype, zone=rec.zone, source=dns_prov.source,
+        ).delete()
+        db.add(CachedDNSRecord(name=rec.name, record_type=rtype, value=rec.value,
+                               zone=rec.zone, ttl=rec.ttl, source=dns_prov.source, synced_at=now))
+        if db.get(CachedDNSZone, (rec.zone, dns_prov.source)) is None:
+            db.add(CachedDNSZone(zone=rec.zone, source=dns_prov.source, synced_at=now))
+
+    if dns_registered and dns_prov and a_record is not None:
+        _cache_record(a_record, a_record.record_type)
+    if ptr_registered and dns_prov and ptr_record is not None:
+        _cache_record(ptr_record, "PTR")
+    if dhcp_registered and dhcp_prov:
+        db.query(CachedDHCPLease).filter_by(
+            scope_id=scope_id, ip_address=addr.address, source=dhcp_prov.source,
+        ).delete()
+        db.add(CachedDHCPLease(scope_id=scope_id, ip_address=addr.address,
+                               mac_address=body.mac_address or (addr.mac_address or ""),
+                               name=hostname, source=dhcp_prov.source, synced_at=now))
 
     if is_new:
         write_audit(db, current_user.username, "create", "address", str(addr.id),
