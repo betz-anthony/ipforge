@@ -61,6 +61,12 @@ SID="$(curl -s -X POST "$API/subnets" "${AUTH[@]}" \
   | jq -r '.id // empty')"
 [ -n "$SID" ] && echo "   - subnet id $SID" || echo "   - (subnet may already exist; check the UI)"
 
+echo "==> Creating dual-stack demo subnet 2001:db8:da::/64 (DNS-only, pinned to bind-demo)..."
+SID6="$(curl -s -X POST "$API/subnets" "${AUTH[@]}" \
+  -d '{"name":"demo-lab-v6","cidr":"2001:db8:da::/64","ip_version":6,"dns_provider_name":"bind-demo","request_eligible":true}' \
+  | jq -r '.id // empty')"
+[ -n "$SID6" ] && echo "   - subnet id $SID6" || echo "   - (v6 subnet may already exist; check the UI)"
+
 # Seed a pending IP request so the UI money-shot is a clean "Approve + Allocate"
 # (the Register DNS/DHCP toggles live in the Requests approval dialog).
 if [ -n "$SID" ]; then
@@ -95,6 +101,13 @@ cat <<EOF
  Prove it on the real servers (split-screen with the UI):
    dig @127.0.0.1 -p 15353 web01.demo.lab A +short        # DNS
    ./examples/demo-backends/kea-query.sh                  # DHCP reservation
+
+ C) Dual-stack beat (~20s) — same flow, IPv6. Allocate then prove the AAAA:
+    curl -s -X POST http://localhost:8000/api/v1/subnets/${SID6:-2}/allocate \\
+      -H "Authorization: Bearer \$TOKEN" -H 'Content-Type: application/json' \\
+      -d '{"hostname":"web6","register_dns":true,"dns_zone":"demo.lab"}'
+    dig @127.0.0.1 -p 15353 web6.demo.lab AAAA +short      # -> 2001:db8:da::1
+    (DHCPv6/DUID on Kea & MS DHCP is supported + tested; not performed here.)
 
  Tear it all down (wipes state):  scripts/demo-down.sh
 ────────────────────────────────────────────────────────────────────
