@@ -103,7 +103,7 @@ def _backfill_dns_providers(db) -> None:
         a.address: a
         for a in db.query(IPAddress).filter(IPAddress.dns_provider.is_(None)).all()
     }
-    for r in db.query(CachedDNSRecord).filter(CachedDNSRecord.record_type == "A").all():
+    for r in db.query(CachedDNSRecord).filter(CachedDNSRecord.record_type.in_(["A", "AAAA"])).all():
         addr = addr_map.get(r.value.strip())
         if addr is not None:
             addr.dns_provider = r.source

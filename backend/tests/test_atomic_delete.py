@@ -253,3 +253,56 @@ def test_subnet_delete_succeeds_when_empty(client, db):
     r = client.delete(f"/api/v1/subnets/{s.id}")
     assert r.status_code == 204
     assert db.get(Subnet, s.id) is None
+
+
+def _subnet_v6(db, cidr="2001:db8::/64"):
+    s = Subnet(name="v6", cidr=cidr, ip_version=6)
+    db.add(s)
+    db.commit()
+    db.refresh(s)
+    return s
+
+
+def test_delete_preview_v6_stored_field_uses_aaaa(client, db):
+    # A v6 address with stored DNS provider must offer an AAAA cleanup item,
+    # not a malformed A record holding a v6 value.
+    s = _subnet_v6(db)
+    _ip(db, s, "2001:db8::5", hostname="web6",
+        dns_provider="bind01", dns_zone="example.com")
+    a = db.query(IPAddress).filter_by(address="2001:db8::5").first()
+    r = client.get(f"/api/v1/addresses/{a.id}/delete-preview")
+    assert r.status_code == 200
+    dns_items = [i for i in r.json()["items"] if i["type"] == "dns"]
+    fwd = next(i for i in dns_items if i["value"] == "2001:db8::5")
+    assert fwd["record_type"] == "AAAA"
+    assert "-AAAA-" in fwd["key"]
+
+
+def test_delete_preview_v6_cache_hit_includes_aaaa(client, db):
+    s = _subnet_v6(db, "2001:db8:1::/64")
+    _ip(db, s, "2001:db8:1::9", hostname="web7")
+    a = db.query(IPAddress).filter_by(address="2001:db8:1::9").first()
+    db.add(CachedDNSRecord(
+        name="web7", record_type="AAAA", value="2001:db8:1::9",
+        zone="test.local", ttl=300, source="bind01", synced_at=_utcnow(),
+    ))
+    db.commit()
+    r = client.get(f"/api/v1/addresses/{a.id}/delete-preview")
+    assert r.status_code == 200
+    dns_items = [i for i in r.json()["items"] if i["type"] == "dns"]
+    assert any(i["record_type"] == "AAAA" and i["value"] == "2001:db8:1::9" for i in dns_items)
+
+
+def test_sync_backfills_dns_provider_for_aaaa(db):
+    s = _subnet_v6(db, "2001:db8:2::/64")
+    a = _ip(db, s, "2001:db8:2::2")
+    assert a.dns_provider is None
+    db.add(CachedDNSRecord(
+        name="host6", record_type="AAAA", value="2001:db8:2::2",
+        zone="example.com", ttl=3600, source="bind01", synced_at=_utcnow(),
+    ))
+    db.commit()
+    _backfill_dns_providers(db)
+    db.refresh(a)
+    assert a.dns_provider == "bind01"
+    assert a.dns_zone == "example.com"
