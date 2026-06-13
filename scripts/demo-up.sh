@@ -61,6 +61,34 @@ SID="$(curl -s -X POST "$API/subnets" "${AUTH[@]}" \
   | jq -r '.id // empty')"
 [ -n "$SID" ] && echo "   - subnet id $SID" || echo "   - (subnet may already exist; check the UI)"
 
+# Populate demo-lab so the subnet map / heatmap looks real: reserved ranges drive
+# the legend (gateway / infra / DHCP pool), and a mix of address statuses gives
+# the map colour. .1-.15 reserved, .16-.49 used, .100-.150 DHCP pool — leaving
+# .50+ free so the on-camera "web01" allocation lands cleanly in open space.
+addr() { # ip hostname status [mac]
+  local body="{\"address\":\"$1\",\"subnet_id\":$SID,\"hostname\":\"$2\",\"status\":\"$3\""
+  [ -n "${4:-}" ] && body="$body,\"mac_address\":\"$4\""
+  curl -s -o /dev/null -X POST "$API/addresses" "${AUTH[@]}" -d "$body}"
+}
+if [ -n "$SID" ]; then
+  echo "==> Populating demo-lab with reserved ranges + a realistic address mix (subnet map)..."
+  for r in \
+    '{"start_ip":"10.99.0.1","end_ip":"10.99.0.1","kind":"gateway","label":"Default gateway"}' \
+    '{"start_ip":"10.99.0.2","end_ip":"10.99.0.15","kind":"reserved","label":"Infrastructure"}' \
+    '{"start_ip":"10.99.0.100","end_ip":"10.99.0.150","kind":"dhcp_pool","label":"DHCP pool"}'; do
+    curl -s -o /dev/null -X POST "$API/subnets/$SID/ranges" "${AUTH[@]}" -d "$r"
+  done
+  names=(app db web api cache queue mail proxy log mon)
+  for i in $(seq 16 40); do
+    addr "10.99.0.$i" "${names[$((i % 10))]}$(printf '%02d' "$i")" assigned "$(printf 'aa:bb:cc:00:00:%02x' "$i")"
+  done
+  for i in 41 42 43; do addr "10.99.0.$i" "rsv-$i" reserved; done
+  for i in 44 45;    do addr "10.99.0.$i" "old-$i" deprecated "$(printf 'aa:bb:cc:00:01:%02x' "$i")"; done
+  for i in 200 201 202 205; do addr "10.99.0.$i" "discovered-$i" discovered "$(printf 'aa:bb:cc:00:02:%02x' "$i")"; done
+  for i in $(seq 100 124); do addr "10.99.0.$i" "dyn-$i" assigned "$(printf 'aa:bb:cc:00:03:%02x' "$i")"; done
+  echo "   - reserved ranges + ~60 addresses created (.50+ left free for the live allocation)"
+fi
+
 echo "==> Creating dual-stack demo subnet 2001:db8:da::/64 (DNS-only, pinned to bind-demo)..."
 SID6="$(curl -s -X POST "$API/subnets" "${AUTH[@]}" \
   -d '{"name":"demo-lab-v6","cidr":"2001:db8:da::/64","ip_version":6,"dns_provider_name":"bind-demo","request_eligible":true}' \
@@ -87,37 +115,31 @@ wait_for "DHCP scopes" scopes_ready || echo "  (sync still running — scopes wi
 
 cat <<EOF
 
-────────────────────────────────────────────────────────────────────
- READY TO RECORD
-   UI:     http://localhost:3000     (login: admin / admin)
-   Subnet: demo-lab  10.99.0.0/24    (id ${SID:-?})
+════════════════════════════════════════════════════════════════════
+  IPForge is up.  Open  http://localhost:3000   (admin / admin)
+════════════════════════════════════════════════════════════════════
 
- The Register-DNS/Register-DHCP toggles live in the REQUESTS approval dialog
- (not the Subnets/Addresses pages). Two ways to do the money shot:
+  What's already set up
+    Subnets    demo-lab       10.99.0.0/24      populated — open it to see
+                                                 the subnet map (gateway,
+                                                 reserved, DHCP pool, ~60 hosts)
+               demo-lab-v6    2001:db8:da::/64  dual-stack
+    DNS        bind-demo      BIND, zone demo.lab (RFC2136 + AXFR)
+    DHCP       kea-demo       ISC Kea, scope 10.99.0.0/24 (.100–.150)
+    Requests   web01          one request pending approval
 
- A) UI (clickable) — a pending "web01" request is already seeded:
-    Requests page -> the web01 request -> "Approve + Allocate"
-      -> check Register DNS (zone: demo.lab) + Register DHCP -> Approve.
+  The 90-second walkthrough
+    1. Subnets → demo-lab — the heatmap shows the space at a glance.
+    2. Requests → web01 → Approve + Allocate.
+         Tick Register DNS (zone demo.lab) and Register DHCP, then approve.
+       IPForge allocates the next free IP and pushes the records to the
+       real DNS and DHCP servers.
+    3. Confirm it landed on the actual servers:
+         dig @127.0.0.1 -p 15353 web01.demo.lab A +short
+         ./examples/demo-backends/kea-query.sh
+    4. Dual-stack: allocate a host in demo-lab-v6 the same way, then
+         dig @127.0.0.1 -p 15353 web6.demo.lab AAAA +short
 
- B) Terminal/IaC (what's tested end-to-end) — allocate directly:
-    TOKEN=\$(curl -s -X POST http://localhost:8000/api/v1/auth/login \\
-      -H 'Content-Type: application/x-www-form-urlencoded' \\
-      -d 'username=admin&password=admin' | jq -r .access_token)
-    curl -s -X POST http://localhost:8000/api/v1/subnets/${SID:-1}/allocate \\
-      -H "Authorization: Bearer \$TOKEN" -H 'Content-Type: application/json' \\
-      -d '{"hostname":"web01","mac_address":"aa:bb:cc:dd:ee:01","register_dns":true,"dns_zone":"demo.lab","register_dhcp":true}'
-
- Prove it on the real servers (split-screen with the UI):
-   dig @127.0.0.1 -p 15353 web01.demo.lab A +short        # DNS
-   ./examples/demo-backends/kea-query.sh                  # DHCP reservation
-
- C) Dual-stack beat (~20s) — same flow, IPv6. Allocate then prove the AAAA:
-    curl -s -X POST http://localhost:8000/api/v1/subnets/${SID6:-2}/allocate \\
-      -H "Authorization: Bearer \$TOKEN" -H 'Content-Type: application/json' \\
-      -d '{"hostname":"web6","register_dns":true,"dns_zone":"demo.lab"}'
-    dig @127.0.0.1 -p 15353 web6.demo.lab AAAA +short      # -> 2001:db8:da::1
-    (DHCPv6/DUID on Kea & MS DHCP is supported + tested; not performed here.)
-
- Tear it all down (wipes state):  scripts/demo-down.sh
-────────────────────────────────────────────────────────────────────
+  When you're done:  scripts/demo-down.sh   (stops everything, wipes state)
+════════════════════════════════════════════════════════════════════
 EOF
