@@ -132,7 +132,8 @@ def _apply_provider_action(db, item: DriftItem, action: str, params: dict) -> bo
         providers = get_dns_providers()
         if not providers:
             return False
-        providers[0].add_record(DNSRecord(name=hostname, record_type="A", value=ip, zone=zone))
+        rtype = "AAAA" if ":" in ip else "A"
+        providers[0].add_record(DNSRecord(name=hostname, record_type=rtype, value=ip, zone=zone))
         return True
 
     if action == "push_hostname":

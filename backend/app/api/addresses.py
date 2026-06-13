@@ -327,12 +327,13 @@ def _build_preview_items(address: IPAddress, db: Session) -> list[DeletePreviewI
     seen: dict[str, DeletePreviewItem] = {}
 
     # Stored provider fields
+    fwd_type = "AAAA" if ":" in address.address else "A"
     if address.dns_provider and address.dns_zone:
-        key = f"dns-{address.dns_provider}-{address.dns_zone}-{address.hostname or address.address}-A-{address.address}"
+        key = f"dns-{address.dns_provider}-{address.dns_zone}-{address.hostname or address.address}-{fwd_type}-{address.address}"
         seen[key] = DeletePreviewItem(
             key=key, type="dns",
             provider=address.dns_provider, zone=address.dns_zone,
-            record_type="A", name=address.hostname or "", value=address.address,
+            record_type=fwd_type, name=address.hostname or "", value=address.address,
         )
 
     if address.dhcp_provider and address.dhcp_scope_id:
@@ -362,7 +363,7 @@ def _build_preview_items(address: IPAddress, db: Session) -> list[DeletePreviewI
     if address.hostname:
         dns_filters.append(CachedDNSRecord.name == address.hostname)
     for r in db.query(CachedDNSRecord).filter(
-        CachedDNSRecord.record_type == "A",
+        CachedDNSRecord.record_type.in_(["A", "AAAA"]),
         or_(*dns_filters),
     ).all():
         key = f"dns-{r.source}-{r.zone}-{r.name}-{r.record_type}-{r.value}"

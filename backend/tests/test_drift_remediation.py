@@ -200,6 +200,32 @@ def test_provider_push_dns_missing_dns(db):
     mock_prov.add_record.assert_called_once()
     call_record = mock_prov.add_record.call_args[0][0]
     assert call_record.name == "web" and call_record.value == "10.0.0.5"
+    assert call_record.record_type == "A"
+    db.refresh(d)
+    assert d.resolved is True
+
+
+def test_provider_push_dns_v6_uses_aaaa(db):
+    # missing_dns remediation for a v6 address must push AAAA, not a malformed A.
+    s = Subnet(name="v6", cidr="2001:db8::/64", ip_version=6)
+    db.add(s)
+    db.commit()
+    db.refresh(s)
+    db.add(IPAddress(address="2001:db8::5", subnet_id=s.id,
+                     status=AddressStatus.assigned, hostname="web6"))
+    db.commit()
+    d = _drift(db, "2001:db8::5", DriftCategory.missing_dns.value,
+               details={"hostname": "web6", "status": "assigned"}, subnet_id=s.id)
+    _policy(db, DriftCategory.missing_dns.value, params={"action": "push_dns", "zone": "example.com"})
+
+    mock_prov = MagicMock()
+    with patch("app.drift_remediation.get_dns_providers", return_value=[mock_prov]):
+        remediate_drift(db)
+
+    mock_prov.add_record.assert_called_once()
+    call_record = mock_prov.add_record.call_args[0][0]
+    assert call_record.record_type == "AAAA"
+    assert call_record.value == "2001:db8::5"
     db.refresh(d)
     assert d.resolved is True
 
