@@ -2,6 +2,7 @@ import ipaddress
 from unittest.mock import MagicMock, patch
 from app.models.subnet import Subnet
 from app.models.address import IPAddress, AddressStatus
+from app.models.cache import CachedDNSRecord, CachedDHCPLease
 from app.providers.dhcp.base import DHCPScope
 
 
@@ -180,6 +181,39 @@ def test_allocate_register_dns_success(client, db):
     assert call_record.record_type == "A"
     assert call_record.zone == "example.com"
     assert call_record.value == "10.0.1.2"
+
+
+def test_allocate_register_dns_writes_cache_row(client, db):
+    # Allocation must reflect the pushed record into the DNS cache immediately, so
+    # the DNS page shows it without waiting for the next background sync.
+    s = _subnet(db)
+    mock_dns = MagicMock()
+    mock_dns.source = "bind01"
+    mock_dns.add_record = MagicMock()
+    with patch("app.api.allocation.get_dns_providers", return_value=[mock_dns]):
+        r = client.post(f"/api/v1/subnets/{s.id}/allocate",
+                        json={"hostname": "web-01", "register_dns": True,
+                              "dns_zone": "example.com"})
+    assert r.status_code == 201
+    row = db.query(CachedDNSRecord).filter_by(name="web-01", zone="example.com").first()
+    assert row is not None
+    assert row.record_type == "A"
+    assert row.value == "10.0.1.2"
+    assert row.source == "bind01"
+
+
+def test_allocate_register_dhcp_writes_cache_lease(client, db):
+    s = _subnet(db)
+    mock_dhcp = _mock_dhcp(source="kea01")
+    with patch("app.api.allocation.get_dhcp_providers", return_value=[mock_dhcp]):
+        r = client.post(f"/api/v1/subnets/{s.id}/allocate",
+                        json={"hostname": "web-01", "register_dhcp": True,
+                              "mac_address": "aa:bb:cc:dd:ee:01"})
+    assert r.status_code == 201
+    lease = db.query(CachedDHCPLease).filter_by(ip_address="10.0.1.2", source="kea01").first()
+    assert lease is not None
+    assert lease.name == "web-01"
+    assert lease.mac_address == "aa:bb:cc:dd:ee:01"
 
 
 def test_allocate_register_dns_failure_rolls_back_ip(client, db):
