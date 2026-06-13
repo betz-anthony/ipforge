@@ -273,10 +273,12 @@ def test_address_list_includes_last_seen(client, db):
 def test_scan_history_endpoint_returns_rows(client, db):
     subnet = _make_subnet(db)
     addr = _make_address(db, subnet.id, "10.0.0.1")
-    from datetime import date as date_type
+    from datetime import date as date_type, timedelta
     db.add(ScanHistoryDay(
         ip_address="10.0.0.1", subnet_id=subnet.id,
-        date=date_type(2026, 5, 14),
+        # relative (yesterday) so it stays inside the endpoint's lookback window
+        # as real time advances — a hardcoded date eventually falls out of range.
+        date=date_type.today() - timedelta(days=1),
         up_count=5, total_count=6, uptime_pct=83.3, avg_latency_ms=12.0,
     ))
     db.commit()
