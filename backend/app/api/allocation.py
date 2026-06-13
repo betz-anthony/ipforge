@@ -229,7 +229,8 @@ def _do_allocate(
 
     if body.register_dns and dns_prov:
         a_record = DNSRecord(
-            name=hostname, record_type="A",
+            name=hostname,
+            record_type="AAAA" if ":" in addr.address else "A",
             value=addr.address, zone=body.dns_zone or "",
         )
         try:

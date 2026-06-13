@@ -522,3 +522,49 @@ def test_dns_create_provider_error_returns_envelope(client, db):
     assert d["hint"]
     # client fixture user is admin -> raw detail present
     assert "WinRMTransportError" in d["detail"]
+
+
+# ── IPv6: allocation forward record must be AAAA (regression) + v6 PTR ──
+def test_allocation_register_dns_v6_uses_aaaa_and_ptr(client, db):
+    s = SubnetModel(name="v6-alloc", cidr="2001:db8::/64", ip_version=6)
+    db.add(s); db.commit(); db.refresh(s)
+    mock_prov = MagicMock()
+    mock_prov.source = "bind01"
+    mock_prov.add_record = MagicMock()
+    mock_prov.delete_record = MagicMock()
+    # /48 reverse zone covering 2001:db8::*  (12 nibbles)
+    mock_prov.get_zones = MagicMock(return_value=["example.com", "0.0.0.0.8.b.d.0.1.0.0.2.ip6.arpa"])
+
+    with patch("app.api.allocation.get_dns_providers", return_value=[mock_prov]), \
+         patch("app.api.allocation.get_dhcp_providers", return_value=[]):
+        r = client.post(f"/api/v1/subnets/{s.id}/allocate", json={
+            "hostname": "web6", "register_dns": True, "register_ptr": True,
+            "dns_zone": "example.com",
+        })
+    assert r.status_code == 201, r.text
+    # forward record is AAAA (was hardcoded "A" before the fix)
+    fwd = mock_prov.add_record.call_args_list[0][0][0]
+    assert fwd.record_type == "AAAA", f"expected AAAA, got {fwd.record_type}"
+    assert ":" in fwd.value
+    # PTR created for the v6 address, in an ip6.arpa zone
+    assert r.json()["ptr_registered"] is True
+    ptr = mock_prov.add_record.call_args_list[1][0][0]
+    assert ptr.record_type == "PTR"
+    assert ptr.zone.endswith("ip6.arpa")
+
+
+# ── IPv6: standalone DNS create — AAAA must also auto-register a PTR (regression) ──
+def test_create_aaaa_record_registers_ptr(client, db):
+    mock_prov = MagicMock()
+    mock_prov.source = "bind01"
+    mock_prov.supports_ptr = True
+    mock_prov.add_record = MagicMock()
+    mock_prov.get_zones = MagicMock(return_value=["example.com", "0.0.0.0.8.b.d.0.1.0.0.2.ip6.arpa"])
+    with patch("app.api.dns.get_dns_providers", return_value=[mock_prov]):
+        r = client.post("/api/v1/dns/zones/example.com/records", json={
+            "name": "web6", "record_type": "AAAA", "value": "2001:db8::5",
+            "ttl": 3600, "source": "bind01", "register_ptr": True,
+        })
+    assert r.status_code == 201, r.text
+    types = [c[0][0].record_type for c in mock_prov.add_record.call_args_list]
+    assert types == ["AAAA", "PTR"], types  # was ["AAAA"] only before the fix

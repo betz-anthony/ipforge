@@ -166,7 +166,7 @@ def create_record(
     ptr_added = False
     # PTR registration is auxiliary: only when the provider supports PTR and a
     # reverse zone exists. A PTR failure is logged but never blocks the A record.
-    if record.register_ptr and record.record_type == "A" and target.supports_ptr:
+    if record.register_ptr and record.record_type in ("A", "AAAA") and target.supports_ptr:
         reverse_zone = find_reverse_zone(record.value, _zone_names(db, target))
         if reverse_zone is not None:
             candidate = build_ptr_record(record.value, record.name, reverse_zone, provider=record.source)
@@ -217,7 +217,7 @@ def delete_record(
         provider_unconfigured("dns")
 
     ptr_record = None
-    if record.delete_ptr and record.record_type == "A" and target.supports_ptr:
+    if record.delete_ptr and record.record_type in ("A", "AAAA") and target.supports_ptr:
         reverse_zone = find_reverse_zone(record.value, _zone_names(db, target))
         if reverse_zone is not None:
             ptr_record = build_ptr_record(record.value, record.name, reverse_zone, provider=record.source)
