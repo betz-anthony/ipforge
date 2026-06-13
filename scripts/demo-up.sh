@@ -76,6 +76,15 @@ if [ -n "$SID" ]; then
   echo "   - request POST: $RC"
 fi
 
+# The background sync ran once at API boot — BEFORE the providers above existed —
+# so the cache (DHCP scopes, DNS zones) is empty and the next auto-sync is ~5 min
+# out. Trigger one now and wait for it, so the DHCP page shows the Kea scope and
+# the DNS zone dropdown is populated the moment you log in.
+echo "==> Triggering initial provider sync (DHCP scopes + DNS zones)..."
+curl -s -o /dev/null -X POST "$API/sync/trigger" "${AUTH[@]}"
+scopes_ready() { [ "$(curl -s "${AUTH[@]}" "$API/dhcp/scopes" | jq 'length')" -gt 0 ]; }
+wait_for "DHCP scopes" scopes_ready || echo "  (sync still running — scopes will appear within ~5 min)"
+
 cat <<EOF
 
 ────────────────────────────────────────────────────────────────────
