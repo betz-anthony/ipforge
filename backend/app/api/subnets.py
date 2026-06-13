@@ -8,7 +8,7 @@ from app.database import get_db
 from app.models.subnet import Subnet
 from app.models.subnet_range import SubnetRange
 from app.models.address import IPAddress, AddressStatus
-from app.models.scan import DriftItem
+from app.models.scan import DriftItem, _CONFLICT_CATEGORIES
 from app.models.user import User
 from app.schemas.subnet import SubnetCreate, SubnetRead, SubnetUpdate, SubnetWithStats, SubnetForecast
 from app.core.deps import get_current_user
@@ -390,8 +390,16 @@ def subnet_map(
         for a in db.query(IPAddress).filter(IPAddress.subnet_id == subnet_id).all()
     }
     reserved = reserved_ip_set(db, subnet_id)
+    # A map cell is a "collision" only for the conflict categories the rest of the
+    # app counts as collisions (Dashboard, Collisions page, metrics) — and only for
+    # drift in THIS subnet. Other drift (missing_dns, orphan_*, …) is not a collision.
     collision_ips = {
-        c.ip_address for c in db.query(DriftItem.ip_address).filter(DriftItem.resolved.is_(False)).all()
+        c.ip_address
+        for c in db.query(DriftItem.ip_address).filter(
+            DriftItem.subnet_id == subnet_id,
+            DriftItem.resolved.is_(False),
+            DriftItem.category.in_([cat.value for cat in _CONFLICT_CATEGORIES]),
+        ).all()
     }
 
     cells = []
