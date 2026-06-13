@@ -36,7 +36,7 @@ def test_map_collision_overlay(client, db):
     s = _subnet(db)
     db.add(IPAddress(address="10.0.5.10", subnet_id=s.id, status=AddressStatus.assigned))
     db.add(DriftItem(ip_address="10.0.5.10", category=DriftCategory.hostname_mismatch.value,
-                     detected_at=utcnow(), resolved=False))
+                     subnet_id=s.id, detected_at=utcnow(), resolved=False))
     db.commit()
     body = client.get(f"/api/v1/subnets/{s.id}/map").json()
     cells = {c["ip"]: c for c in body["cells"]}
@@ -48,8 +48,35 @@ def test_map_excludes_resolved_collision(client, db):
     s = _subnet(db)
     db.add(IPAddress(address="10.0.5.10", subnet_id=s.id, status=AddressStatus.assigned))
     db.add(DriftItem(ip_address="10.0.5.10", category=DriftCategory.hostname_mismatch.value,
-                     detected_at=utcnow(), resolved=True))
+                     subnet_id=s.id, detected_at=utcnow(), resolved=True))
     db.commit()
     body = client.get(f"/api/v1/subnets/{s.id}/map").json()
+    cells = {c["ip"]: c for c in body["cells"]}
+    assert cells["10.0.5.10"]["collision"] is False
+
+
+def test_map_excludes_non_conflict_drift(client, db):
+    # Non-conflict drift (e.g. missing_dns) must NOT light a cell as a collision —
+    # the map's collision overlay must agree with the Dashboard/Collisions count.
+    s = _subnet(db)
+    db.add(IPAddress(address="10.0.5.10", subnet_id=s.id, status=AddressStatus.assigned))
+    db.add(DriftItem(ip_address="10.0.5.10", category=DriftCategory.missing_dns.value,
+                     subnet_id=s.id, detected_at=utcnow(), resolved=False))
+    db.commit()
+    body = client.get(f"/api/v1/subnets/{s.id}/map").json()
+    cells = {c["ip"]: c for c in body["cells"]}
+    assert cells["10.0.5.10"]["collision"] is False
+
+
+def test_map_collision_scoped_to_subnet(client, db):
+    # A conflict drift in a DIFFERENT subnet must not bleed onto this subnet's map,
+    # even if the IPs happen to overlap.
+    s1 = _subnet(db, cidr="10.0.5.0/24")
+    s2 = _subnet(db, cidr="10.0.6.0/24")
+    db.add(IPAddress(address="10.0.5.10", subnet_id=s1.id, status=AddressStatus.assigned))
+    db.add(DriftItem(ip_address="10.0.5.10", category=DriftCategory.hostname_mismatch.value,
+                     subnet_id=s2.id, detected_at=utcnow(), resolved=False))
+    db.commit()
+    body = client.get(f"/api/v1/subnets/{s1.id}/map").json()
     cells = {c["ip"]: c for c in body["cells"]}
     assert cells["10.0.5.10"]["collision"] is False
