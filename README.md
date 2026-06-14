@@ -6,7 +6,9 @@ Tracks subnets, IP allocations, DNS zones/records, and DHCP scopes/reservations 
 
 Unlike inventory-only IPAMs, IPForge **pushes** changes to your DNS and DHCP — and continuously reconciles drift between intended state and what's live.
 
-**▶ [Watch the demo](docs/screenshots/ipforge-demo.mov)** — allocate an IP and see the DNS + DHCP records appear on the real servers.
+**Demo** — allocate an IP and watch the DNS + DHCP records appear on the real servers:
+
+https://github.com/user-attachments/assets/7538725d-68dd-4a66-809e-f17aed4fa066
 
 ![IPForge dashboard](docs/screenshots/01-dashboard.png)
 
