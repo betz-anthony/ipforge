@@ -154,6 +154,9 @@ Implement the ABC in `backend/app/providers/dns/<name>.py` (or `dhcp/<name>.py`)
 
 ## License
 
-GNU General Public License v3.0 — see [LICENSE](LICENSE).
+GNU Affero General Public License v3.0 — see [LICENSE](LICENSE).
 
-Modifications you distribute (including container images you publish) must be released under GPL v3 with source available.
+AGPLv3 means modifications must be released with source available — including when
+you run a modified IPForge as a **network service** (not only when you distribute
+binaries). If AGPL doesn't fit your use, a separate **commercial license** is
+available; open an issue or get in touch.
