@@ -1,0 +1,29 @@
+# gitleaks config for IPForge.
+#
+# Extends the default ruleset and allowlists the DISPOSABLE demo-backend
+# credentials in examples/demo-backends/ + scripts/demo-up.sh. Those creds are
+# intentionally public: the demo lab is meant to be cloned and run by anyone, so
+# they must stay functional in the published mirror — they are NOT real secrets.
+# The mirror's gitleaks gate (scripts/github-mirror-rewrite.sh) auto-loads this
+# file from the rewritten history root.
+#
+# Real secrets are handled differently: the historically-leaked Fernet key lives
+# only in k8s/secret.yaml, which the mirror strips via .mirror/remove-paths.txt
+# (and the CI also redacts it via EXTRA_REPLACE). Never allowlist a real secret
+# here — redact or remove it instead.
+
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Disposable demo-backend TSIG key (base64 of '1234567890abcdefghijklmnopqrstuv') — public by design, demo only"
+regexes = [
+  '''MTIzNDU2Nzg5MGFiY2RlZmdoaWprbG1ub3BxcnN0dXY=''',
+]
+
+[[allowlists]]
+description = "Disposable demo-backend credentials — examples/demo-backends/ and the demo launcher"
+paths = [
+  '''examples/demo-backends/.*''',
+  '''scripts/demo-up\.sh''',
+]
