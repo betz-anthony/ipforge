@@ -61,32 +61,44 @@ SID="$(curl -s -X POST "$API/subnets" "${AUTH[@]}" \
   | jq -r '.id // empty')"
 [ -n "$SID" ] && echo "   - subnet id $SID" || echo "   - (subnet may already exist; check the UI)"
 
-# Populate demo-lab so the subnet map / heatmap looks real: reserved ranges drive
-# the legend (gateway / infra / DHCP pool), and a mix of address statuses gives
-# the map colour. .1-.15 reserved, .16-.49 used, .100-.150 DHCP pool — leaving
-# .50+ free so the on-camera "web01" allocation lands cleanly in open space.
+# Populate demo-lab so every tab tells the same story. Reserved ranges drive the
+# map legend (gateway / infra / DHCP pool); the managed hosts are allocated through
+# the REAL flow so each gets a live BIND A record and (most) a Kea reservation — so
+# the subnet map, the DNS tab, and the DHCP tab all agree and dig / kea-query prove
+# every host. A few discovered/deprecated hosts are added with no DNS (realistic, and
+# it gives the Drift page something to show). .16+ fills up; .34+ stays free so the
+# on-camera "web01" request lands cleanly in open space.
 addr() { # ip hostname status [mac]
   local body="{\"address\":\"$1\",\"subnet_id\":$SID,\"hostname\":\"$2\",\"status\":\"$3\""
   [ -n "${4:-}" ] && body="$body,\"mac_address\":\"$4\""
   curl -s -o /dev/null -X POST "$API/addresses" "${AUTH[@]}" -d "$body}"
 }
 if [ -n "$SID" ]; then
-  echo "==> Populating demo-lab with reserved ranges + a realistic address mix (subnet map)..."
+  echo "==> Populating demo-lab: reserved ranges + managed hosts (real DNS + DHCP)..."
   for r in \
     '{"start_ip":"10.99.0.1","end_ip":"10.99.0.1","kind":"gateway","label":"Default gateway"}' \
     '{"start_ip":"10.99.0.2","end_ip":"10.99.0.15","kind":"reserved","label":"Infrastructure"}' \
     '{"start_ip":"10.99.0.100","end_ip":"10.99.0.150","kind":"dhcp_pool","label":"DHCP pool"}'; do
     curl -s -o /dev/null -X POST "$API/subnets/$SID/ranges" "${AUTH[@]}" -d "$r"
   done
-  names=(app db web api cache queue mail proxy log mon)
-  for i in $(seq 16 40); do
-    addr "10.99.0.$i" "${names[$((i % 10))]}$(printf '%02d' "$i")" assigned "$(printf 'aa:bb:cc:00:00:%02x' "$i")"
+  # Managed hosts via the allocation API: every one gets an A record in BIND; ~2/3 of
+  # them also get a Kea reservation (the rest are DNS-only — a realistic mix that also
+  # surfaces missing_dhcp on the Drift page). Then mark them assigned for the map.
+  # NB: avoid the name "web01" — that's reserved for the pending on-camera request.
+  hosts=(dc01 dc02 dns01 vcenter app01 app02 db01 db02 cache01 mon01 mail01 proxy01 ci01 nas01 log01 ns2 kdc01 fileserv)
+  n=0
+  for h in "${hosts[@]}"; do
+    n=$((n + 1)); mac=$(printf 'aa:bb:cc:00:10:%02x' "$n")
+    body="{\"hostname\":\"$h\",\"mac_address\":\"$mac\",\"register_dns\":true,\"dns_zone\":\"demo.lab\""
+    [ $((n % 3)) -ne 0 ] && body="$body,\"register_dhcp\":true"   # ~2/3 also get DHCP
+    id=$(curl -s -X POST "$API/subnets/$SID/allocate" "${AUTH[@]}" -d "$body}" | jq -r '.id // empty')
+    [ -n "$id" ] && curl -s -o /dev/null -X PUT "$API/addresses/$id" "${AUTH[@]}" -d '{"status":"assigned"}'
   done
-  for i in 41 42 43; do addr "10.99.0.$i" "rsv-$i" reserved; done
-  for i in 44 45;    do addr "10.99.0.$i" "old-$i" deprecated "$(printf 'aa:bb:cc:00:01:%02x' "$i")"; done
-  for i in 200 201 202 205; do addr "10.99.0.$i" "discovered-$i" discovered "$(printf 'aa:bb:cc:00:02:%02x' "$i")"; done
-  for i in $(seq 100 124); do addr "10.99.0.$i" "dyn-$i" assigned "$(printf 'aa:bb:cc:00:03:%02x' "$i")"; done
-  echo "   - reserved ranges + ~60 addresses created (.50+ left free for the live allocation)"
+  # Discovered / deprecated hosts with NO DNS — realistic, adds map colour + Drift.
+  addr "10.99.0.200" "discovered-200" discovered "aa:bb:cc:00:20:01"
+  addr "10.99.0.201" "discovered-201" discovered "aa:bb:cc:00:20:02"
+  addr "10.99.0.45"  "old-decom"      deprecated "aa:bb:cc:00:20:03"
+  echo "   - ${#hosts[@]} managed hosts (live DNS + DHCP) + 3 discovered/deprecated; .34+ left free"
 fi
 
 echo "==> Creating dual-stack demo subnet 2001:db8:da::/64 (DNS-only, pinned to bind-demo)..."
@@ -120,9 +132,9 @@ cat <<EOF
 ════════════════════════════════════════════════════════════════════
 
   What's already set up
-    Subnets    demo-lab       10.99.0.0/24      populated — open it to see
-                                                 the subnet map (gateway,
-                                                 reserved, DHCP pool, ~60 hosts)
+    Subnets    demo-lab       10.99.0.0/24      ~18 managed hosts, live in
+                                                 DNS + DHCP (subnet map,
+                                                 DNS tab and DHCP tab all agree)
                demo-lab-v6    2001:db8:da::/64  dual-stack
     DNS        bind-demo      BIND, zone demo.lab (RFC2136 + AXFR)
     DHCP       kea-demo       ISC Kea, scope 10.99.0.0/24 (.100–.150)
