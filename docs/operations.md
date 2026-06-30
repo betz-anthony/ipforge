@@ -29,7 +29,7 @@ Order matters:
        scripts/restore.sh --target compose ./backups/ipforge-backup-<ts>.dump
    > The restore prompts for an interactive confirmation (type `restore`). Add `--yes` to skip it for unattended/scripted recovery.
 3. Restart the app so migrations run to head:
-       docker compose restart api      # or: kubectl rollout restart deploy/ipforge-api
+       docker compose restart api      # or: kubectl rollout restart deploy/api -n ipforge
 
 Raw fallback (Compose):
     docker compose exec -T db sh -c 'pg_restore --clean --if-exists --no-owner -U "$POSTGRES_USER" -d "$POSTGRES_DB"' < backup.dump

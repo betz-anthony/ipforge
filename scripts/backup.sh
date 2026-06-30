@@ -13,9 +13,10 @@ TARGET=compose
 OUT=./backups
 SERVICE=db
 SELECTOR=app=postgres
+NAMESPACE=ipforge
 POD=""  # resolved once for --target k8s; see below
 
-usage() { echo "usage: $0 [--target compose|k8s] [--out DIR] [--service NAME] [--selector LABEL]" >&2; exit 2; }
+usage() { echo "usage: $0 [--target compose|k8s] [--out DIR] [--service NAME] [--selector LABEL] [--namespace NAME]" >&2; exit 2; }
 
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -23,6 +24,7 @@ while [ $# -gt 0 ]; do
     --out) OUT="${2:?}"; shift 2;;
     --service) SERVICE="${2:?}"; shift 2;;
     --selector) SELECTOR="${2:?}"; shift 2;;
+    --namespace) NAMESPACE="${2:?}"; shift 2;;
     -h|--help) usage;;
     *) echo "unknown arg: $1" >&2; usage;;
   esac
@@ -40,24 +42,24 @@ dump_compose() {
     'pg_dump -Fc -U "$POSTGRES_USER" "$POSTGRES_DB"' > "$TMP"
 }
 
-k8s_pod() { kubectl get pod -l "$SELECTOR" -o jsonpath='{.items[0].metadata.name}'; }
+k8s_pod() { kubectl get pod -l "$SELECTOR" -n "$NAMESPACE" -o jsonpath='{.items[0].metadata.name}'; }
 
 dump_k8s() {
-  kubectl exec "$POD" -- sh -c \
+  kubectl exec "$POD" -n "$NAMESPACE" -- sh -c \
     'pg_dump -Fc -U "$POSTGRES_USER" "$POSTGRES_DB"' > "$TMP"
 }
 
 pg_version() {
   case "$TARGET" in
     compose) docker compose exec -T "$SERVICE" sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -tAc "select version()"' 2>/dev/null || echo "unknown";;
-    k8s) kubectl exec "$POD" -- sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -tAc "select version()"' 2>/dev/null || echo "unknown";;
+    k8s) kubectl exec "$POD" -n "$NAMESPACE" -- sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -tAc "select version()"' 2>/dev/null || echo "unknown";;
   esac
 }
 
 schema_rev() {
   case "$TARGET" in
     compose) docker compose exec -T "$SERVICE" sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -tAc "select version_num from alembic_version"' 2>/dev/null || echo "unknown";;
-    k8s) kubectl exec "$POD" -- sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -tAc "select version_num from alembic_version"' 2>/dev/null || echo "unknown";;
+    k8s) kubectl exec "$POD" -n "$NAMESPACE" -- sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -tAc "select version_num from alembic_version"' 2>/dev/null || echo "unknown";;
   esac
 }
 

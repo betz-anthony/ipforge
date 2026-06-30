@@ -12,16 +12,18 @@ set -euo pipefail
 TARGET=compose
 SERVICE=db
 SELECTOR=app=postgres
+NAMESPACE=ipforge
 ASSUME_YES=0
 DUMP=""
 
-usage() { echo "usage: $0 [--target compose|k8s] [--service NAME] [--selector LABEL] [--yes] <dump-file>" >&2; exit 2; }
+usage() { echo "usage: $0 [--target compose|k8s] [--service NAME] [--selector LABEL] [--namespace NAME] [--yes] <dump-file>" >&2; exit 2; }
 
 while [ $# -gt 0 ]; do
   case "$1" in
     --target) TARGET="${2:?}"; shift 2;;
     --service) SERVICE="${2:?}"; shift 2;;
     --selector) SELECTOR="${2:?}"; shift 2;;
+    --namespace) NAMESPACE="${2:?}"; shift 2;;
     --yes) ASSUME_YES=1; shift;;
     -h|--help) usage;;
     -*) echo "unknown arg: $1" >&2; usage;;
@@ -31,9 +33,11 @@ done
 
 [ -n "$DUMP" ] && [ -f "$DUMP" ] || { echo "dump file not found: '$DUMP'" >&2; usage; }
 
-# Manifest guardrail: warn if the dump's schema is newer than running code (no auto-downgrade).
+# Manifest check: surface the dump's schema revision for operator judgment.
+# (No automatic version gate — restoring a dump from NEWER code into an OLDER
+#  image leaves the app unable to boot; there is no Alembic auto-downgrade.)
 MANIFEST="${DUMP%.dump}.manifest.txt"
-k8s_pod() { kubectl get pod -l "$SELECTOR" -o jsonpath='{.items[0].metadata.name}'; }
+k8s_pod() { kubectl get pod -l "$SELECTOR" -n "$NAMESPACE" -o jsonpath='{.items[0].metadata.name}'; }
 if [ -f "$MANIFEST" ]; then
   DUMP_REV="$(grep '^alembic_revision:' "$MANIFEST" | awk '{print $2}')"
   echo "Dump schema revision: ${DUMP_REV:-unknown}"
@@ -58,7 +62,7 @@ restore_compose() {
 restore_k8s() {
   local pod; pod="$(k8s_pod)"
   [ -n "$pod" ] || { echo "no pod matched selector '$SELECTOR'" >&2; exit 1; }
-  kubectl exec -i "$pod" -- sh -c \
+  kubectl exec -i "$pod" -n "$NAMESPACE" -- sh -c \
     'pg_restore --clean --if-exists --no-owner -U "$POSTGRES_USER" -d "$POSTGRES_DB"' < "$DUMP"
 }
 
@@ -71,4 +75,4 @@ esac
 echo
 echo "Restore complete. Now restart the app so migrations run to head:"
 echo "  compose: docker compose restart api"
-echo "  k8s:     kubectl rollout restart deploy/ipforge-api"
+echo "  k8s:     kubectl rollout restart deploy/api -n ipforge"
