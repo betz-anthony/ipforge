@@ -27,6 +27,7 @@ Order matters:
    encrypted). Set it BEFORE restoring.
 2. Restore the database:
        scripts/restore.sh --target compose ./backups/ipforge-backup-<ts>.dump
+   > The restore prompts for an interactive confirmation (type `restore`). Add `--yes` to skip it for unattended/scripted recovery.
 3. Restart the app so migrations run to head:
        docker compose restart api      # or: kubectl rollout restart deploy/ipforge-api
 
