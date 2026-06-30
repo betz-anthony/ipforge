@@ -16,13 +16,24 @@ def test_build_subnet_rows_count_and_unique_cidr():
 
 
 def test_build_address_rows_count_unique_and_valid_fk():
-    subnet_ids = [1, 2, 3, 4, 5]
-    rows = scale_seed.build_address_rows(10000, subnet_ids)
+    subnet_ids = list(range(1, 101))           # 100 subnets
+    rows = scale_seed.build_address_rows(10000, subnet_ids)   # 100 hosts/subnet
     assert len(rows) == 10000
-    assert len({r["address"] for r in rows}) == 10000   # unique addresses
+    assert len({r["address"] for r in rows}) == 10000
     assert all(r["subnet_id"] in subnet_ids for r in rows)
-    # status distribution exercises real filters, not all-one-value
     assert len({r["status"] for r in rows}) >= 3
+    # every address lives in its subnet's /24 (index-based: subnet k -> 10.(k>>8).(k&0xFF).0/24)
+    import ipaddress
+    for r in rows[:500]:
+        k = subnet_ids.index(r["subnet_id"])
+        net = ipaddress.ip_network(f"10.{(k>>8)&0xFF}.{k&0xFF}.0/24")
+        assert ipaddress.ip_address(r["address"]) in net
+
+
+def test_build_address_rows_rejects_overflow():
+    import pytest
+    with pytest.raises(ValueError):
+        scale_seed.build_address_rows(10000, [1, 2, 3])   # 3334 hosts/subnet > 254
 
 
 def test_tiers_mapping():
