@@ -34,12 +34,6 @@ done
 # Manifest guardrail: warn if the dump's schema is newer than running code (no auto-downgrade).
 MANIFEST="${DUMP%.dump}.manifest.txt"
 k8s_pod() { kubectl get pod -l "$SELECTOR" -o jsonpath='{.items[0].metadata.name}'; }
-running_rev() {
-  case "$TARGET" in
-    compose) docker compose exec -T "$SERVICE" sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -tAc "select version_num from alembic_version"' 2>/dev/null || echo "unknown";;
-    k8s) kubectl exec "$(k8s_pod)" -- sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -tAc "select version_num from alembic_version"' 2>/dev/null || echo "unknown";;
-  esac
-}
 if [ -f "$MANIFEST" ]; then
   DUMP_REV="$(grep '^alembic_revision:' "$MANIFEST" | awk '{print $2}')"
   echo "Dump schema revision: ${DUMP_REV:-unknown}"
@@ -53,7 +47,7 @@ echo "About to DESTRUCTIVELY restore into the $TARGET database (pg_restore --cle
 echo "Confirm SECRET_KEY is already set on the deployment before continuing."
 if [ "$ASSUME_YES" -ne 1 ]; then
   printf "Type 'restore' to proceed: "
-  read -r ans
+  read -r ans || { echo "aborted."; exit 1; }
   [ "$ans" = "restore" ] || { echo "aborted."; exit 1; }
 fi
 
