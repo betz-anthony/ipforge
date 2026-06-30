@@ -13,6 +13,7 @@ TARGET=compose
 OUT=./backups
 SERVICE=db
 SELECTOR=app=postgres
+POD=""  # resolved once for --target k8s; see below
 
 usage() { echo "usage: $0 [--target compose|k8s] [--out DIR] [--service NAME] [--selector LABEL]" >&2; exit 2; }
 
@@ -32,6 +33,7 @@ mkdir -p "$OUT"
 DUMP="$OUT/ipforge-backup-$TS.dump"
 MANIFEST="$OUT/ipforge-backup-$TS.manifest.txt"
 TMP="$DUMP.partial"
+trap 'rm -f "$TMP"' EXIT  # remove partial dump on any exit (no-op after successful mv)
 
 dump_compose() {
   docker compose exec -T "$SERVICE" sh -c \
@@ -41,25 +43,29 @@ dump_compose() {
 k8s_pod() { kubectl get pod -l "$SELECTOR" -o jsonpath='{.items[0].metadata.name}'; }
 
 dump_k8s() {
-  local pod; pod="$(k8s_pod)"
-  [ -n "$pod" ] || { echo "no pod matched selector '$SELECTOR'" >&2; exit 1; }
-  kubectl exec "$pod" -- sh -c \
+  kubectl exec "$POD" -- sh -c \
     'pg_dump -Fc -U "$POSTGRES_USER" "$POSTGRES_DB"' > "$TMP"
 }
 
 pg_version() {
   case "$TARGET" in
-    compose) docker compose exec -T "$SERVICE" sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -tAc "select version()"';;
-    k8s) kubectl exec "$(k8s_pod)" -- sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -tAc "select version()"';;
+    compose) docker compose exec -T "$SERVICE" sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -tAc "select version()"' 2>/dev/null || echo "unknown";;
+    k8s) kubectl exec "$POD" -- sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -tAc "select version()"' 2>/dev/null || echo "unknown";;
   esac
 }
 
 schema_rev() {
   case "$TARGET" in
     compose) docker compose exec -T "$SERVICE" sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -tAc "select version_num from alembic_version"' 2>/dev/null || echo "unknown";;
-    k8s) kubectl exec "$(k8s_pod)" -- sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -tAc "select version_num from alembic_version"' 2>/dev/null || echo "unknown";;
+    k8s) kubectl exec "$POD" -- sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -tAc "select version_num from alembic_version"' 2>/dev/null || echo "unknown";;
   esac
 }
+
+# Resolve k8s pod once so all three functions share the same target
+if [ "$TARGET" = k8s ]; then
+  POD="$(k8s_pod)"
+  [ -n "$POD" ] || { echo "no pod matched selector '$SELECTOR'" >&2; exit 1; }
+fi
 
 case "$TARGET" in
   compose) dump_compose;;
