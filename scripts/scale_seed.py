@@ -38,15 +38,23 @@ def build_subnet_rows(n_subnets: int) -> list[dict]:
 
 
 def build_address_rows(n_addr: int, subnet_ids: list[int]) -> list[dict]:
-    """Unique addresses in 10.128.0.0/9 space, round-robin across subnets."""
+    """Addresses placed inside each subnet's /24 (10.b.c.host), round-robin by
+    subnet index so each address lives in its subnet's CIDR. host stays 1..254."""
+    s = len(subnet_ids)
+    max_host = (n_addr - 1) // s + 1 if n_addr else 0
+    if max_host > 254:
+        raise ValueError(
+            f"{n_addr} addresses across {s} subnets = {max_host} hosts/subnet, "
+            f"exceeds a /24 (254). Use more subnets.")
     rows = []
     for i in range(n_addr):
-        b = 128 + ((i >> 16) & 0x7F)
-        c = (i >> 8) & 0xFF
-        d = i & 0xFF
+        k = i % s
+        host = i // s + 1
+        b = (k >> 8) & 0xFF
+        c = k & 0xFF
         rows.append({
-            "address": f"{10}.{b}.{c}.{d}",
-            "subnet_id": subnet_ids[i % len(subnet_ids)],
+            "address": f"10.{b}.{c}.{host}",
+            "subnet_id": subnet_ids[k],
             "hostname": f"host-{i}.bench.example.com" if i % 2 == 0 else None,
             "status": _STATUSES[i % len(_STATUSES)],
             "mac_address": f"02:00:{(i>>24)&0xFF:02x}:{(i>>16)&0xFF:02x}:{(i>>8)&0xFF:02x}:{i&0xFF:02x}" if i % 3 == 0 else None,
@@ -81,6 +89,7 @@ def seed(database_url: str, n_addr: int, n_subnets: int) -> dict:
     db = SessionLocal()
     try:
         # Truncate only the seeded tables; keep users/provider_configs.
+        # CASCADE also clears tables referencing subnets/addresses (scan results, drift items, etc.).
         db.execute(text("TRUNCATE ip_addresses, subnet_ranges, subnets RESTART IDENTITY CASCADE"))
         db.commit()
 
