@@ -61,9 +61,9 @@ schedule or on demand — not on the request path.
 
 | Dataset | Full detect pass (p50) |
 |---------|-----------------------:|
-| 10k / 100 subnets  | ~11 s |
-| 50k / 300 subnets  | ~56 s |
-| 100k / 500 subnets | ~117 s |
+| 10k / 100 subnets  | ~4 s |
+| 50k / 300 subnets  | ~20 s |
+| 100k / 500 subnets | ~41 s |
 
 ## Supported ceiling
 
@@ -76,7 +76,7 @@ rig with interactive read paths staying under ~350 ms at p95:
   computes per-subnet usage across all 500 subnets.
 
 Everyday use at 100k addresses stays interactive. Larger datasets are likely workable
-but are not yet validated. Full drift detect is a batch job — budget ~2 minutes at
+but are not yet validated. Full drift detect is a batch job — budget ~40 seconds at
 100k and run it scheduled, not per-request.
 
 ## Reproduce it yourself
