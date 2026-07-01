@@ -23,7 +23,7 @@ def test_percentiles_single_sample():
 
 def test_endpoints_cover_required_paths():
     paths = {path for (_lbl, _m, path) in bench.ENDPOINTS}
-    assert any(p.startswith("/api/addresses") for p in paths)
+    assert any(p.startswith("/api/v1/addresses") for p in paths)
     assert any("/map" in p for p in paths)
-    assert "/api/drift/scan" in paths
-    assert "/api/subnets" in paths
+    assert any(p.startswith("/api/v1/drift/scan") for p in paths)
+    assert any(p.startswith("/api/v1/subnets") for p in paths)
