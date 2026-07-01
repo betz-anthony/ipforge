@@ -56,6 +56,8 @@ def test_detect_drift_characterization(db):
     assert ("10.0.0.6", DriftCategory.mac_mismatch.value, False) in rows
     assert ("10.0.0.6", DriftCategory.missing_dns.value, False) not in rows
     assert ("10.0.0.6", DriftCategory.missing_dhcp.value, False) not in rows
+    # exactly these three items — no spurious extras (guards the refactor)
+    assert len(rows) == 3
 
     events = Counter((e.trigger_type, e.resource_key) for e in drain_queue())
     # every detected item emits a "drift" event; reopened missing_dhcp re-emits
@@ -64,3 +66,5 @@ def test_detect_drift_characterization(db):
     assert events[("drift", "ip:10.0.0.6:mac_mismatch")] == 1
     # none of these categories are conflict categories -> no "collision" events here
     assert all(t != "collision" for (t, _k) in events)
+    # exactly three emits — no spurious extras (guards the refactor)
+    assert sum(events.values()) == 3
