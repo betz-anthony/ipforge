@@ -23,35 +23,35 @@ Two kinds of path are reported separately, because they answer different questio
 ### 100,000 addresses / 500 subnets
 | Endpoint | p50 | p95 | max |
 |----------|----:|----:|----:|
-| Address list (paginated) | 18.2 | 20.2 | 20.8 |
-| Address search (`?q=`)   | 144.7 | 154.8 | 165.7 |
-| Address deep page (offset 90k) | 36.3 | 45.7 | 54.9 |
-| Subnet list (with utilization stats) | 311.6 | 324.3 | 341.8 |
-| Subnet heatmap (`/map`)  | 20.8 | 27.3 | 34.2 |
-| Drift list | 5.9 | 6.8 | 6.9 |
-| Drift stats | 6.3 | 7.1 | 9.4 |
+| Address list (paginated) | 17.4 | 22.7 | 25.3 |
+| Address search (`?q=`)   | 142.8 | 149.7 | 151.2 |
+| Address deep page (offset 90k) | 36.2 | 38.4 | 38.6 |
+| Subnet list (with utilization stats) | 304.0 | 331.3 | 347.8 |
+| Subnet heatmap (`/map`)  | 21.3 | 23.3 | 23.6 |
+| Drift list | 6.1 | 6.9 | 7.1 |
+| Drift stats | 6.6 | 7.7 | 8.1 |
 
 ### 50,000 addresses / 300 subnets
 | Endpoint | p50 | p95 | max |
 |----------|----:|----:|----:|
-| Address list (paginated) | 14.6 | 18.0 | 18.3 |
-| Address search (`?q=`)   | 141.1 | 147.3 | 172.4 |
-| Address deep page | 41.7 | 45.0 | 50.1 |
-| Subnet list (with utilization stats) | 137.2 | 192.6 | 197.9 |
-| Subnet heatmap (`/map`)  | 16.8 | 19.3 | 19.4 |
-| Drift list | 6.0 | 6.8 | 6.9 |
-| Drift stats | 6.1 | 6.8 | 10.4 |
+| Address list (paginated) | 15.2 | 18.1 | 18.8 |
+| Address search (`?q=`)   | 141.5 | 152.1 | 161.6 |
+| Address deep page (offset 45k) | 25.7 | 27.8 | 29.1 |
+| Subnet list (with utilization stats) | 140.2 | 196.3 | 205.3 |
+| Subnet heatmap (`/map`)  | 17.3 | 19.3 | 20.0 |
+| Drift list | 5.9 | 6.9 | 10.9 |
+| Drift stats | 6.3 | 7.5 | 8.5 |
 
 ### 10,000 addresses / 100 subnets
 | Endpoint | p50 | p95 | max |
 |----------|----:|----:|----:|
-| Address list (paginated) | 13.1 | 15.1 | 17.7 |
-| Address search (`?q=`)   | 38.3 | 45.6 | 47.4 |
-| Address deep page | 13.8 | 16.6 | 18.9 |
-| Subnet list (with utilization stats) | 38.5 | 67.8 | 88.3 |
-| Subnet heatmap (`/map`)  | 13.9 | 15.0 | 15.3 |
-| Drift list | 6.3 | 9.0 | 10.1 |
-| Drift stats | 6.1 | 7.3 | 7.5 |
+| Address list (paginated) | 13.1 | 15.7 | 16.5 |
+| Address search (`?q=`)   | 39.9 | 53.0 | 65.4 |
+| Address deep page (offset 9k) | 18.1 | 22.3 | 24.4 |
+| Subnet list (with utilization stats) | 39.3 | 58.1 | 97.6 |
+| Subnet heatmap (`/map`)  | 14.0 | 16.2 | 17.0 |
+| Drift list | 5.8 | 7.0 | 9.5 |
+| Drift stats | 6.3 | 7.7 | 8.7 |
 
 ## Batch reconciliation (full drift detect)
 
@@ -62,17 +62,18 @@ schedule or on demand — not on the request path.
 | Dataset | Full detect pass (p50) |
 |---------|-----------------------:|
 | 10k / 100 subnets  | ~11 s |
-| 50k / 300 subnets  | ~57 s |
-| 100k / 500 subnets | ~112 s |
+| 50k / 300 subnets  | ~56 s |
+| 100k / 500 subnets | ~117 s |
 
 ## Supported ceiling
 
 IPForge is validated to **100,000 addresses across 500 subnets** on the reference
-rig with interactive read paths staying well under half a second at p95:
+rig with interactive read paths staying under ~350 ms at p95:
 
-- Address list, deep pagination, subnet heatmap, and drift views: **under ~50 ms** p95.
-- Address search and the utilization-annotated subnet list are the heaviest reads:
-  **~155 ms and ~325 ms** p95 respectively at 100k.
+- Address list, deep pagination, subnet heatmap, and drift views: **under ~40 ms** p95.
+- Address search (substring match) is **~150 ms** p95.
+- The utilization-annotated subnet list is the heaviest read at **~330 ms** p95; it
+  computes per-subnet usage across all 500 subnets.
 
 Everyday use at 100k addresses stays interactive. Larger datasets are likely workable
 but are not yet validated. Full drift detect is a batch job — budget ~2 minutes at
@@ -80,8 +81,7 @@ but are not yet validated. Full drift detect is a batch job — budget ~2 minute
 
 ## Reproduce it yourself
 
-    docker compose up -d db     # or let the bench spin its own Postgres
-    scripts/bench-run.sh --all  # seeds 10k/50k/100k, benchmarks each, writes JSON
+    scripts/bench-run.sh --all   # seeds 10k/50k/100k, benchmarks each, writes JSON
 
 Results land in `bench-results-<tier>.json`. The benchmark stands up a dedicated
 PostgreSQL 16 container, seeds it with the real schema, serves the API with the
