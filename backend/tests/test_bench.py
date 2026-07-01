@@ -21,6 +21,13 @@ def test_percentiles_single_sample():
     assert p["p50"] == p["p95"] == p["max"] == p["mean"] == 7.0
 
 
+def test_deep_offset_for_scales_per_tier():
+    assert bench.deep_offset_for("100k") == 90000
+    assert bench.deep_offset_for("50k") == 45000
+    assert bench.deep_offset_for("10k") == 9000
+    assert bench.deep_offset_for("adhoc") == 90000   # unknown tier falls back to 90000
+
+
 def test_endpoints_cover_required_paths():
     paths = {path for (_lbl, _m, path) in bench.ENDPOINTS}
     assert any(p.startswith("/api/v1/addresses") for p in paths)
