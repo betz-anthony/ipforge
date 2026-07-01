@@ -53,3 +53,6 @@ demo.db
 
 # Superpowers plugin working state
 .superpowers/
+
+# Scale benchmark generated artifacts
+bench-results-*.json

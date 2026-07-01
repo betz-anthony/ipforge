@@ -32,10 +32,11 @@ import app.discovery.runner as _disc  # noqa: E402
 
 # Freeze the seeded dataset: disable scan scheduler + discovery poller loops
 # so they cannot mutate data or deadlock against scale_seed.py's TRUNCATE.
+# main.py's lifespan does function-local `from app.scan import scan_scheduler_loop`
+# (and likewise for discovery), so patching the source modules is sufficient — the
+# lifespan reads these attrs at startup, after this runs.
 _scan.scan_scheduler_loop = lambda *a, **k: None
 _disc.discovery_poller_loop = lambda *a, **k: None
-main.scan_scheduler_loop = _scan.scan_scheduler_loop
-main.discovery_poller_loop = _disc.discovery_poller_loop
 
 if __name__ == "__main__":
     import uvicorn
