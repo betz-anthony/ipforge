@@ -17,14 +17,14 @@ import urllib.request
 
 # (label, method, path) — {sid} is filled with subnet id 1.
 ENDPOINTS = [
-    ("addresses_list",   "GET",  "/api/addresses?limit=50&offset=0"),
-    ("addresses_search", "GET",  "/api/addresses?q=host-1&limit=50"),
-    ("addresses_deep",   "GET",  "/api/addresses?limit=50&offset=90000"),
-    ("subnets_list",     "GET",  "/api/subnets"),
-    ("subnet_map",       "GET",  "/api/subnets/1/map"),
-    ("drift_list",       "GET",  "/api/drift"),
-    ("drift_stats",      "GET",  "/api/drift/stats"),
-    ("drift_scan",       "POST", "/api/drift/scan"),
+    ("addresses_list",   "GET",  "/api/v1/addresses?limit=50&offset=0"),
+    ("addresses_search", "GET",  "/api/v1/addresses?q=host-1&limit=50"),
+    ("addresses_deep",   "GET",  "/api/v1/addresses?limit=50&offset=90000"),
+    ("subnets_list",     "GET",  "/api/v1/subnets"),
+    ("subnet_map",       "GET",  "/api/v1/subnets/1/map"),
+    ("drift_list",       "GET",  "/api/v1/drift"),
+    ("drift_stats",      "GET",  "/api/v1/drift/stats"),
+    ("drift_scan",       "POST", "/api/v1/drift/scan"),
 ]
 # Heavy endpoints run fewer iterations.
 ITER_OVERRIDE = {"drift_scan": 5}
