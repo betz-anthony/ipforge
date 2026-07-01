@@ -2,7 +2,7 @@
 """Bulk-seed Postgres with a large IPForge dataset for scale benchmarking.
 
 Runs Alembic migrations to head (so production indexes exist), then bulk-inserts
-subnets, reserved ranges, and addresses. Postgres only — SQLite numbers are not
+subnets and addresses. Postgres only — SQLite numbers are not
 representative. Idempotent: truncates the seeded tables and reseeds; leaves the
 admin user and provider configs intact.
 

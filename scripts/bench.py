@@ -15,6 +15,17 @@ import math
 import time
 import urllib.request
 
+# Tier -> address count used to compute deep-page offset (90 % of dataset).
+# Unknown/adhoc tiers fall back to 100k (offset 90000) to match the literal default.
+TIER_ADDR_COUNTS = {"10k": 10000, "50k": 50000, "100k": 100000}
+
+
+def deep_offset_for(tier: str) -> int:
+    """Return the addresses_deep page offset for *tier* (pure, no I/O)."""
+    count = TIER_ADDR_COUNTS.get(tier, 100000)
+    return int(count * 0.9)
+
+
 # (label, method, path) — {sid} is filled with subnet id 1.
 ENDPOINTS = [
     ("addresses_list",   "GET",  "/api/v1/addresses?limit=50&offset=0"),
@@ -57,9 +68,11 @@ def _call(base_url: str, token: str, method: str, path: str) -> float:
     return (time.monotonic() - t0) * 1000.0  # ms
 
 
-def run(base_url: str, token: str, iterations: int) -> dict:
+def run(base_url: str, token: str, iterations: int, endpoints=None) -> dict:
+    if endpoints is None:
+        endpoints = ENDPOINTS
     results = {}
-    for label, method, path in ENDPOINTS:
+    for label, method, path in endpoints:
         iters = ITER_OVERRIDE.get(label, iterations)
         for _ in range(3):            # warm up
             _call(base_url, token, method, path)
@@ -76,7 +89,13 @@ def main() -> int:
     ap.add_argument("--iterations", type=int, default=40)
     args = ap.parse_args()
 
-    results = run(args.base_url, args.token, args.iterations)
+    deep_off = deep_offset_for(args.tier)
+    effective_endpoints = [
+        (lbl, mth, path.replace("offset=90000", f"offset={deep_off}"))
+        if lbl == "addresses_deep" else (lbl, mth, path)
+        for lbl, mth, path in ENDPOINTS
+    ]
+    results = run(args.base_url, args.token, args.iterations, endpoints=effective_endpoints)
     out = f"bench-results-{args.tier}.json"
     with open(out, "w") as fh:
         json.dump({"tier": args.tier, "results": results}, fh, indent=2)
