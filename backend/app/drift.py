@@ -62,13 +62,20 @@ def detect_drift(db, subnet_id: int | None = None) -> None:
 
     detected: set[tuple[str, str]] = set()
 
+    # DRIFT-PERF-001: preload every existing drift item once (unique by ip+category)
+    # instead of a per-item SELECT inside _upsert. Table is small vs address count.
+    existing_items: dict[tuple[str, str], DriftItem] = {
+        (d.ip_address, d.category): d for d in db.query(DriftItem).all()
+    }
+    new_rows: list[dict] = []
+
     def _upsert(ip: str, category: DriftCategory, details: dict, sid: int | None) -> None:
         cat = category.value
         if (ip, cat) in detected:
             return  # already handled this pass (e.g. multiple leases for one IP)
         detected.add((ip, cat))
         details_str = json.dumps(details)
-        existing = db.query(DriftItem).filter_by(ip_address=ip, category=cat).first()
+        existing = existing_items.get((ip, cat))
         is_new_or_reopened = False
         if existing:
             existing.detected_at = now
@@ -80,10 +87,12 @@ def detect_drift(db, subnet_id: int | None = None) -> None:
                 existing.resolved_at = None
                 is_new_or_reopened = True
         else:
-            db.add(DriftItem(
-                ip_address=ip, category=cat, severity=DRIFT_SEVERITY[category],
-                subnet_id=sid, details=details_str, detected_at=now, resolved=False,
-            ))
+            new_rows.append({
+                "ip_address": ip, "category": cat,
+                "severity": DRIFT_SEVERITY[category], "subnet_id": sid,
+                "details": details_str, "detected_at": now,
+                "resolved": False, "resolved_at": None, "needs_review": False,
+            })
             is_new_or_reopened = True
 
         if is_new_or_reopened:
@@ -234,6 +243,12 @@ def detect_drift(db, subnet_id: int | None = None) -> None:
             continue
         _upsert(ip, DriftCategory.unreachable_assigned,
                 {"last_scanned": sr.scanned_at.isoformat()}, a.subnet_id)
+
+    # DRIFT-PERF-001: one bulk insert for all new items (replaces per-item db.add).
+    # Done before the auto-resolve query so the new rows are visible there and are
+    # skipped via the `detected` set, exactly as the old per-item db.add path was.
+    if new_rows:
+        db.bulk_insert_mappings(DriftItem, new_rows)
 
     # ── auto-resolve cleared items in scope ──────────────────────────────────
     for d in db.query(DriftItem).filter(DriftItem.resolved.is_(False)).all():
