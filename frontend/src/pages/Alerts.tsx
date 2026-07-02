@@ -95,12 +95,12 @@ export default function Alerts() {
       <table className="data-table">
         <thead>
           <tr>
-            <th className="th-sortable" onClick={() => toggleSort('state')}><span>State {sortIcon('state')}</span></th>
-            <th className="th-sortable" onClick={() => toggleSort('resource')}><span>Resource {sortIcon('resource')}</span></th>
-            <th className="th-sortable" onClick={() => toggleSort('first')}><span>First fired {sortIcon('first')}</span></th>
-            <th className="th-sortable" onClick={() => toggleSort('last')}><span>Last fired {sortIcon('last')}</span></th>
-            <th>Deliveries</th>
-            <th></th>
+            <th scope="col" className="th-sortable" onClick={() => toggleSort('state')}><span>State {sortIcon('state')}</span></th>
+            <th scope="col" className="th-sortable" onClick={() => toggleSort('resource')}><span>Resource {sortIcon('resource')}</span></th>
+            <th scope="col" className="th-sortable" onClick={() => toggleSort('first')}><span>First fired {sortIcon('first')}</span></th>
+            <th scope="col" className="th-sortable" onClick={() => toggleSort('last')}><span>Last fired {sortIcon('last')}</span></th>
+            <th scope="col">Deliveries</th>
+            <th scope="col"></th>
           </tr>
         </thead>
         <tbody>

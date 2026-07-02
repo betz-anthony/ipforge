@@ -108,12 +108,12 @@ export default function ApiTokens() {
         <table>
           <thead>
             <tr>
-              <th>Name</th>
-              <th>Token</th>
-              <th>Mode</th>
-              <th>Expires</th>
-              <th>Last used</th>
-              <th style={{ width: '2.5rem' }}></th>
+              <th scope="col">Name</th>
+              <th scope="col">Token</th>
+              <th scope="col">Mode</th>
+              <th scope="col">Expires</th>
+              <th scope="col">Last used</th>
+              <th scope="col" style={{ width: '2.5rem' }}></th>
             </tr>
           </thead>
           <tbody>

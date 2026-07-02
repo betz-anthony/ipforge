@@ -317,8 +317,9 @@ export default function DHCP() {
                 <div className="inline-form">
                   <div className="form-grid">
                     <div className="form-field">
-                      <label>IP Address</label>
+                      <label htmlFor="dhcp-ip">IP Address</label>
                       <input
+                        id="dhcp-ip"
                         placeholder={isV6(selectedScope) ? '2001:db8::100' : '10.0.0.100'}
                         value={form.ip_address}
                         onChange={set('ip_address')}
@@ -329,8 +330,9 @@ export default function DHCP() {
                     {isV6(selectedScope) ? (
                       <>
                         <div className="form-field">
-                          <label>Client DUID</label>
+                          <label htmlFor="dhcp-duid">Client DUID</label>
                           <input
+                            id="dhcp-duid"
                             placeholder="AA:BB:CC:DD:EE:FF or AA:BB:CC:DD:EE:FF:00:11"
                             value={form.client_duid}
                             onChange={set('client_duid')}
@@ -338,8 +340,9 @@ export default function DHCP() {
                           {macError && <span className="feedback-error" style={{ fontSize: '0.72rem' }}>{macError}</span>}
                         </div>
                         <div className="form-field">
-                          <label>IAID</label>
+                          <label htmlFor="dhcp-iaid">IAID</label>
                           <input
+                            id="dhcp-iaid"
                             type="number"
                             placeholder="12345678"
                             value={form.iaid || ''}
@@ -349,8 +352,9 @@ export default function DHCP() {
                       </>
                     ) : (
                       <div className="form-field">
-                        <label>MAC Address</label>
+                        <label htmlFor="dhcp-mac">MAC Address</label>
                         <input
+                          id="dhcp-mac"
                           placeholder="AA:BB:CC:DD:EE:FF"
                           value={form.mac_address}
                           onChange={set('mac_address')}
@@ -360,12 +364,12 @@ export default function DHCP() {
                     )}
 
                     <div className="form-field">
-                      <label>Hostname / Name</label>
-                      <input placeholder="server01" value={form.name} onChange={set('name')} />
+                      <label htmlFor="dhcp-name">Hostname / Name</label>
+                      <input id="dhcp-name" placeholder="server01" value={form.name} onChange={set('name')} />
                     </div>
                     <div className="form-field">
-                      <label>Description</label>
-                      <input placeholder="Optional" value={form.description} onChange={set('description')} />
+                      <label htmlFor="dhcp-desc">Description</label>
+                      <input id="dhcp-desc" placeholder="Optional" value={form.description} onChange={set('description')} />
                     </div>
                   </div>
                   <div className="form-actions">
@@ -446,22 +450,22 @@ export default function DHCP() {
                   <table>
                     <thead>
                       <tr>
-                        <th className="th-sortable" onClick={() => toggleLeasesSort('ip_address')}>
+                        <th scope="col" className="th-sortable" onClick={() => toggleLeasesSort('ip_address')}>
                           <span>IP Address {sortIcon('ip_address')}</span>
                         </th>
-                        <th>
+                        <th scope="col">
                           <span>{isV6(selectedScope) ? 'Client DUID' : 'MAC'}</span>
                         </th>
                         {isV6(selectedScope) && (
-                          <th><span>IAID</span></th>
+                          <th scope="col"><span>IAID</span></th>
                         )}
-                        <th className="th-sortable" onClick={() => toggleLeasesSort('name')}>
+                        <th scope="col" className="th-sortable" onClick={() => toggleLeasesSort('name')}>
                           <span>Hostname {sortIcon('name')}</span>
                         </th>
-                        <th>
+                        <th scope="col">
                           <span>Description</span>
                         </th>
-                        <th></th>
+                        <th scope="col"></th>
                       </tr>
                     </thead>
                     <tbody>

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useId, isValidElement, cloneElement } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Eye, EyeOff, Save, Plus, Pencil, Trash2, Check, X } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
@@ -105,10 +105,15 @@ const TYPE_LABEL: Record<string, string> = Object.fromEntries(
 // ── Small reusable components ──────────────────────────────────────────────
 
 function Field({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
+  const fieldId = useId()
+  // Associate the label with a single control child (unless it already has an id).
+  const control = isValidElement(children) && !(children.props as { id?: string }).id
+    ? cloneElement(children as React.ReactElement<{ id?: string }>, { id: fieldId })
+    : children
   return (
     <div className="form-field">
-      <label>{label}{hint && <span style={{ color: 'var(--accent)', marginLeft: '0.375rem', fontSize: '0.7rem' }}>{hint}</span>}</label>
-      {children}
+      <label htmlFor={fieldId}>{label}{hint && <span style={{ color: 'var(--accent)', marginLeft: '0.375rem', fontSize: '0.7rem' }}>{hint}</span>}</label>
+      {control}
     </div>
   )
 }
@@ -807,7 +812,7 @@ function CustomFieldsSection() {
         <div className="table-wrap" style={{ marginTop: '1rem' }}>
           <table>
             <thead>
-              <tr><th>Entity</th><th>Name</th><th>Label</th><th>Type</th><th>Options</th><th></th></tr>
+              <tr><th scope="col">Entity</th><th scope="col">Name</th><th scope="col">Label</th><th scope="col">Type</th><th scope="col">Options</th><th scope="col"></th></tr>
             </thead>
             <tbody>
               {defs.map((d: CustomFieldDef) => (
@@ -880,7 +885,7 @@ function DiscoveryDevicesSection() {
       <div className="table-wrap">
         <table>
           <thead>
-            <tr><th>Name</th><th>Host</th><th>Ver</th><th>Status</th><th>Interval</th><th></th></tr>
+            <tr><th scope="col">Name</th><th scope="col">Host</th><th scope="col">Ver</th><th scope="col">Status</th><th scope="col">Interval</th><th scope="col"></th></tr>
           </thead>
           <tbody>
             {devices.length === 0 && <tr><td colSpan={6} className="empty-state">No devices configured.</td></tr>}

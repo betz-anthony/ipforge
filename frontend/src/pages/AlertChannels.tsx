@@ -74,7 +74,7 @@ export default function AlertChannels() {
     >
       <table className="data-table" style={{ width: '100%', fontSize: '0.82rem' }}>
         <thead>
-          <tr><th>Name</th><th>Kind</th><th>Enabled</th><th></th></tr>
+          <tr><th scope="col">Name</th><th scope="col">Kind</th><th scope="col">Enabled</th><th scope="col"></th></tr>
         </thead>
         <tbody>
           {channels.map(c => (
@@ -99,15 +99,17 @@ export default function AlertChannels() {
         <div className="inline-form" style={{ marginTop: '0.75rem' }}>
           <div className="form-grid">
             <div className="form-field">
-              <label>Name</label>
+              <label htmlFor="chan-name">Name</label>
               <input
+                id="chan-name"
                 value={editing.form.name}
                 onChange={e => setEditing({ ...editing, form: { ...editing.form, name: e.target.value } })}
               />
             </div>
             <div className="form-field">
-              <label>Kind</label>
+              <label htmlFor="chan-kind">Kind</label>
               <select
+                id="chan-kind"
                 value={editing.form.kind}
                 onChange={e => setEditing({ ...editing, form: { ...editing.form, kind: e.target.value as AlertChannel['kind'], config: { url: '' }, secret: null } })}
               >
@@ -115,8 +117,9 @@ export default function AlertChannels() {
               </select>
             </div>
             <div className="form-field">
-              <label>Enabled</label>
+              <label htmlFor="chan-enabled">Enabled</label>
               <select
+                id="chan-enabled"
                 value={editing.form.enabled ? 'yes' : 'no'}
                 onChange={e => setEditing({ ...editing, form: { ...editing.form, enabled: e.target.value === 'yes' } })}
               >
@@ -128,23 +131,26 @@ export default function AlertChannels() {
             {editing.form.kind === 'smtp' ? (
               <>
                 <div className="form-field">
-                  <label>Host</label>
+                  <label htmlFor="chan-host">Host</label>
                   <input
+                    id="chan-host"
                     value={editing.form.config.host ?? ''}
                     onChange={e => setEditing({ ...editing, form: { ...editing.form, config: { ...editing.form.config, host: e.target.value } } })}
                   />
                 </div>
                 <div className="form-field">
-                  <label>Port</label>
+                  <label htmlFor="chan-port">Port</label>
                   <input
+                    id="chan-port"
                     type="number"
                     value={editing.form.config.port ?? 25}
                     onChange={e => setEditing({ ...editing, form: { ...editing.form, config: { ...editing.form.config, port: +e.target.value } } })}
                   />
                 </div>
                 <div className="form-field">
-                  <label>TLS (STARTTLS)</label>
+                  <label htmlFor="chan-tls">TLS (STARTTLS)</label>
                   <select
+                    id="chan-tls"
                     value={editing.form.config.tls ? 'yes' : 'no'}
                     onChange={e => setEditing({ ...editing, form: { ...editing.form, config: { ...editing.form.config, tls: e.target.value === 'yes' } } })}
                   >
@@ -153,30 +159,34 @@ export default function AlertChannels() {
                   </select>
                 </div>
                 <div className="form-field">
-                  <label>Username</label>
+                  <label htmlFor="chan-user">Username</label>
                   <input
+                    id="chan-user"
                     value={editing.form.config.user ?? ''}
                     onChange={e => setEditing({ ...editing, form: { ...editing.form, config: { ...editing.form.config, user: e.target.value } } })}
                   />
                 </div>
                 <div className="form-field">
-                  <label>From address</label>
+                  <label htmlFor="chan-from">From address</label>
                   <input
+                    id="chan-from"
                     value={editing.form.config.from ?? ''}
                     onChange={e => setEditing({ ...editing, form: { ...editing.form, config: { ...editing.form.config, from: e.target.value } } })}
                   />
                 </div>
                 <div className="form-field">
-                  <label>To address(es)</label>
+                  <label htmlFor="chan-to">To address(es)</label>
                   <input
+                    id="chan-to"
                     value={editing.form.config.to ?? ''}
                     placeholder="comma-separated"
                     onChange={e => setEditing({ ...editing, form: { ...editing.form, config: { ...editing.form.config, to: e.target.value } } })}
                   />
                 </div>
                 <div className="form-field">
-                  <label>Password</label>
+                  <label htmlFor="chan-password">Password</label>
                   <input
+                    id="chan-password"
                     type="password"
                     placeholder={editing.id != null ? '(leave blank to keep)' : ''}
                     onChange={e => setEditing({ ...editing, form: { ...editing.form, secret: e.target.value || null } })}
@@ -186,15 +196,17 @@ export default function AlertChannels() {
             ) : (
               <>
                 <div className="form-field">
-                  <label>Webhook URL</label>
+                  <label htmlFor="chan-url">Webhook URL</label>
                   <input
+                    id="chan-url"
                     value={editing.form.config.url ?? ''}
                     onChange={e => setEditing({ ...editing, form: { ...editing.form, config: { ...editing.form.config, url: e.target.value } } })}
                   />
                 </div>
                 <div className="form-field">
-                  <label>Bearer Token (optional)</label>
+                  <label htmlFor="chan-token">Bearer Token (optional)</label>
                   <input
+                    id="chan-token"
                     type="password"
                     placeholder={editing.id != null ? '(leave blank to keep)' : ''}
                     onChange={e => setEditing({ ...editing, form: { ...editing.form, secret: e.target.value || null } })}

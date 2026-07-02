@@ -9,6 +9,7 @@ import EmptyState from '../components/EmptyState'
 import CustomFieldsEditor, { parseTags } from '../components/CustomFieldsEditor'
 import SearchInput from '../components/SearchInput'
 import { TableSkeleton } from '../components/Skeleton'
+import ModalDialog from '../components/ModalDialog'
 import { usePagedQuery } from '../hooks/usePagedQuery'
 import { Pager } from '../components/Pager'
 import { useToast } from '../contexts/ToastContext'
@@ -492,8 +493,9 @@ export default function Addresses() {
         <div className="inline-form">
           <div className="form-grid">
             <div className={`form-field${ipError ? ' form-field-error' : ''}`}>
-              <label>IP Address</label>
+              <label htmlFor="addr-new-ip">IP Address</label>
               <input
+                id="addr-new-ip"
                 placeholder="10.0.1.50"
                 value={form.address}
                 autoFocus
@@ -503,8 +505,8 @@ export default function Addresses() {
               {ipError && <span className="form-field-error-msg">{ipError}</span>}
             </div>
             <div className="form-field">
-              <label>Subnet</label>
-              <select value={form.subnet_id} onChange={set('subnet_id')}>
+              <label htmlFor="addr-new-subnet">Subnet</label>
+              <select id="addr-new-subnet" value={form.subnet_id} onChange={set('subnet_id')}>
                 <option value="">— select —</option>
                 {(subnets ?? []).map(s => (
                   <option key={s.id} value={s.id}>{s.name} ({s.cidr})</option>
@@ -512,18 +514,19 @@ export default function Addresses() {
               </select>
             </div>
             <div className="form-field">
-              <label>Status</label>
-              <select value={form.status} onChange={set('status')}>
+              <label htmlFor="addr-new-status">Status</label>
+              <select id="addr-new-status" value={form.status} onChange={set('status')}>
                 {STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
               </select>
             </div>
             <div className="form-field">
-              <label>Hostname</label>
-              <input placeholder="Optional" value={form.hostname} onChange={set('hostname')} />
+              <label htmlFor="addr-new-hostname">Hostname</label>
+              <input id="addr-new-hostname" placeholder="Optional" value={form.hostname} onChange={set('hostname')} />
             </div>
             <div className={`form-field${macError ? ' form-field-error' : ''}`}>
-              <label>MAC Address</label>
+              <label htmlFor="addr-new-mac">MAC Address</label>
               <input
+                id="addr-new-mac"
                 placeholder="Optional — aa:bb:cc:dd:ee:ff"
                 value={form.mac_address}
                 onChange={e => { setForm(f => ({ ...f, mac_address: e.target.value })); if (macError) setMacError('') }}
@@ -532,8 +535,8 @@ export default function Addresses() {
               {macError && <span className="form-field-error-msg">{macError}</span>}
             </div>
             <div className="form-field">
-              <label>Description</label>
-              <input placeholder="Optional" value={form.description} onChange={set('description')} />
+              <label htmlFor="addr-new-desc">Description</label>
+              <input id="addr-new-desc" placeholder="Optional" value={form.description} onChange={set('description')} />
             </div>
           </div>
           <div className="form-actions">
@@ -576,13 +579,13 @@ export default function Addresses() {
           <table>
             <thead>
               <tr>
-                <th className="th-sortable" onClick={() => toggleSort('address')}><span>Address {sortIcon('address')}</span></th>
-                <th className="th-sortable" onClick={() => toggleSort('hostname')}><span>Hostname {sortIcon('hostname')}</span></th>
-                <th className="th-sortable" onClick={() => toggleSort('status')}><span>Status {sortIcon('status')}</span></th>
-                <th className="th-sortable" onClick={() => toggleSort('mac_address')}><span>MAC {sortIcon('mac_address')}</span></th>
-                <th><span>Description</span></th>
-                <th className="th-sortable" onClick={() => toggleSort('last_seen')}><span>Last Seen {sortIcon('last_seen')}</span></th>
-                <th style={{ width: '2.5rem' }}></th>
+                <th scope="col" className="th-sortable" onClick={() => toggleSort('address')}><span>Address {sortIcon('address')}</span></th>
+                <th scope="col" className="th-sortable" onClick={() => toggleSort('hostname')}><span>Hostname {sortIcon('hostname')}</span></th>
+                <th scope="col" className="th-sortable" onClick={() => toggleSort('status')}><span>Status {sortIcon('status')}</span></th>
+                <th scope="col" className="th-sortable" onClick={() => toggleSort('mac_address')}><span>MAC {sortIcon('mac_address')}</span></th>
+                <th scope="col"><span>Description</span></th>
+                <th scope="col" className="th-sortable" onClick={() => toggleSort('last_seen')}><span>Last Seen {sortIcon('last_seen')}</span></th>
+                <th scope="col" style={{ width: '2.5rem' }}></th>
               </tr>
             </thead>
             <tbody>
@@ -662,11 +665,11 @@ export default function Addresses() {
       )}
 
       {deletePreview && deletingId !== null && (
-        <div className="modal-backdrop" onClick={() => { setDeletingId(null); setDeletePreview(null) }}>
-          <div className="modal" onClick={e => e.stopPropagation()}>
-            <h2 className="modal-title">
-              Delete {deletePreview.address}{deletePreview.hostname ? ` (${deletePreview.hostname})` : ''}?
-            </h2>
+        <ModalDialog
+          title={`Delete ${deletePreview.address}${deletePreview.hostname ? ` (${deletePreview.hostname})` : ''}?`}
+          onClose={() => { setDeletingId(null); setDeletePreview(null) }}
+        >
+          <>
             {deletePreview.items.length > 0 ? (
               <>
                 <p className="modal-section-title">Provider cleanup</p>
@@ -710,8 +713,8 @@ export default function Addresses() {
                 {deleteWithCleanupMutation.isPending ? 'Deleting…' : 'Delete'}
               </button>
             </div>
-          </div>
-        </div>
+          </>
+        </ModalDialog>
       )}
 
       {selectedAddress && (
@@ -731,26 +734,27 @@ export default function Addresses() {
           onClose={() => setSelectedAddress(null)}
         >
           <div className="form-field">
-            <label>Hostname</label>
-            <input value={editForm.hostname} onChange={setEdit('hostname')} />
+            <label htmlFor="addr-edit-hostname">Hostname</label>
+            <input id="addr-edit-hostname" value={editForm.hostname} onChange={setEdit('hostname')} />
           </div>
           <div className="form-field">
-            <label>Status</label>
-            <select value={editForm.status} onChange={setEdit('status')}>
+            <label htmlFor="addr-edit-status">Status</label>
+            <select id="addr-edit-status" value={editForm.status} onChange={setEdit('status')}>
               {STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
             </select>
           </div>
           <div className="form-field">
-            <label>MAC Address</label>
-            <input value={editForm.mac_address} onChange={setEdit('mac_address')} />
+            <label htmlFor="addr-edit-mac">MAC Address</label>
+            <input id="addr-edit-mac" value={editForm.mac_address} onChange={setEdit('mac_address')} />
           </div>
           <div className="form-field">
-            <label>Description</label>
-            <input value={editForm.description} onChange={setEdit('description')} />
+            <label htmlFor="addr-edit-desc">Description</label>
+            <input id="addr-edit-desc" value={editForm.description} onChange={setEdit('description')} />
           </div>
           <div className="form-field" style={{ gridColumn: '1 / -1' }}>
-            <label>Notes</label>
+            <label htmlFor="addr-edit-notes">Notes</label>
             <textarea
+              id="addr-edit-notes"
               value={editForm.notes}
               onChange={setEdit('notes')}
               rows={4}

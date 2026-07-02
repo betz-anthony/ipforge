@@ -117,8 +117,9 @@ export default function CollisionResolveDialog({ collision, queryKeys, onClose }
               </tbody>
             </table>
             <div className="form-field" style={{ margin: 0 }}>
-              <label style={{ fontSize: '0.75rem' }}>Canonical hostname</label>
+              <label htmlFor="collision-canonical" style={{ fontSize: '0.75rem' }}>Canonical hostname</label>
               <input
+                id="collision-canonical"
                 value={canonicalHostname}
                 onChange={e => setCanonicalHostname(e.target.value)}
                 placeholder="hostname"

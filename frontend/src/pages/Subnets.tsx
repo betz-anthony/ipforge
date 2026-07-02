@@ -429,9 +429,9 @@ export default function Subnets() {
             <table>
               <thead>
                 <tr>
-                  <th>Address</th>
-                  <th>Hostname</th>
-                  <th>Status</th>
+                  <th scope="col">Address</th>
+                  <th scope="col">Hostname</th>
+                  <th scope="col">Status</th>
                 </tr>
               </thead>
               <tbody>
@@ -527,12 +527,12 @@ export default function Subnets() {
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem', marginBottom: '0.5rem' }}>
               <div className="form-field">
-                <label>Start IP</label>
-                <input placeholder="10.0.0.1" value={rangeForm.start_ip} onChange={e => setRangeForm(f => ({ ...f, start_ip: e.target.value }))} />
+                <label htmlFor="subnet-range-start">Start IP</label>
+                <input id="subnet-range-start" placeholder="10.0.0.1" value={rangeForm.start_ip} onChange={e => setRangeForm(f => ({ ...f, start_ip: e.target.value }))} />
               </div>
               <div className="form-field">
-                <label>End IP</label>
-                <input placeholder="10.0.0.254" value={rangeForm.end_ip} onChange={e => setRangeForm(f => ({ ...f, end_ip: e.target.value }))} />
+                <label htmlFor="subnet-range-end">End IP</label>
+                <input id="subnet-range-end" placeholder="10.0.0.254" value={rangeForm.end_ip} onChange={e => setRangeForm(f => ({ ...f, end_ip: e.target.value }))} />
               </div>
             </div>
             <div className="form-actions">
@@ -560,7 +560,7 @@ export default function Subnets() {
           <div className="table-wrap" style={{ marginTop: '0.5rem' }}>
             <table>
               <thead>
-                <tr><th>IP</th><th>Status</th><th>Latency</th></tr>
+                <tr><th scope="col">IP</th><th scope="col">Status</th><th scope="col">Latency</th></tr>
               </thead>
               <tbody>
                 {scanStatus.results.filter(r => r.reachable).map(r => {
@@ -699,12 +699,13 @@ export default function Subnets() {
         <div className="inline-form">
           <div className="form-grid">
             <div className="form-field">
-              <label>Name</label>
-              <input placeholder="Server Network" value={form.name} onChange={set('name')} autoFocus />
+              <label htmlFor="subnet-new-name">Name</label>
+              <input id="subnet-new-name" placeholder="Server Network" value={form.name} onChange={set('name')} autoFocus />
             </div>
             <div className={`form-field${cidrError ? ' form-field-error' : ''}`}>
-              <label>CIDR</label>
+              <label htmlFor="subnet-new-cidr">CIDR</label>
               <input
+                id="subnet-new-cidr"
                 placeholder="10.0.1.0/24"
                 value={form.cidr}
                 onChange={e => { setForm(f => ({ ...f, cidr: e.target.value })); if (cidrError) setCidrError('') }}
@@ -713,16 +714,17 @@ export default function Subnets() {
               {cidrError && <span className="form-field-error-msg">{cidrError}</span>}
             </div>
             <div className="form-field">
-              <label>VLAN ID</label>
-              <input type="number" placeholder="Optional" value={form.vlan_id} onChange={set('vlan_id')} />
+              <label htmlFor="subnet-new-vlan">VLAN ID</label>
+              <input id="subnet-new-vlan" type="number" placeholder="Optional" value={form.vlan_id} onChange={set('vlan_id')} />
             </div>
             <div className="form-field">
-              <label>Description</label>
-              <input placeholder="Optional" value={form.description} onChange={set('description')} />
+              <label htmlFor="subnet-new-desc">Description</label>
+              <input id="subnet-new-desc" placeholder="Optional" value={form.description} onChange={set('description')} />
             </div>
             <div className="form-field">
-              <label>Scan interval (min)</label>
+              <label htmlFor="subnet-new-scan">Scan interval (min)</label>
               <input
+                id="subnet-new-scan"
                 type="number"
                 min={1}
                 placeholder={`global default (${settingsData?.scan_interval_minutes ?? 30})`}
@@ -731,8 +733,8 @@ export default function Subnets() {
               />
             </div>
             <div className="form-field">
-              <label>DNS Provider</label>
-              <select value={form.dns_provider_name} onChange={e => setForm(f => ({ ...f, dns_provider_name: e.target.value }))}>
+              <label htmlFor="subnet-new-dns">DNS Provider</label>
+              <select id="subnet-new-dns" value={form.dns_provider_name} onChange={e => setForm(f => ({ ...f, dns_provider_name: e.target.value }))}>
                 <option value="">— auto (first enabled) —</option>
                 {provOptions(providerNames?.dns, form.dns_provider_name).map(n => <option key={n} value={n}>{n}</option>)}
               </select>
@@ -741,8 +743,8 @@ export default function Subnets() {
               )}
             </div>
             <div className="form-field">
-              <label>DHCP Provider</label>
-              <select value={form.dhcp_provider_name} onChange={e => setForm(f => ({ ...f, dhcp_provider_name: e.target.value }))}>
+              <label htmlFor="subnet-new-dhcp">DHCP Provider</label>
+              <select id="subnet-new-dhcp" value={form.dhcp_provider_name} onChange={e => setForm(f => ({ ...f, dhcp_provider_name: e.target.value }))}>
                 <option value="">— auto (first enabled) —</option>
                 {provOptions(providerNames?.dhcp, form.dhcp_provider_name).map(n => <option key={n} value={n}>{n}</option>)}
               </select>
@@ -751,8 +753,9 @@ export default function Subnets() {
               )}
             </div>
             <div className="form-field" style={{ gridColumn: '1 / -1' }}>
-              <label>Parent Subnet</label>
+              <label htmlFor="subnet-new-parent">Parent Subnet</label>
               <select
+                id="subnet-new-parent"
                 value={formParentId ?? ''}
                 onChange={e => setFormParentId(e.target.value ? Number(e.target.value) : null)}
               >
@@ -803,13 +806,13 @@ export default function Subnets() {
           <table>
             <thead>
               <tr>
-                <th className="th-sortable" onClick={() => toggleSort('name')}><span>Name {sortIcon('name')}</span></th>
-                <th className="th-sortable" onClick={() => toggleSort('cidr')}><span>CIDR {sortIcon('cidr')}</span></th>
-                <th className="th-sortable" onClick={() => toggleSort('ip_version')}><span>Version {sortIcon('ip_version')}</span></th>
-                <th className="th-sortable" onClick={() => toggleSort('vlan')}><span>VLAN {sortIcon('vlan')}</span></th>
-                <th className="th-sortable" onClick={() => toggleSort('description')}><span>Description {sortIcon('description')}</span></th>
-                <th className="th-sortable" onClick={() => toggleSort('utilization')}><span>Utilization {sortIcon('utilization')}</span></th>
-                <th style={{ width: '2.5rem' }}></th>
+                <th scope="col" className="th-sortable" onClick={() => toggleSort('name')}><span>Name {sortIcon('name')}</span></th>
+                <th scope="col" className="th-sortable" onClick={() => toggleSort('cidr')}><span>CIDR {sortIcon('cidr')}</span></th>
+                <th scope="col" className="th-sortable" onClick={() => toggleSort('ip_version')}><span>Version {sortIcon('ip_version')}</span></th>
+                <th scope="col" className="th-sortable" onClick={() => toggleSort('vlan')}><span>VLAN {sortIcon('vlan')}</span></th>
+                <th scope="col" className="th-sortable" onClick={() => toggleSort('description')}><span>Description {sortIcon('description')}</span></th>
+                <th scope="col" className="th-sortable" onClick={() => toggleSort('utilization')}><span>Utilization {sortIcon('utilization')}</span></th>
+                <th scope="col" style={{ width: '2.5rem' }}></th>
               </tr>
             </thead>
             <tbody>
@@ -937,20 +940,21 @@ export default function Subnets() {
           onClose={() => { setSelectedSubnet(null); setEditParentCandidates([]) }}
         >
           <div className="form-field">
-            <label>Name</label>
-            <input value={editForm.name} onChange={setEdit('name')} />
+            <label htmlFor="subnet-edit-name">Name</label>
+            <input id="subnet-edit-name" value={editForm.name} onChange={setEdit('name')} />
           </div>
           <div className="form-field">
-            <label>VLAN ID</label>
-            <input type="number" value={editForm.vlan_id} onChange={setEdit('vlan_id')} />
+            <label htmlFor="subnet-edit-vlan">VLAN ID</label>
+            <input id="subnet-edit-vlan" type="number" value={editForm.vlan_id} onChange={setEdit('vlan_id')} />
           </div>
           <div className="form-field">
-            <label>Description</label>
-            <input value={editForm.description} onChange={setEdit('description')} />
+            <label htmlFor="subnet-edit-desc">Description</label>
+            <input id="subnet-edit-desc" value={editForm.description} onChange={setEdit('description')} />
           </div>
           <div className="form-field">
-            <label>Scan interval (min)</label>
+            <label htmlFor="subnet-edit-scan">Scan interval (min)</label>
             <input
+              id="subnet-edit-scan"
               type="number"
               min={1}
               placeholder={`global default (${settingsData?.scan_interval_minutes ?? 30})`}
@@ -959,15 +963,15 @@ export default function Subnets() {
             />
           </div>
           <div className="form-field">
-            <label>DNS Provider</label>
-            <select value={editForm.dns_provider_name} onChange={e => setEditForm(f => ({ ...f, dns_provider_name: e.target.value }))}>
+            <label htmlFor="subnet-edit-dns">DNS Provider</label>
+            <select id="subnet-edit-dns" value={editForm.dns_provider_name} onChange={e => setEditForm(f => ({ ...f, dns_provider_name: e.target.value }))}>
               <option value="">— auto (first enabled) —</option>
               {provOptions(providerNames?.dns, editForm.dns_provider_name).map(n => <option key={n} value={n}>{n}</option>)}
             </select>
           </div>
           <div className="form-field">
-            <label>DHCP Provider</label>
-            <select value={editForm.dhcp_provider_name} onChange={e => setEditForm(f => ({ ...f, dhcp_provider_name: e.target.value }))}>
+            <label htmlFor="subnet-edit-dhcp">DHCP Provider</label>
+            <select id="subnet-edit-dhcp" value={editForm.dhcp_provider_name} onChange={e => setEditForm(f => ({ ...f, dhcp_provider_name: e.target.value }))}>
               <option value="">— auto (first enabled) —</option>
               {provOptions(providerNames?.dhcp, editForm.dhcp_provider_name).map(n => <option key={n} value={n}>{n}</option>)}
             </select>
@@ -985,8 +989,9 @@ export default function Subnets() {
             </div>
           )}
           <div className="form-field" style={{ gridColumn: '1 / -1' }}>
-            <label>Parent Subnet</label>
+            <label htmlFor="subnet-edit-parent">Parent Subnet</label>
             <select
+              id="subnet-edit-parent"
               value={editParentId ?? ''}
               onChange={e => setEditParentId(e.target.value ? Number(e.target.value) : null)}
             >
@@ -997,8 +1002,9 @@ export default function Subnets() {
             </select>
           </div>
           <div className="form-field" style={{ gridColumn: '1 / -1' }}>
-            <label>Notes</label>
+            <label htmlFor="subnet-edit-notes">Notes</label>
             <textarea
+              id="subnet-edit-notes"
               value={editForm.notes}
               onChange={setEdit('notes')}
               rows={4}

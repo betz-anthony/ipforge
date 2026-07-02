@@ -101,15 +101,15 @@ export default function Requests() {
         <table>
           <thead>
             <tr>
-              <th className="th-sortable" onClick={() => toggleSort('requester')}><span>Requester {sortIcon('requester')}</span></th>
-              <th className="th-sortable" onClick={() => toggleSort('subnet')}><span>Subnet {sortIcon('subnet')}</span></th>
-              <th className="th-sortable" onClick={() => toggleSort('hostname')}><span>Hostname {sortIcon('hostname')}</span></th>
-              <th className="th-sortable" onClick={() => toggleSort('mac')}><span>MAC {sortIcon('mac')}</span></th>
-              <th>Purpose</th>
-              <th className="th-sortable" onClick={() => toggleSort('status')}><span>Status {sortIcon('status')}</span></th>
-              <th className="th-sortable" onClick={() => toggleSort('allocated')}><span>Allocated {sortIcon('allocated')}</span></th>
-              <th className="th-sortable" onClick={() => toggleSort('created')}><span>Submitted {sortIcon('created')}</span></th>
-              <th></th>
+              <th scope="col" className="th-sortable" onClick={() => toggleSort('requester')}><span>Requester {sortIcon('requester')}</span></th>
+              <th scope="col" className="th-sortable" onClick={() => toggleSort('subnet')}><span>Subnet {sortIcon('subnet')}</span></th>
+              <th scope="col" className="th-sortable" onClick={() => toggleSort('hostname')}><span>Hostname {sortIcon('hostname')}</span></th>
+              <th scope="col" className="th-sortable" onClick={() => toggleSort('mac')}><span>MAC {sortIcon('mac')}</span></th>
+              <th scope="col">Purpose</th>
+              <th scope="col" className="th-sortable" onClick={() => toggleSort('status')}><span>Status {sortIcon('status')}</span></th>
+              <th scope="col" className="th-sortable" onClick={() => toggleSort('allocated')}><span>Allocated {sortIcon('allocated')}</span></th>
+              <th scope="col" className="th-sortable" onClick={() => toggleSort('created')}><span>Submitted {sortIcon('created')}</span></th>
+              <th scope="col"></th>
             </tr>
           </thead>
           <tbody>
@@ -199,8 +199,8 @@ function SubmitForm({ onClose, onSaved }: { onClose: () => void; onSaved: () => 
     <div className="inline-form" style={{ marginTop: '0.75rem' }}>
       <div className="form-grid">
         <div className="form-field">
-          <label>Subnet</label>
-          <select value={form.subnet_id} onChange={e => setForm({ ...form, subnet_id: +e.target.value })}>
+          <label htmlFor="req-subnet">Subnet</label>
+          <select id="req-subnet" value={form.subnet_id} onChange={e => setForm({ ...form, subnet_id: +e.target.value })}>
             <option value={0}>— select —</option>
             {subnets.map((s: EligibleSubnet) => (
               <option key={s.id} value={s.id}>{s.cidr}{s.name ? ` (${s.name})` : ''}</option>
@@ -208,16 +208,16 @@ function SubmitForm({ onClose, onSaved }: { onClose: () => void; onSaved: () => 
           </select>
         </div>
         <div className="form-field">
-          <label>Hostname</label>
-          <input value={form.hostname} onChange={e => setForm({ ...form, hostname: e.target.value })} />
+          <label htmlFor="req-hostname">Hostname</label>
+          <input id="req-hostname" value={form.hostname} onChange={e => setForm({ ...form, hostname: e.target.value })} />
         </div>
         <div className="form-field">
-          <label>MAC (optional)</label>
-          <input value={form.mac_address ?? ''} onChange={e => setForm({ ...form, mac_address: e.target.value })} />
+          <label htmlFor="req-mac">MAC (optional)</label>
+          <input id="req-mac" value={form.mac_address ?? ''} onChange={e => setForm({ ...form, mac_address: e.target.value })} />
         </div>
         <div className="form-field" style={{ gridColumn: 'span 2' }}>
-          <label>Purpose</label>
-          <textarea value={form.purpose} onChange={e => setForm({ ...form, purpose: e.target.value })} rows={3} />
+          <label htmlFor="req-purpose">Purpose</label>
+          <textarea id="req-purpose" value={form.purpose} onChange={e => setForm({ ...form, purpose: e.target.value })} rows={3} />
         </div>
       </div>
       <div className="form-actions">
@@ -251,8 +251,8 @@ function ApproveForm({ request, onClose, onSaved }: { request: IPRequest; onClos
       </div>
       <div className="form-grid">
         <div className="form-field" style={{ gridColumn: 'span 2' }}>
-          <label>Description (optional)</label>
-          <input value={body.description ?? ''} onChange={e => setBody({ ...body, description: e.target.value })} />
+          <label htmlFor="req-desc">Description (optional)</label>
+          <input id="req-desc" value={body.description ?? ''} onChange={e => setBody({ ...body, description: e.target.value })} />
         </div>
         <div className="form-field">
           <label><input type="checkbox" checked={body.register_dns} onChange={e => setBody({ ...body, register_dns: e.target.checked })} /> Register DNS</label>
@@ -260,12 +260,12 @@ function ApproveForm({ request, onClose, onSaved }: { request: IPRequest; onClos
         {body.register_dns && (
           <>
             <div className="form-field">
-              <label>DNS Zone</label>
-              <input value={body.dns_zone ?? ''} onChange={e => setBody({ ...body, dns_zone: e.target.value })} />
+              <label htmlFor="req-dns-zone">DNS Zone</label>
+              <input id="req-dns-zone" value={body.dns_zone ?? ''} onChange={e => setBody({ ...body, dns_zone: e.target.value })} />
             </div>
             <div className="form-field">
-              <label>DNS Provider</label>
-              <input value={body.dns_provider ?? ''} onChange={e => setBody({ ...body, dns_provider: e.target.value })} placeholder="leave blank for subnet default" />
+              <label htmlFor="req-dns-provider">DNS Provider</label>
+              <input id="req-dns-provider" value={body.dns_provider ?? ''} onChange={e => setBody({ ...body, dns_provider: e.target.value })} placeholder="leave blank for subnet default" />
             </div>
             <div className="form-field">
               <label><input type="checkbox" checked={body.register_ptr} onChange={e => setBody({ ...body, register_ptr: e.target.checked })} /> Register PTR</label>
@@ -277,8 +277,8 @@ function ApproveForm({ request, onClose, onSaved }: { request: IPRequest; onClos
         </div>
         {body.register_dhcp && (
           <div className="form-field">
-            <label>DHCP Provider</label>
-            <input value={body.dhcp_provider ?? ''} onChange={e => setBody({ ...body, dhcp_provider: e.target.value })} placeholder="leave blank for subnet default" />
+            <label htmlFor="req-dhcp-provider">DHCP Provider</label>
+            <input id="req-dhcp-provider" value={body.dhcp_provider ?? ''} onChange={e => setBody({ ...body, dhcp_provider: e.target.value })} placeholder="leave blank for subnet default" />
           </div>
         )}
       </div>
@@ -311,8 +311,8 @@ function DenyForm({ request, onClose, onSaved }: { request: IPRequest; onClose: 
       </div>
       <div className="form-grid">
         <div className="form-field" style={{ gridColumn: 'span 2' }}>
-          <label>Reason / Notes</label>
-          <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={3} />
+          <label htmlFor="req-notes">Reason / Notes</label>
+          <textarea id="req-notes" value={notes} onChange={e => setNotes(e.target.value)} rows={3} />
         </div>
       </div>
       <div className="form-actions">

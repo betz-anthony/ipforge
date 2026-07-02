@@ -79,7 +79,7 @@ export default function AlertRules() {
     >
       <table className="data-table" style={{ width: '100%', fontSize: '0.82rem' }}>
         <thead>
-          <tr><th>Name</th><th>Trigger</th><th>Channels</th><th>Re-notify</th><th>Enabled</th><th></th></tr>
+          <tr><th scope="col">Name</th><th scope="col">Trigger</th><th scope="col">Channels</th><th scope="col">Re-notify</th><th scope="col">Enabled</th><th scope="col"></th></tr>
         </thead>
         <tbody>
           {rules.map((r: AlertRule) => (
@@ -105,15 +105,17 @@ export default function AlertRules() {
         <div className="inline-form" style={{ marginTop: '0.75rem' }}>
           <div className="form-grid">
             <div className="form-field">
-              <label>Name</label>
+              <label htmlFor="rule-name">Name</label>
               <input
+                id="rule-name"
                 value={editing.form.name}
                 onChange={e => setEditing({ ...editing, form: { ...editing.form, name: e.target.value } })}
               />
             </div>
             <div className="form-field">
-              <label>Trigger</label>
+              <label htmlFor="rule-trigger">Trigger</label>
               <select
+                id="rule-trigger"
                 value={editing.form.trigger_type}
                 onChange={e => setEditing({ ...editing, form: { ...editing.form, trigger_type: e.target.value as AlertRule['trigger_type'], condition: {} } })}
               >
@@ -123,8 +125,9 @@ export default function AlertRules() {
 
             {editing.form.trigger_type === 'utilization' && (
               <div className="form-field">
-                <label>Threshold %</label>
+                <label htmlFor="rule-threshold-pct">Threshold %</label>
                 <input
+                  id="rule-threshold-pct"
                   type="number"
                   min={1}
                   max={100}
@@ -135,8 +138,9 @@ export default function AlertRules() {
             )}
             {editing.form.trigger_type === 'stale_queue' && (
               <div className="form-field">
-                <label>Threshold (count)</label>
+                <label htmlFor="rule-threshold-count">Threshold (count)</label>
                 <input
+                  id="rule-threshold-count"
                   type="number"
                   min={1}
                   value={editing.form.condition.threshold ?? 10}
@@ -146,8 +150,9 @@ export default function AlertRules() {
             )}
 
             <div className="form-field">
-              <label>Channels</label>
+              <label htmlFor="rule-channels">Channels</label>
               <select
+                id="rule-channels"
                 multiple
                 value={editing.form.channel_ids.map(String)}
                 onChange={e => setEditing({ ...editing, form: { ...editing.form, channel_ids: Array.from(e.target.selectedOptions).map(o => +o.value) } })}
@@ -158,8 +163,9 @@ export default function AlertRules() {
 
             {showRecipients && (
               <div className="form-field">
-                <label>Recipients (comma-separated)</label>
+                <label htmlFor="rule-recipients">Recipients (comma-separated)</label>
                 <input
+                  id="rule-recipients"
                   value={editing.form.recipients.join(', ')}
                   onChange={e => setEditing({ ...editing, form: { ...editing.form, recipients: e.target.value.split(',').map(s => s.trim()).filter(Boolean) } })}
                 />
@@ -167,8 +173,9 @@ export default function AlertRules() {
             )}
 
             <div className="form-field">
-              <label>Re-notify minutes (blank = never)</label>
+              <label htmlFor="rule-renotify">Re-notify minutes (blank = never)</label>
               <input
+                id="rule-renotify"
                 type="number"
                 min={1}
                 value={editing.form.renotify_minutes ?? ''}
@@ -176,8 +183,9 @@ export default function AlertRules() {
               />
             </div>
             <div className="form-field">
-              <label>Enabled</label>
+              <label htmlFor="rule-enabled">Enabled</label>
               <select
+                id="rule-enabled"
                 value={editing.form.enabled ? 'yes' : 'no'}
                 onChange={e => setEditing({ ...editing, form: { ...editing.form, enabled: e.target.value === 'yes' } })}
               >
