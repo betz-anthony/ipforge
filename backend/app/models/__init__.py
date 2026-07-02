@@ -22,6 +22,7 @@ from app.models.network_device import NetworkDevice, DiscoveredEndpoint  # noqa:
 from app.models.gitops import GitopsManaged  # noqa: F401
 from app.models.automation import AutomationRule  # noqa: F401
 from app.models.security import SecurityEvent, MacLastSeen  # noqa: F401
+from app.models.webhook import WebhookEndpoint, WebhookDelivery  # noqa: F401
 
 __all__ = [
     "Subnet", "IPAddress", "AppSetting",
