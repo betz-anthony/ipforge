@@ -9,6 +9,7 @@ import {
 } from '../api/client'
 import ConfirmModal from '../components/ConfirmModal'
 import Collapsible from '../components/Collapsible'
+import WebhooksSection from '../components/WebhooksSection'
 import { useToast } from '../contexts/ToastContext'
 import AlertChannels from './AlertChannels'
 import AlertRules from './AlertRules'
@@ -1052,6 +1053,9 @@ export default function SettingsPage() {
 
       {/* ── Custom Fields ── */}
       <CustomFieldsSection />
+
+      {/* ── Webhooks ── */}
+      <WebhooksSection />
 
       {/* ── Discovery Devices ── */}
       <DiscoveryDevicesSection />

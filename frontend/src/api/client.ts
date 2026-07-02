@@ -1047,3 +1047,56 @@ export const vlansApi = {
   update: (id: number, body: Partial<VlanIn>) => api.put<Vlan>(`/vlans/${id}`, body).then(r => r.data),
   delete: (id: number)                        => api.delete(`/vlans/${id}`),
 }
+
+export interface WebhookEndpoint {
+  id: number
+  name: string
+  url: string
+  enabled: boolean
+  has_secret: boolean
+  custom_headers: Record<string, string>
+  resource_types: string[]
+  actions: string[]
+  last_status: string | null
+  dead_count: number
+  created_at: string
+  updated_at: string
+}
+
+export interface WebhookEndpointIn {
+  name: string
+  url: string
+  enabled: boolean
+  secret?: string | null
+  custom_headers: Record<string, string>
+  resource_types: string[]
+  actions: string[]
+}
+
+export interface WebhookDelivery {
+  id: number
+  uuid: string
+  endpoint_id: number
+  event_type: string
+  status: string
+  attempts: number
+  next_attempt_at: string
+  last_error: string | null
+  response_status: number | null
+  created_at: string
+  delivered_at: string | null
+  payload: Record<string, unknown>
+}
+
+export const webhooksApi = {
+  list: () => api.get<WebhookEndpoint[]>('/webhooks').then(r => r.data),
+  create: (body: WebhookEndpointIn) => api.post<WebhookEndpoint>('/webhooks', body).then(r => r.data),
+  update: (id: number, body: WebhookEndpointIn) => api.put<WebhookEndpoint>(`/webhooks/${id}`, body).then(r => r.data),
+  remove: (id: number) => api.delete(`/webhooks/${id}`),
+  test: (id: number) =>
+    api.post<{ status: string; response_status: number | null; error: string | null }>(`/webhooks/${id}/test`).then(r => r.data),
+  deliveries: (id: number, params?: { status?: string; limit?: number; offset?: number }) =>
+    api.get<{ total: number; items: WebhookDelivery[] }>(`/webhooks/${id}/deliveries`, { params }).then(r => r.data),
+  redeliver: (deliveryId: number) => api.post<WebhookDelivery>(`/webhooks/deliveries/${deliveryId}/redeliver`).then(r => r.data),
+  removeDelivery: (deliveryId: number) => api.delete(`/webhooks/deliveries/${deliveryId}`),
+}
