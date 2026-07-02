@@ -200,3 +200,77 @@ def test_unreachable_reachable_no_flag(db):
     db.commit()
     detect_drift(db)
     assert ("10.0.0.5", DriftCategory.unreachable_assigned.value) not in _cats(db)
+
+
+# ── PROVIDER-CONFLICT-001: dns_source_conflict ──────────────────────────────
+
+def _drift(db, ip, category):
+    return (
+        db.query(DriftItem)
+        .filter_by(ip_address=ip, category=category, resolved=False)
+        .one_or_none()
+    )
+
+
+def test_dns_source_conflict_two_providers_same_ip(db):
+    """Same IP has an A record in two DNS providers → conflict flagged."""
+    s = _subnet(db)
+    db.add(IPAddress(address="10.0.0.5", subnet_id=s.id, status=AddressStatus.assigned, hostname="web"))
+    db.add(CachedDNSRecord(name="web", record_type="A", value="10.0.0.5", zone="x", source="msdns", synced_at=utcnow()))
+    db.add(CachedDNSRecord(name="web", record_type="A", value="10.0.0.5", zone="x", source="bind", synced_at=utcnow()))
+    db.commit()
+    detect_drift(db)
+    d = _drift(db, "10.0.0.5", DriftCategory.dns_source_conflict.value)
+    assert d is not None
+    import json
+    details = json.loads(d.details)
+    assert sorted(details["sources"]) == ["bind", "msdns"]
+    assert details["divergent_names"] is False
+
+
+def test_dns_source_conflict_divergent_names(db):
+    """Two providers claim the same IP with different names → divergent flag set."""
+    _subnet(db)
+    db.add(CachedDNSRecord(name="web", record_type="A", value="10.0.0.5", zone="x", source="msdns", synced_at=utcnow()))
+    db.add(CachedDNSRecord(name="www", record_type="A", value="10.0.0.5", zone="x", source="cloudflare", synced_at=utcnow()))
+    db.commit()
+    detect_drift(db)
+    d = _drift(db, "10.0.0.5", DriftCategory.dns_source_conflict.value)
+    assert d is not None
+    import json
+    assert json.loads(d.details)["divergent_names"] is True
+
+
+def test_dns_source_conflict_single_provider_no_flag(db):
+    """One provider with the record (even multiple names) is not a conflict."""
+    _subnet(db)
+    db.add(CachedDNSRecord(name="web", record_type="A", value="10.0.0.5", zone="x", source="msdns", synced_at=utcnow()))
+    db.add(CachedDNSRecord(name="alias", record_type="A", value="10.0.0.5", zone="x", source="msdns", synced_at=utcnow()))
+    db.commit()
+    detect_drift(db)
+    assert ("10.0.0.5", DriftCategory.dns_source_conflict.value) not in _cats(db)
+
+
+def test_dns_source_conflict_out_of_scope_ignored(db):
+    """A conflicting IP outside every managed subnet is not flagged."""
+    _subnet(db, cidr="10.0.0.0/24")
+    db.add(CachedDNSRecord(name="x", record_type="A", value="192.168.9.9", zone="x", source="msdns", synced_at=utcnow()))
+    db.add(CachedDNSRecord(name="x", record_type="A", value="192.168.9.9", zone="x", source="bind", synced_at=utcnow()))
+    db.commit()
+    detect_drift(db)
+    assert ("192.168.9.9", DriftCategory.dns_source_conflict.value) not in _cats(db)
+
+
+def test_dns_source_conflict_auto_resolves(db):
+    """When one provider's record disappears, the conflict auto-resolves."""
+    _subnet(db)
+    r1 = CachedDNSRecord(name="web", record_type="A", value="10.0.0.5", zone="x", source="msdns", synced_at=utcnow())
+    r2 = CachedDNSRecord(name="web", record_type="A", value="10.0.0.5", zone="x", source="bind", synced_at=utcnow())
+    db.add_all([r1, r2])
+    db.commit()
+    detect_drift(db)
+    assert _drift(db, "10.0.0.5", DriftCategory.dns_source_conflict.value) is not None
+    db.delete(r2)
+    db.commit()
+    detect_drift(db)
+    assert _drift(db, "10.0.0.5", DriftCategory.dns_source_conflict.value) is None

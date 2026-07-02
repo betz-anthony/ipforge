@@ -20,6 +20,7 @@ const CATEGORY_LABEL: Record<string, string> = {
   mac_mismatch: 'MAC mismatch',
   ptr_mismatch: 'PTR mismatch',
   unreachable_assigned: 'Unreachable (assigned)',
+  dns_source_conflict: 'DNS source conflict',
 }
 
 const SEV_BADGE: Record<string, string> = { error: 'badge-red', warning: 'badge-yellow', info: 'badge-gray' }

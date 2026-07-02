@@ -684,6 +684,8 @@ export interface CollisionResolveRequest {
 export type DriftCategory =
   | 'active_but_available' | 'multi_dhcp_scope' | 'hostname_mismatch'
   | 'missing_dns' | 'orphan_dns' | 'orphan_dhcp' | 'mac_mismatch'
+  | 'missing_dhcp' | 'ptr_mismatch' | 'unreachable_assigned'
+  | 'dns_source_conflict'
 
 export interface DriftItem {
   id: number
