@@ -1,5 +1,27 @@
 # IPForge Operations & Disaster Recovery
 
+## Deployment topology & availability
+
+IPForge runs as a **single API instance** backed by PostgreSQL. High availability
+(multiple API replicas, DHCP-style failover, distributed operation) is not yet
+supported: the background loops (scan scheduler, discovery poller, sync, alert
+dispatcher) assume one instance, and running two would duplicate their work.
+Recovery from instance loss is redeploy + restore from backup (below) — for most
+deployments that means minutes of downtime, during which the network itself keeps
+working (IPForge pushes records to your DNS/DHCP servers; it is not in the
+serving path). Scale limits are published in [scaling.md](scaling.md).
+
+## Versioning & upgrades
+
+- Releases are semver-tagged (`vX.Y.Z`) with a Keep-a-Changelog `CHANGELOG.md`.
+- The HTTP API is versioned under `/api/v1` and treated as stable: breaking
+  changes to `/api/v1` only happen with a major version bump; additive changes
+  (new endpoints/fields) may land in minors.
+- The Python client (`ipforge-client`) and Terraform provider
+  (`betz-anthony/ipforge`) track the `/api/v1` surface.
+- Database schema migrates **forward automatically** at boot; there is no
+  downgrade path (see Upgrade path below).
+
 ## What to back up
 Three things, not one:
 1. **Postgres database** — all IPAM data. Use `scripts/backup.sh`.
