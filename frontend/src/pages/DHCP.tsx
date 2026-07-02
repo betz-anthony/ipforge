@@ -28,6 +28,7 @@ export default function DHCP() {
   const [selectedScope, setSelectedScope] = useState<DHCPScope | null>(null)
   const [showForm, setShowForm]           = useState(false)
   const [form, setForm]                   = useState(emptyForm)
+  const [dnsLink, setDnsLink]             = useState({ register_dns: false, dns_zone: '' })
   const [viewMode, setViewMode]           = useState<ViewMode>('combined')
   const [selectedLease, setSelectedLease] = useState<DHCPReservation | null>(null)
   const [confirmIp, setConfirmIp] = useState<string | null>(null)
@@ -76,10 +77,15 @@ export default function DHCP() {
   useEffect(() => { setLeasesPage(1) }, [selectedScope?.scope_id])
 
   const addMutation = useMutation({
-    mutationFn: () => dhcpApi.addReservation(selectedScope!.scope_id, form, selectedScope!.source),
+    mutationFn: () => dhcpApi.addReservation(
+      selectedScope!.scope_id, form, selectedScope!.source,
+      dnsLink.register_dns ? { register_dns: true, dns_zone: dnsLink.dns_zone } : undefined,
+    ),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['dhcp-leases', selectedScope?.scope_id, selectedScope?.source] })
+      if (dnsLink.register_dns) qc.invalidateQueries({ queryKey: ['dns-records'] })
       setForm(emptyForm)
+      setDnsLink({ register_dns: false, dns_zone: '' })
       setShowForm(false)
     },
   })
@@ -202,7 +208,7 @@ export default function DHCP() {
 
   const canSubmit = form.ip_address && !ipError && form.name && !macError && (
     isV6(selectedScope) ? form.client_duid : form.mac_address
-  )
+  ) && (!dnsLink.register_dns || dnsLink.dns_zone.trim())
 
   const sortIcon = (key: string) =>
     leasesSort !== key ? <ArrowUpDown size={11} className="sort-icon-idle" />
@@ -215,7 +221,7 @@ export default function DHCP() {
       className={'panel-list-item' + (
         selectedScope?.scope_id === s.scope_id && selectedScope?.source === s.source ? ' active' : ''
       )}
-      onClick={() => { setSelectedScope(s); setShowForm(false); setForm(emptyForm); setSelectedLease(null) }}
+      onClick={() => { setSelectedScope(s); setShowForm(false); setForm(emptyForm); setDnsLink({ register_dns: false, dns_zone: '' }); setSelectedLease(null) }}
     >
       <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
         <span className={`badge ${s.ip_version === 6 ? 'badge-blue' : 'badge-green'}`} style={{ fontSize: '0.6rem' }}>
@@ -372,6 +378,30 @@ export default function DHCP() {
                       <input id="dhcp-desc" placeholder="Optional" value={form.description} onChange={set('description')} />
                     </div>
                   </div>
+                  <div className="form-field" style={{ marginTop: '0.5rem' }}>
+                    <label style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.8rem', color: 'var(--text-subtle)' }}>
+                      <input
+                        type="checkbox"
+                        checked={dnsLink.register_dns}
+                        onChange={e => setDnsLink(d => ({ ...d, register_dns: e.target.checked }))}
+                      />
+                      Also create DNS {isV6(selectedScope) ? 'AAAA' : 'A'} record ({form.name || 'name'} → {form.ip_address || 'IP'})
+                    </label>
+                  </div>
+                  {dnsLink.register_dns && (
+                    <div className="form-field" style={{ maxWidth: '20rem' }}>
+                      <label htmlFor="dhcp-dns-zone">DNS Zone</label>
+                      <input
+                        id="dhcp-dns-zone"
+                        placeholder="example.com"
+                        value={dnsLink.dns_zone}
+                        onChange={e => setDnsLink(d => ({ ...d, dns_zone: e.target.value }))}
+                      />
+                      <span className="text-muted" style={{ fontSize: '0.7rem' }}>
+                        Uses the subnet's DNS provider. Rolls back the reservation if the DNS push fails.
+                      </span>
+                    </div>
+                  )}
                   <div className="form-actions">
                     <button
                       className="btn-primary btn-sm"
@@ -380,7 +410,7 @@ export default function DHCP() {
                     >
                       {addMutation.isPending ? 'Adding…' : 'Add'}
                     </button>
-                    <button className="btn-ghost btn-sm" onClick={() => { setShowForm(false); setForm(emptyForm) }}>
+                    <button className="btn-ghost btn-sm" onClick={() => { setShowForm(false); setForm(emptyForm); setDnsLink({ register_dns: false, dns_zone: '' }) }}>
                       <X size={13} /> Cancel
                     </button>
                     {addMutation.isError && (

@@ -516,8 +516,20 @@ export const dhcpApi = {
   }) =>
     api.get<Paged<DHCPReservation>>(`/dhcp/scopes/${scope_id}/leases`,
       { params: { source, ...params } }).then(r => r.data),
-  addReservation: (scope_id: string, data: Omit<DHCPReservation, 'scope_id'>, source: string) =>
-    api.post<DHCPReservation>(`/dhcp/scopes/${scope_id}/reservations`, data, { params: { source } }).then(r => r.data),
+  addReservation: (
+    scope_id: string,
+    data: Omit<DHCPReservation, 'scope_id'>,
+    source: string,
+    dns?: { register_dns: boolean; dns_zone?: string; dns_provider?: string },
+  ) =>
+    api.post<DHCPReservation>(`/dhcp/scopes/${scope_id}/reservations`, data, {
+      params: {
+        source,
+        ...(dns?.register_dns
+          ? { register_dns: true, dns_zone: dns.dns_zone, dns_provider: dns.dns_provider || undefined }
+          : {}),
+      },
+    }).then(r => r.data),
   deleteReservation: (scope_id: string, ip_address: string, source: string) =>
     api.delete(`/dhcp/scopes/${scope_id}/reservations/${ip_address}`, { params: { source } }),
   byIp: (address: string) =>
