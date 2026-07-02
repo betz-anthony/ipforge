@@ -19,6 +19,8 @@ class DriftCategory(str, enum.Enum):
     missing_dhcp         = "missing_dhcp"
     ptr_mismatch         = "ptr_mismatch"
     unreachable_assigned = "unreachable_assigned"
+    # PROVIDER-CONFLICT-001 — cross-provider conflicts
+    dns_source_conflict  = "dns_source_conflict"
 
 
 # Backwards-compatible alias (the three original values still resolve).
@@ -41,6 +43,7 @@ DRIFT_SEVERITY = {
     DriftCategory.orphan_dns:           "info",
     DriftCategory.orphan_dhcp:          "info",
     DriftCategory.unreachable_assigned: "info",
+    DriftCategory.dns_source_conflict:  "warning",
 }
 
 

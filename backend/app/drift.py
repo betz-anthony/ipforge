@@ -149,6 +149,25 @@ def detect_drift(db, subnet_id: int | None = None) -> None:
         _upsert(ip, DriftCategory.multi_dhcp_scope, {"sources": sources},
                 _subnet_for_ip(scope_subnets, ip))
 
+    # ── dns_source_conflict (PROVIDER-CONFLICT-001) ──────────────────────────
+    # Same IP carries an A/AAAA record in more than one DNS provider — the
+    # clobbering-push sharp edge. `divergent_names` distinguishes a genuine data
+    # conflict (providers disagree on the name) from dual authority (same name).
+    dns_sources_by_ip: dict[str, set[str]] = {}
+    dns_names_by_ip: dict[str, set[str]] = {}
+    for r in dns_records:
+        dns_sources_by_ip.setdefault(r.value, set()).add(r.source)
+        if r.name:
+            dns_names_by_ip.setdefault(r.value, set()).add(r.name.lower())
+    for ip, srcs in dns_sources_by_ip.items():
+        if len(srcs) < 2 or not in_scope(ip):
+            continue
+        _upsert(ip, DriftCategory.dns_source_conflict, {
+            "sources": sorted(srcs),
+            "names": sorted(dns_names_by_ip.get(ip, set())),
+            "divergent_names": len(dns_names_by_ip.get(ip, set())) > 1,
+        }, _subnet_for_ip(scope_subnets, ip))
+
     # ── hostname_mismatch ────────────────────────────────────────────────────
     for a in addresses:
         if not a.hostname:
