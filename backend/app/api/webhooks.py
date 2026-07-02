@@ -66,8 +66,7 @@ def create_endpoint(body: WebhookEndpointIn, db: Session = Depends(get_db),
     if body.secret:
         ep.secret_enc = encrypt_secret(body.secret)
     db.add(ep)
-    db.commit()
-    db.refresh(ep)
+    db.flush()
     write_audit(db, user.username, "create", "webhook_endpoint", str(ep.id), ep.name,
                 after={"name": ep.name, "url": ep.url, "enabled": ep.enabled})
     db.commit()
