@@ -61,7 +61,7 @@ export default function AutomationRules() {
       </p>
       <div className="table-wrap">
         <table>
-          <thead><tr><th>Name</th><th>Trigger</th><th>Condition</th><th>Action</th><th>Enabled</th><th></th></tr></thead>
+          <thead><tr><th scope="col">Name</th><th scope="col">Trigger</th><th scope="col">Condition</th><th scope="col">Action</th><th scope="col">Enabled</th><th scope="col"></th></tr></thead>
           <tbody>
             {rules.length === 0 && <tr><td colSpan={6} className="empty-state">No automation rules.</td></tr>}
             {rules.map((r: AutomationRule) => (
@@ -84,29 +84,29 @@ export default function AutomationRules() {
       {adding ? (
         <form onSubmit={e => { e.preventDefault(); if (canAdd) createMut.mutate() }} style={{ marginTop: '0.75rem' }}>
           <div className="form-grid">
-            <div className="form-field"><label>Name</label><input value={name} onChange={e => setName(e.target.value)} /></div>
+            <div className="form-field"><label htmlFor="auto-name">Name</label><input id="auto-name" value={name} onChange={e => setName(e.target.value)} /></div>
             <div className="form-field">
-              <label>Trigger</label>
-              <select value={trigger} onChange={e => setTrigger(e.target.value as 'rogue' | 'drift')}>
+              <label htmlFor="auto-trigger">Trigger</label>
+              <select id="auto-trigger" value={trigger} onChange={e => setTrigger(e.target.value as 'rogue' | 'drift')}>
                 <option value="rogue">rogue (new device)</option>
                 <option value="drift">drift</option>
               </select>
             </div>
             {trigger === 'drift' && (
               <div className="form-field">
-                <label>Drift category (optional)</label>
-                <input value={category} onChange={e => setCategory(e.target.value)} placeholder="e.g. orphan_dhcp — blank = any" />
+                <label htmlFor="auto-category">Drift category (optional)</label>
+                <input id="auto-category" value={category} onChange={e => setCategory(e.target.value)} placeholder="e.g. orphan_dhcp — blank = any" />
               </div>
             )}
             <div className="form-field">
-              <label>Set status</label>
-              <select value={status} onChange={e => setStatus(e.target.value)}>
+              <label htmlFor="auto-status">Set status</label>
+              <select id="auto-status" value={status} onChange={e => setStatus(e.target.value)}>
                 {STATUSES.map(s => <option key={s} value={s}>{s || '— none —'}</option>)}
               </select>
             </div>
             <div className="form-field">
-              <label>Add tags (comma-separated)</label>
-              <input value={tags} onChange={e => setTags(e.target.value)} placeholder="unverified" />
+              <label htmlFor="auto-tags">Add tags (comma-separated)</label>
+              <input id="auto-tags" value={tags} onChange={e => setTags(e.target.value)} placeholder="unverified" />
             </div>
           </div>
           <div className="form-actions">

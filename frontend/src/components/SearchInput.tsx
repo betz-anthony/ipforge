@@ -5,6 +5,8 @@ type Props = {
   onChange: (v: string) => void
   placeholder?: string
   width?: string
+  id?: string
+  ariaLabel?: string
 }
 
 export default function SearchInput({
@@ -12,12 +14,16 @@ export default function SearchInput({
   onChange,
   placeholder = 'Search…',
   width = '15rem',
+  id,
+  ariaLabel,
 }: Props) {
   return (
     <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
       <Search size={13} style={{ position: 'absolute', left: '0.5rem', color: 'var(--text-muted)', pointerEvents: 'none' }} />
       <input
         type="text"
+        id={id}
+        aria-label={ariaLabel ?? (id ? undefined : placeholder)}
         placeholder={placeholder}
         value={value}
         onChange={e => onChange(e.target.value)}

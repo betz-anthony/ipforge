@@ -91,7 +91,7 @@ export default function Groups() {
       <div className="table-wrap">
         <table>
           <thead>
-            <tr><th>Name</th><th>Description</th><th>Members</th><th style={{ width: '2.5rem' }}></th></tr>
+            <tr><th scope="col">Name</th><th scope="col">Description</th><th scope="col">Members</th><th scope="col" style={{ width: '2.5rem' }}></th></tr>
           </thead>
           <tbody>
             {(groups ?? []).length === 0 && (

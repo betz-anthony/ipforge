@@ -57,7 +57,7 @@ export default function DriftRemediation() {
       </p>
       <div className="table-wrap">
         <table>
-          <thead><tr><th>Category</th><th>Mode</th><th>Dry-run</th><th>Status (active)</th></tr></thead>
+          <thead><tr><th scope="col">Category</th><th scope="col">Mode</th><th scope="col">Dry-run</th><th scope="col">Status (active)</th></tr></thead>
           <tbody>
             {ALL.map(cat => {
               const p = byCat[cat]

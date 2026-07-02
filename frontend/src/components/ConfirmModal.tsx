@@ -1,6 +1,7 @@
-import { useEffect } from 'react'
+import { useEffect, useId } from 'react'
 import type React from 'react'
 import { createPortal } from 'react-dom'
+import { useFocusTrap } from '../hooks/useFocusTrap'
 
 interface ConfirmModalProps {
   title: string
@@ -15,6 +16,10 @@ interface ConfirmModalProps {
 export default function ConfirmModal({
   title, message, confirmLabel = 'Delete', danger = true, onConfirm, onCancel, extra,
 }: ConfirmModalProps) {
+  const trapRef = useFocusTrap<HTMLDivElement>()
+  const titleId = useId()
+  const msgId = useId()
+
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if (e.key === 'Enter') { e.preventDefault(); onConfirm() }
@@ -26,9 +31,17 @@ export default function ConfirmModal({
 
   return createPortal(
     <div className="modal-backdrop" onClick={onCancel}>
-      <div className="modal" onClick={e => e.stopPropagation()}>
-        <h2 className="modal-title">{title}</h2>
-        <p className="modal-message">{message}</p>
+      <div
+        className="modal"
+        onClick={e => e.stopPropagation()}
+        role="alertdialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        aria-describedby={msgId}
+        ref={trapRef}
+      >
+        <h2 className="modal-title" id={titleId}>{title}</h2>
+        <p className="modal-message" id={msgId}>{message}</p>
         {extra && <div className="modal-extra">{extra}</div>}
         <div className="modal-actions">
           <button className="btn btn-ghost" onClick={onCancel}>Cancel</button>

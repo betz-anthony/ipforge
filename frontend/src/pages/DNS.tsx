@@ -370,12 +370,12 @@ export default function DNS() {
       <table>
         <thead>
           <tr>
-            <th {...thProps('name')}>Name <SortArrow col="name" sortCol={recordsSort as SortCol} sortDir={recordsDir} /></th>
-            <th {...thProps('record_type')}>Type <SortArrow col="record_type" sortCol={recordsSort as SortCol} sortDir={recordsDir} /></th>
-            <th {...thProps('value')}>Value <SortArrow col="value" sortCol={recordsSort as SortCol} sortDir={recordsDir} /></th>
-            <th>TTL</th>
-            {multiProvider && <th>Source</th>}
-            <th style={{ width: '2.5rem' }}></th>
+            <th scope="col" {...thProps('name')}>Name <SortArrow col="name" sortCol={recordsSort as SortCol} sortDir={recordsDir} /></th>
+            <th scope="col" {...thProps('record_type')}>Type <SortArrow col="record_type" sortCol={recordsSort as SortCol} sortDir={recordsDir} /></th>
+            <th scope="col" {...thProps('value')}>Value <SortArrow col="value" sortCol={recordsSort as SortCol} sortDir={recordsDir} /></th>
+            <th scope="col">TTL</th>
+            {multiProvider && <th scope="col">Source</th>}
+            <th scope="col" style={{ width: '2.5rem' }}></th>
           </tr>
         </thead>
         <tbody>
@@ -594,8 +594,9 @@ export default function DNS() {
                 <div className="inline-form">
                   <div className="form-grid">
                     <div className={`form-field${nameError ? ' form-field-error' : ''}`}>
-                      <label>Name</label>
+                      <label htmlFor="dns-name">Name</label>
                       <input
+                        id="dns-name"
                         placeholder="server01"
                         value={form.name}
                         onChange={e => { set('name')(e); if (nameError) setNameError('') }}
@@ -604,14 +605,15 @@ export default function DNS() {
                       {nameError && <span className="form-field-error-msg">{nameError}</span>}
                     </div>
                     <div className="form-field">
-                      <label>Type</label>
-                      <select value={form.record_type} onChange={e => { set('record_type')(e); setValueError('') }}>
+                      <label htmlFor="dns-type">Type</label>
+                      <select id="dns-type" value={form.record_type} onChange={e => { set('record_type')(e); setValueError('') }}>
                         {RECORD_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
                       </select>
                     </div>
                     <div className={`form-field${valueError ? ' form-field-error' : ''}`}>
-                      <label>Value</label>
+                      <label htmlFor="dns-value">Value</label>
                       <input
+                        id="dns-value"
                         placeholder="10.0.0.1"
                         value={form.value}
                         onChange={e => { set('value')(e); if (valueError) setValueError('') }}
@@ -620,13 +622,13 @@ export default function DNS() {
                       {valueError && <span className="form-field-error-msg">{valueError}</span>}
                     </div>
                     <div className="form-field">
-                      <label>TTL (seconds)</label>
-                      <input type="number" value={form.ttl} onChange={set('ttl')} />
+                      <label htmlFor="dns-ttl">TTL (seconds)</label>
+                      <input id="dns-ttl" type="number" value={form.ttl} onChange={set('ttl')} />
                     </div>
                     {multiProvider && (
                       <div className="form-field">
-                        <label>Provider</label>
-                        <select value={form.source} onChange={set('source')}>
+                        <label htmlFor="dns-provider">Provider</label>
+                        <select id="dns-provider" value={form.source} onChange={set('source')}>
                           {dnsProviders.map(p => (
                             <option key={p} value={p}>{SOURCE_LABEL[p] ?? p}</option>
                           ))}

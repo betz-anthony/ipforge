@@ -138,11 +138,11 @@ export default function DriftPage() {
           <table>
             <thead>
               <tr>
-                <th style={{ width: 28 }}>
+                <th scope="col" style={{ width: 28 }}>
                   <input type="checkbox" checked={allChecked}
                     onChange={e => setSelected(e.target.checked ? new Set(rows.map(d => d.id)) : new Set())} />
                 </th>
-                <th>IP</th><th>Category</th><th>Severity</th><th>Details</th><th></th>
+                <th scope="col">IP</th><th scope="col">Category</th><th scope="col">Severity</th><th scope="col">Details</th><th scope="col"></th>
               </tr>
             </thead>
             <tbody>

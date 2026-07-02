@@ -130,8 +130,9 @@ export default function Vlans() {
         <div className="inline-form">
           <div className="form-grid">
             <div className={`form-field${vlanIdError ? ' form-field-error' : ''}`}>
-              <label>VLAN ID (1–4094)</label>
+              <label htmlFor="vlan-id">VLAN ID (1–4094)</label>
               <input
+                id="vlan-id"
                 type="number"
                 min={1}
                 max={4094}
@@ -143,24 +144,27 @@ export default function Vlans() {
               {vlanIdError && <span className="form-field-error-msg">{vlanIdError}</span>}
             </div>
             <div className="form-field">
-              <label>Name</label>
+              <label htmlFor="vlan-name">Name</label>
               <input
+                id="vlan-name"
                 placeholder="Production"
                 value={form.name}
                 onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
               />
             </div>
             <div className="form-field" style={{ gridColumn: '1 / -1' }}>
-              <label>Description</label>
+              <label htmlFor="vlan-desc">Description</label>
               <input
+                id="vlan-desc"
                 placeholder="Optional"
                 value={form.description ?? ''}
                 onChange={e => setForm(f => ({ ...f, description: e.target.value }))}
               />
             </div>
             <div className="form-field" style={{ gridColumn: '1 / -1' }}>
-              <label>Notes</label>
+              <label htmlFor="vlan-notes">Notes</label>
               <textarea
+                id="vlan-notes"
                 value={form.notes ?? ''}
                 onChange={e => setForm(f => ({ ...f, notes: e.target.value }))}
                 rows={3}
@@ -205,11 +209,11 @@ export default function Vlans() {
           <table>
             <thead>
               <tr>
-                <th className="th-sortable" onClick={() => toggleSort('vlan_id')}><span>VLAN ID {sortIcon('vlan_id')}</span></th>
-                <th className="th-sortable" onClick={() => toggleSort('name')}><span>Name {sortIcon('name')}</span></th>
-                <th className="th-sortable" onClick={() => toggleSort('description')}><span>Description {sortIcon('description')}</span></th>
-                <th className="th-sortable" onClick={() => toggleSort('subnet_count')}><span>Subnets {sortIcon('subnet_count')}</span></th>
-                <th style={{ width: canWrite ? '6rem' : 0 }}></th>
+                <th scope="col" className="th-sortable" onClick={() => toggleSort('vlan_id')}><span>VLAN ID {sortIcon('vlan_id')}</span></th>
+                <th scope="col" className="th-sortable" onClick={() => toggleSort('name')}><span>Name {sortIcon('name')}</span></th>
+                <th scope="col" className="th-sortable" onClick={() => toggleSort('description')}><span>Description {sortIcon('description')}</span></th>
+                <th scope="col" className="th-sortable" onClick={() => toggleSort('subnet_count')}><span>Subnets {sortIcon('subnet_count')}</span></th>
+                <th scope="col" style={{ width: canWrite ? '6rem' : 0 }}></th>
               </tr>
             </thead>
             <tbody>

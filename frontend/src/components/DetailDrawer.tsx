@@ -1,5 +1,6 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useId } from 'react'
 import { X } from 'lucide-react'
+import { useFocusTrap } from '../hooks/useFocusTrap'
 
 export interface DetailField {
   label: string
@@ -21,6 +22,8 @@ export default function DetailDrawer({
   title, subtitle, fields, children, viewExtra, onSave, isSaving, onClose,
 }: Props) {
   const [editing, setEditing] = useState(false)
+  const trapRef = useFocusTrap<HTMLDivElement>()
+  const titleId = useId()
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
@@ -30,16 +33,17 @@ export default function DetailDrawer({
 
   return (
     <>
-      <div className="detail-backdrop" onClick={onClose} />
-      <div className="detail-panel">
+      <div className="detail-backdrop" onClick={onClose} aria-hidden="true" />
+      <div className="detail-panel" role="dialog" aria-modal="true" aria-labelledby={titleId} ref={trapRef}>
         <div className="detail-panel-header">
           <div style={{ minWidth: 0 }}>
-            <div className="detail-panel-title">{title}</div>
+            <div className="detail-panel-title" id={titleId}>{title}</div>
             {subtitle && <div className="detail-panel-subtitle">{subtitle}</div>}
           </div>
           <button
             className="btn-ghost btn-sm"
             onClick={onClose}
+            aria-label="Close"
             style={{ padding: '0.25rem', flexShrink: 0 }}
           >
             <X size={14} />

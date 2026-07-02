@@ -98,27 +98,28 @@ export default function AuditPage() {
       {/* Filters */}
       <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', marginBottom: '1rem' }}>
         <div className="form-field" style={{ margin: 0, minWidth: '160px' }}>
-          <label>Resource Type</label>
-          <select value={filterType} onChange={e => setFilterType(e.target.value)}>
+          <label htmlFor="audit-type">Resource Type</label>
+          <select id="audit-type" value={filterType} onChange={e => setFilterType(e.target.value)}>
             <option value="">All</option>
             {RESOURCE_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
           </select>
         </div>
         <div className="form-field" style={{ margin: 0, minWidth: '140px' }}>
-          <label>Username</label>
-          <input value={filterUser} onChange={e => setFilterUser(e.target.value)} placeholder="any" />
+          <label htmlFor="audit-user">Username</label>
+          <input id="audit-user" value={filterUser} onChange={e => setFilterUser(e.target.value)} placeholder="any" />
         </div>
         <div className="form-field" style={{ margin: 0 }}>
-          <label>From</label>
-          <input type="date" value={fromDate} onChange={e => setFromDate(e.target.value)} />
+          <label htmlFor="audit-from">From</label>
+          <input id="audit-from" type="date" value={fromDate} onChange={e => setFromDate(e.target.value)} />
         </div>
         <div className="form-field" style={{ margin: 0 }}>
-          <label>To</label>
-          <input type="date" value={toDate} onChange={e => setToDate(e.target.value)} />
+          <label htmlFor="audit-to">To</label>
+          <input id="audit-to" type="date" value={toDate} onChange={e => setToDate(e.target.value)} />
         </div>
         <div className="form-field" style={{ margin: 0, marginLeft: 'auto' }}>
-          <label>Search</label>
+          <label htmlFor="audit-search">Search</label>
           <SearchInput
+            id="audit-search"
             value={searchTerm}
             onChange={setSearchTerm}
             placeholder="Search summary, action…"

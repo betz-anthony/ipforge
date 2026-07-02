@@ -12,8 +12,9 @@ export default function CustomFieldsEditor({ defs, values, tagsText, onValueChan
   return (
     <>
       <div className="form-field" style={{ gridColumn: '1 / -1' }}>
-        <label>Tags</label>
+        <label htmlFor="cf-tags">Tags</label>
         <input
+          id="cf-tags"
           value={tagsText}
           onChange={e => onTagsChange(e.target.value)}
           placeholder="comma-separated, e.g. prod, critical"
@@ -21,9 +22,9 @@ export default function CustomFieldsEditor({ defs, values, tagsText, onValueChan
       </div>
       {defs.map(d => (
         <div className="form-field" key={d.id} style={{ gridColumn: '1 / -1' }}>
-          <label>{d.label}</label>
+          <label htmlFor={`cf-${d.name}`}>{d.label}</label>
           {d.field_type === 'select' ? (
-            <select value={values[d.name] ?? ''} onChange={e => onValueChange(d.name, e.target.value)}>
+            <select id={`cf-${d.name}`} value={values[d.name] ?? ''} onChange={e => onValueChange(d.name, e.target.value)}>
               <option value="">— None —</option>
               {(d.options ?? []).map(o => (
                 <option key={o} value={o}>{o}</option>
@@ -31,6 +32,7 @@ export default function CustomFieldsEditor({ defs, values, tagsText, onValueChan
             </select>
           ) : (
             <input
+              id={`cf-${d.name}`}
               type={d.field_type === 'date' ? 'date' : 'text'}
               value={values[d.name] ?? ''}
               onChange={e => onValueChange(d.name, e.target.value)}

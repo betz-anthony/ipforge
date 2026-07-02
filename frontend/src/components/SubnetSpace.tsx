@@ -112,23 +112,23 @@ export default function SubnetSpace({ subnet }: { subnet: Subnet }) {
         <div className="inline-form" style={{ marginTop: '0.5rem' }}>
           <div className="form-grid">
             <div className={`form-field${start && !startValid ? ' form-field-error' : ''}`}>
-              <label>Start IP</label>
-              <input value={start} onChange={e => { setStart(e.target.value); setIpErr('') }}
+              <label htmlFor="range-start">Start IP</label>
+              <input id="range-start" value={start} onChange={e => { setStart(e.target.value); setIpErr('') }}
                 onBlur={() => setIpErr(start && !startValid ? 'Invalid IP' : '')} />
             </div>
             <div className={`form-field${end && !endValid ? ' form-field-error' : ''}`}>
-              <label>End IP (optional)</label>
-              <input value={end} onChange={e => setEnd(e.target.value)} placeholder="same as start" />
+              <label htmlFor="range-end">End IP (optional)</label>
+              <input id="range-end" value={end} onChange={e => setEnd(e.target.value)} placeholder="same as start" />
             </div>
             <div className="form-field">
-              <label>Kind</label>
-              <select value={kind} onChange={e => setKind(e.target.value as RangeKind)}>
+              <label htmlFor="range-kind">Kind</label>
+              <select id="range-kind" value={kind} onChange={e => setKind(e.target.value as RangeKind)}>
                 {KINDS.map(k => <option key={k} value={k}>{k}</option>)}
               </select>
             </div>
             <div className="form-field">
-              <label>Label</label>
-              <input value={label} onChange={e => setLabel(e.target.value)} placeholder="optional" />
+              <label htmlFor="range-label">Label</label>
+              <input id="range-label" value={label} onChange={e => setLabel(e.target.value)} placeholder="optional" />
             </div>
           </div>
           {ipErr && <span className="form-field-error-msg">{ipErr}</span>}

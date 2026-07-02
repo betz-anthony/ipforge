@@ -60,7 +60,7 @@ export default function SearchPage() {
               <div className="table-wrap">
                 <table>
                   <thead>
-                    <tr><th>CIDR</th><th>Name</th><th>Version</th><th>Description</th></tr>
+                    <tr><th scope="col">CIDR</th><th scope="col">Name</th><th scope="col">Version</th><th scope="col">Description</th></tr>
                   </thead>
                   <tbody>
                     {data.subnets.map(s => (
@@ -84,7 +84,7 @@ export default function SearchPage() {
               <div className="table-wrap">
                 <table>
                   <thead>
-                    <tr><th>IP</th><th>Hostname</th><th>Status</th><th>MAC</th></tr>
+                    <tr><th scope="col">IP</th><th scope="col">Hostname</th><th scope="col">Status</th><th scope="col">MAC</th></tr>
                   </thead>
                   <tbody>
                     {data.addresses.map(a => (
@@ -108,7 +108,7 @@ export default function SearchPage() {
               <div className="table-wrap">
                 <table>
                   <thead>
-                    <tr><th>IP</th><th>Hostname</th><th>MAC</th><th>Scope</th></tr>
+                    <tr><th scope="col">IP</th><th scope="col">Hostname</th><th scope="col">MAC</th><th scope="col">Scope</th></tr>
                   </thead>
                   <tbody>
                     {data.leases.map(l => (
@@ -132,7 +132,7 @@ export default function SearchPage() {
               <div className="table-wrap">
                 <table>
                   <thead>
-                    <tr><th>Name</th><th>Type</th><th>Value</th><th>Zone</th></tr>
+                    <tr><th scope="col">Name</th><th scope="col">Type</th><th scope="col">Value</th><th scope="col">Zone</th></tr>
                   </thead>
                   <tbody>
                     {data.records.map(r => (

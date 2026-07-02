@@ -57,7 +57,7 @@ export default function SecurityPage() {
         <div className="table-wrap">
           <table>
             <thead>
-              <tr><th>Severity</th><th>Type</th><th>MAC</th><th>IP</th><th>Detected</th><th></th></tr>
+              <tr><th scope="col">Severity</th><th scope="col">Type</th><th scope="col">MAC</th><th scope="col">IP</th><th scope="col">Detected</th><th scope="col"></th></tr>
             </thead>
             <tbody>
               {rows.map((e: SecurityEvent) => (

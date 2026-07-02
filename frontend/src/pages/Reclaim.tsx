@@ -127,13 +127,13 @@ export default function ReclaimPage() {
               <table className="data-table" style={{ width: '100%', fontSize: '0.82rem' }}>
                 <thead>
                   <tr>
-                    <th>IP Address</th>
-                    <th>Hostname</th>
-                    <th>Subnet</th>
-                    <th>Status</th>
-                    <th>Last Seen</th>
-                    <th>Days Stale</th>
-                    <th>Actions</th>
+                    <th scope="col">IP Address</th>
+                    <th scope="col">Hostname</th>
+                    <th scope="col">Subnet</th>
+                    <th scope="col">Status</th>
+                    <th scope="col">Last Seen</th>
+                    <th scope="col">Days Stale</th>
+                    <th scope="col">Actions</th>
                   </tr>
                 </thead>
                 <tbody>

@@ -1,7 +1,8 @@
-import { useEffect } from 'react'
+import { useEffect, useId } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { X, Wifi, WifiOff } from 'lucide-react'
 import { toolsApi } from '../api/client'
+import { useFocusTrap } from '../hooks/useFocusTrap'
 
 function fmtAge(isoStr: string | null | undefined): string {
   if (!isoStr) return 'N/A'
@@ -28,6 +29,9 @@ interface Props {
 }
 
 export default function DetailPanel({ title, subtitle, pingTarget, fields, extra, syncedAt, onClose }: Props) {
+  const trapRef = useFocusTrap<HTMLDivElement>()
+  const titleId = useId()
+
   useEffect(() => {
     const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
     window.addEventListener('keydown', handler)
@@ -44,16 +48,17 @@ export default function DetailPanel({ title, subtitle, pingTarget, fields, extra
 
   return (
     <>
-      <div className="detail-backdrop" onClick={onClose} />
-      <div className="detail-panel">
+      <div className="detail-backdrop" onClick={onClose} aria-hidden="true" />
+      <div className="detail-panel" role="dialog" aria-modal="true" aria-labelledby={titleId} ref={trapRef}>
         <div className="detail-panel-header">
           <div style={{ minWidth: 0 }}>
-            <div className="detail-panel-title">{title}</div>
+            <div className="detail-panel-title" id={titleId}>{title}</div>
             {subtitle && <div className="detail-panel-subtitle">{subtitle}</div>}
           </div>
           <button
             className="btn-ghost btn-sm"
             onClick={onClose}
+            aria-label="Close"
             style={{ padding: '0.25rem', flexShrink: 0 }}
           >
             <X size={14} />
