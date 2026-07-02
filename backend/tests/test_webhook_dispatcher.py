@@ -138,6 +138,55 @@ def test_tick_skips_not_due_and_disabled(db):
     post.assert_not_called()
 
 
+def test_fifth_failure_schedules_final_6h_backoff(db):
+    ep, d = _seed(db, attempts=4)
+    with patch("app.webhook_dispatcher.requests.post", return_value=_resp(500)):
+        dispatch_tick(db)
+    db.refresh(d)
+    assert d.status == "pending"
+    assert d.attempts == 5
+    delta = d.next_attempt_at - utcnow()
+    assert timedelta(minutes=350) < delta <= timedelta(minutes=360, seconds=5)
+
+
+def test_stale_delivering_claim_recovered(db):
+    ep, d = _seed(db, status="delivering",
+                  next_attempt_at=utcnow() - timedelta(minutes=20))
+    with patch("app.webhook_dispatcher.requests.post", return_value=_resp(200)):
+        n = dispatch_tick(db)
+    assert n == 1
+    db.refresh(d)
+    assert d.status == "delivered"
+
+
+def test_fresh_delivering_claim_not_reclaimed(db):
+    ep, d = _seed(db, status="delivering", next_attempt_at=utcnow())
+    with patch("app.webhook_dispatcher.requests.post", return_value=_resp(200)) as post:
+        n = dispatch_tick(db)
+    assert n == 0
+    post.assert_not_called()
+    db.refresh(d)
+    assert d.status == "delivering"
+
+
+def test_one_row_exception_does_not_abort_batch(db):
+    ep1, d1 = _seed(db)
+    ep2, d2 = _seed(db, payload={"id": "u-2", "event": "x.y"})
+    calls = {"n": 0}
+
+    def flaky(url, **kw):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            raise ConnectionError("refused")
+        return _resp(200)
+
+    with patch("app.webhook_dispatcher.requests.post", side_effect=flaky):
+        dispatch_tick(db)
+    rows = db.query(WebhookDelivery).order_by(WebhookDelivery.id).all()
+    statuses = sorted(r.status for r in rows)
+    assert statuses == ["delivered", "pending"]
+
+
 def test_purge_delivered_old_rows(db):
     ep, d = _seed(db, status="delivered")
     d.created_at = utcnow() - timedelta(days=31)

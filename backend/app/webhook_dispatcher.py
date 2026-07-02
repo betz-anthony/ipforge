@@ -21,9 +21,10 @@ from app.models.webhook import WebhookDelivery, WebhookEndpoint
 logger = logging.getLogger(__name__)
 
 BACKOFF_MINUTES = [1, 5, 15, 60, 360]
-MAX_ATTEMPTS = 5
+MAX_ATTEMPTS = 6  # 5 backoff waits (1m/5m/15m/1h/6h), dead on the 6th failed attempt
 TICK_SECONDS = 5
 RETENTION_DAYS = 30
+CLAIM_TIMEOUT_MINUTES = 15  # worst case: 50-row batch * 10s timeout ~= 8.3min in-flight
 
 _RESERVED_HEADERS = {"content-type", "x-ipforge-event", "x-ipforge-delivery", "x-ipforge-signature-256"}
 
@@ -54,6 +55,15 @@ _stop = threading.Event()
 def dispatch_tick(db: Session) -> int:
     """Claim due pending rows for enabled endpoints, deliver each. Returns rows processed."""
     now = utcnow()
+
+    # Recover claims stranded by a crash: no live claim can be this old.
+    stale_cutoff = now - timedelta(minutes=CLAIM_TIMEOUT_MINUTES)
+    (db.query(WebhookDelivery)
+       .filter(WebhookDelivery.status == "delivering",
+               WebhookDelivery.next_attempt_at <= stale_cutoff)
+       .update({"status": "pending"}, synchronize_session=False))
+    db.commit()
+
     rows = (
         db.query(WebhookDelivery)
         .join(WebhookEndpoint, WebhookDelivery.endpoint_id == WebhookEndpoint.id)
@@ -70,9 +80,14 @@ def dispatch_tick(db: Session) -> int:
     db.commit()
 
     for d in rows:
-        ep = db.get(WebhookEndpoint, d.endpoint_id)
-        body, headers = build_request(ep, d.payload)
         try:
+            ep = db.get(WebhookEndpoint, d.endpoint_id)
+            if ep is None:
+                d.status = "dead"
+                d.last_error = "endpoint deleted"
+                db.commit()
+                continue
+            body, headers = build_request(ep, d.payload)
             r = requests.post(ep.url, data=body, headers=headers, timeout=10)
             d.response_status = r.status_code
             if 200 <= r.status_code < 300:
