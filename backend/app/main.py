@@ -35,6 +35,7 @@ from app.api import discovery as discovery_router
 from app.api import gitops as gitops_router
 from app.api import automation as automation_router
 from app.api import security as security_router
+from app.api import webhooks as webhooks_router
 from app.alerting import api as alerting_api
 from app.alerting.dispatcher import start as start_alert_dispatcher
 import app.models  # noqa: F401
@@ -129,6 +130,8 @@ async def lifespan(app: FastAPI):
     if not app_settings.database_url.startswith("sqlite"):
         start_alert_dispatcher()
         logger.info("Alert dispatcher thread started")
+        from app.webhook_dispatcher import start as start_webhook_dispatcher
+        start_webhook_dispatcher()
     yield
 
 
@@ -197,6 +200,7 @@ app.include_router(users_router.router,            prefix="/api/v1/users",      
 app.include_router(groups_router.router,           prefix="/api/v1/groups",           tags=["groups"],           dependencies=_adm)
 app.include_router(subnet_grants_router.router,    prefix="/api/v1/subnet-grants",    tags=["grants"],           dependencies=_adm)
 app.include_router(automation_router.router,       prefix="/api/v1/automation",       tags=["automation"],       dependencies=_adm)
+app.include_router(webhooks_router.router,         prefix="/api/v1/webhooks",         tags=["webhooks"],        dependencies=_adm)
 
 # IP requests (requester+ role; scoped blocked per-endpoint)
 app.include_router(ip_requests_router.router, prefix="/api/v1/requests", tags=["ip-requests"])
