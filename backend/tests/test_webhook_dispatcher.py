@@ -39,3 +39,15 @@ def test_build_request_custom_headers_cannot_override_reserved():
     _, headers = build_request(ep, {"id": "u", "event": "ping"})
     assert headers["X-IPForge-Event"] == "ping"
     assert headers["Content-Type"] == "application/json"
+
+
+def test_build_request_reserved_header_check_is_case_insensitive():
+    ep = WebhookEndpoint(name="e", url="https://x/h",
+                         custom_headers={"content-type": "text/evil", "X-IPFORGE-EVENT": "spoof"})
+    _, headers = build_request(ep, {"id": "u", "event": "ping"})
+    assert headers["Content-Type"] == "application/json"
+    assert headers["X-IPForge-Event"] == "ping"
+    # no duplicate case-variant keys snuck in
+    lowered = [k.lower() for k in headers]
+    assert lowered.count("content-type") == 1
+    assert lowered.count("x-ipforge-event") == 1
