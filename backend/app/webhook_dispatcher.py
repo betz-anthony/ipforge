@@ -18,7 +18,7 @@ MAX_ATTEMPTS = 5
 TICK_SECONDS = 5
 RETENTION_DAYS = 30
 
-_RESERVED_HEADERS = {"Content-Type", "X-IPForge-Event", "X-IPForge-Delivery", "X-IPForge-Signature-256"}
+_RESERVED_HEADERS = {"content-type", "x-ipforge-event", "x-ipforge-delivery", "x-ipforge-signature-256"}
 
 
 def sign(secret: str, body: bytes) -> str:
@@ -34,7 +34,7 @@ def build_request(ep: WebhookEndpoint, payload: dict) -> tuple[bytes, dict]:
         "X-IPForge-Delivery": payload["id"],
     }
     for k, v in (ep.custom_headers or {}).items():
-        if k not in _RESERVED_HEADERS:
+        if k.lower() not in _RESERVED_HEADERS:
             headers[k] = str(v)
     if ep.secret_enc:
         headers["X-IPForge-Signature-256"] = sign(decrypt_secret(ep.secret_enc), body)
