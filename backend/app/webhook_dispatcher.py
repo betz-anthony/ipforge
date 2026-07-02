@@ -7,9 +7,16 @@ import hashlib
 import hmac
 import json
 import logging
+import threading
+from datetime import timedelta
+
+import requests
+from sqlalchemy.orm import Session
 
 from app.core.crypto import decrypt_secret
-from app.models.webhook import WebhookEndpoint
+from app.core.time import utcnow
+from app.database import SessionLocal
+from app.models.webhook import WebhookDelivery, WebhookEndpoint
 
 logger = logging.getLogger(__name__)
 
@@ -39,3 +46,82 @@ def build_request(ep: WebhookEndpoint, payload: dict) -> tuple[bytes, dict]:
     if ep.secret_enc:
         headers["X-IPForge-Signature-256"] = sign(decrypt_secret(ep.secret_enc), body)
     return body, headers
+
+
+_stop = threading.Event()
+
+
+def dispatch_tick(db: Session) -> int:
+    """Claim due pending rows for enabled endpoints, deliver each. Returns rows processed."""
+    now = utcnow()
+    rows = (
+        db.query(WebhookDelivery)
+        .join(WebhookEndpoint, WebhookDelivery.endpoint_id == WebhookEndpoint.id)
+        .filter(
+            WebhookDelivery.status == "pending",
+            WebhookDelivery.next_attempt_at <= now,
+            WebhookEndpoint.enabled == True,  # noqa: E712
+        )
+        .limit(50)
+        .all()
+    )
+    for d in rows:
+        d.status = "delivering"
+    db.commit()
+
+    for d in rows:
+        ep = db.get(WebhookEndpoint, d.endpoint_id)
+        body, headers = build_request(ep, d.payload)
+        try:
+            r = requests.post(ep.url, data=body, headers=headers, timeout=10)
+            d.response_status = r.status_code
+            if 200 <= r.status_code < 300:
+                d.status = "delivered"
+                d.delivered_at = utcnow()
+                d.last_error = None
+            else:
+                _schedule_retry(d, f"HTTP {r.status_code}: {r.text[:200]}")
+        except Exception as exc:
+            d.response_status = None
+            _schedule_retry(d, str(exc))
+        db.commit()
+    return len(rows)
+
+
+def _schedule_retry(d: WebhookDelivery, error: str) -> None:
+    d.attempts += 1
+    d.last_error = error
+    if d.attempts >= MAX_ATTEMPTS:
+        d.status = "dead"
+    else:
+        d.status = "pending"
+        d.next_attempt_at = utcnow() + timedelta(minutes=BACKOFF_MINUTES[d.attempts - 1])
+
+
+def purge_delivered(db: Session) -> int:
+    """Delete delivered rows older than RETENTION_DAYS. Dead rows are kept."""
+    cutoff = utcnow() - timedelta(days=RETENTION_DAYS)
+    n = (
+        db.query(WebhookDelivery)
+        .filter(WebhookDelivery.status == "delivered", WebhookDelivery.created_at < cutoff)
+        .delete(synchronize_session=False)
+    )
+    db.commit()
+    return n
+
+
+def webhook_dispatcher_loop() -> None:
+    logger.info("webhook dispatcher started (tick %ss)", TICK_SECONDS)
+    while not _stop.wait(TICK_SECONDS):
+        db = SessionLocal()
+        try:
+            dispatch_tick(db)
+            purge_delivered(db)
+        except Exception:
+            logger.exception("webhook dispatcher tick failed")
+        finally:
+            db.close()
+
+
+def start() -> None:
+    threading.Thread(target=webhook_dispatcher_loop, daemon=True, name="ipam-webhook-dispatcher").start()
