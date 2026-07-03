@@ -116,7 +116,7 @@ def test_endpoint(ep_id: int, db: Session = Depends(get_db), user=Depends(requir
     payload = {
         "id": str(_uuid.uuid4()),
         "event": "ping",
-        "timestamp": utcnow().isoformat(),
+        "timestamp": utcnow().isoformat() + "Z",
         "actor": user.username,
         "resource_type": "webhook_endpoint",
         "resource_id": str(ep.id),
@@ -139,11 +139,13 @@ def test_endpoint(ep_id: int, db: Session = Depends(get_db), user=Depends(requir
 def list_deliveries(ep_id: int, status: str | None = None, limit: int = 50, offset: int = 0,
                     db: Session = Depends(get_db)):
     db.get(WebhookEndpoint, ep_id) or _404()
+    limit = max(1, min(limit, 200))
+    offset = max(0, offset)
     q = db.query(WebhookDelivery).filter(WebhookDelivery.endpoint_id == ep_id)
     if status:
         q = q.filter(WebhookDelivery.status == status)
     total = q.count()
-    rows = q.order_by(WebhookDelivery.id.desc()).offset(offset).limit(min(limit, 200)).all()
+    rows = q.order_by(WebhookDelivery.id.desc()).offset(offset).limit(limit).all()
     return {"total": total,
             "items": [WebhookDeliveryOut.model_validate(r) for r in rows]}
 
@@ -153,10 +155,13 @@ def redeliver(d_id: int, db: Session = Depends(get_db), user=Depends(require_adm
     d = db.get(WebhookDelivery, d_id)
     if not d:
         raise HTTPException(404, "delivery not found")
+    if d.status == "delivering":
+        raise HTTPException(409, "delivery in flight")
     d.status = "pending"
     d.attempts = 0
     d.next_attempt_at = utcnow()
     d.last_error = None
+    write_audit(db, user.username, "redeliver", "webhook_delivery", str(d.id), d.event_type)
     db.commit()
     db.refresh(d)
     return WebhookDeliveryOut.model_validate(d)
@@ -168,5 +173,6 @@ def delete_delivery(d_id: int, db: Session = Depends(get_db), user=Depends(requi
     if not d:
         raise HTTPException(404, "delivery not found")
     db.delete(d)
+    write_audit(db, user.username, "delete", "webhook_delivery", str(d.id), d.event_type)
     db.commit()
     return Response(status_code=204)

@@ -64,6 +64,8 @@ def dispatch_tick(db: Session) -> int:
        .update({"status": "pending"}, synchronize_session=False))
     db.commit()
 
+    # Single-instance claim (no SELECT ... FOR UPDATE SKIP LOCKED): safe because
+    # the app runs one API replica (k8s pins replicas: 1). Revisit before scaling out.
     rows = (
         db.query(WebhookDelivery)
         .join(WebhookEndpoint, WebhookDelivery.endpoint_id == WebhookEndpoint.id)

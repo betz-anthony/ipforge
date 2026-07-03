@@ -75,3 +75,15 @@ def test_write_audit_survives_outbox_failure(db, monkeypatch):
     monkeypatch.setattr(audit_mod, "enqueue_webhooks", boom)
     write_audit(db, "admin", "create", "subnet", "7", "10.0.0.0/24")  # must not raise
     db.commit()
+
+
+def test_enqueue_payload_json_safe_with_datetimes(db):
+    from datetime import datetime
+    db.add(_ep())
+    db.commit()
+    enqueue_webhooks(db, username="u", action="update", resource_type="address",
+                     resource_id="1", summary="s",
+                     before={"seen": datetime(2026, 7, 2, 12, 0, 0)}, after=None)
+    db.commit()  # must not raise on JSON serialization
+    d = db.query(WebhookDelivery).one()
+    assert d.payload["before"]["seen"] == "2026-07-02 12:00:00"
