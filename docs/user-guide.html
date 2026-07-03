@@ -92,6 +92,7 @@ ul, ol { padding-left: 1.5rem; }
 <li><a href="#gitops-declarative-config">GitOps (Declarative Config)</a></li>
 <li><a href="#stale-ip-reclamation">Stale IP Reclamation</a></li>
 <li><a href="#alerting">Alerting</a></li>
+<li><a href="#webhooks">Webhooks</a></li>
 <li><a href="#search">Search</a></li>
 <li><a href="#import--export">Import / Export</a></li>
 <li><a href="#audit-log">Audit Log</a></li>
@@ -1039,6 +1040,76 @@ every newly-discovered device <code>unverified</code>, or set <code>orphan_dhcp<
 <p>Actions are reversible and IPAM-only (no provider writes, no deletes), each is
 audit-logged, and rules have a per-rule enable toggle. Rules run from the same
 background dispatcher that delivers alerts.</p>
+<hr>
+<h2 id="webhooks">Webhooks</h2>
+<p>IPForge can push a signed HTTP POST to an external system for <strong>every audited
+write</strong> — a generic change feed, distinct from the condition-shaped Alerting
+above. Event name is <code>{resource_type}.{action}</code>, e.g. <code>address.create</code>,
+<code>subnet.update</code>, <code>dns_record.delete</code>.</p>
+<h3 id="configuring-settings-webhooks-admin">Configuring (Settings → Webhooks, admin)</h3>
+<ul>
+<li><strong>URL</strong> — where to POST.</li>
+<li><strong>Secret</strong> (optional) — write-only; used to HMAC-sign each delivery. Leave
+  blank on edit to keep the existing secret.</li>
+<li><strong>Custom headers</strong> — sent verbatim on every delivery (cannot override the
+  three <code>X-IPForge-*</code> headers below).</li>
+<li><strong>Resource-type / action filters</strong> — restrict which events this endpoint
+  receives. Empty = all resource types / all actions.</li>
+<li><strong>Test</strong> — fires a synchronous <code>ping</code> event at the endpoint immediately
+  (not persisted to the delivery log) so you can confirm connectivity and
+  signature setup before relying on it.</li>
+</ul>
+<h3 id="payload">Payload</h3>
+<pre><code class="language-json">{
+  &quot;id&quot;: &quot;&lt;delivery uuid&gt;&quot;,
+  &quot;event&quot;: &quot;address.updated&quot;,
+  &quot;timestamp&quot;: &quot;2026-07-02T18:00:00Z&quot;,
+  &quot;actor&quot;: &quot;admin&quot;,
+  &quot;resource_type&quot;: &quot;address&quot;,
+  &quot;resource_id&quot;: &quot;123&quot;,
+  &quot;summary&quot;: &quot;Updated 10.0.1.5 (hostname web01 -&gt; web02)&quot;,
+  &quot;before&quot;: { &quot;...&quot;: &quot;audit before_state&quot; },
+  &quot;after&quot;:  { &quot;...&quot;: &quot;audit after_state&quot; }
+}
+</code></pre>
+<table>
+<thead>
+<tr>
+<th>Header</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>X-IPForge-Event</code></td>
+<td>Event name, e.g. <code>address.updated</code></td>
+</tr>
+<tr>
+<td><code>X-IPForge-Delivery</code></td>
+<td>Delivery UUID — use as the idempotency key</td>
+</tr>
+<tr>
+<td><code>X-IPForge-Signature-256</code></td>
+<td><code>sha256=&lt;hex hmac-sha256&gt;</code> over the raw request body, only sent when the endpoint has a secret configured</td>
+</tr>
+</tbody>
+</table>
+<h3 id="verifying-the-signature">Verifying the signature</h3>
+<pre><code class="language-python">import hmac, hashlib
+
+def verify(secret: str, body: bytes, signature_header: str) -&gt; bool:
+    expected = &quot;sha256=&quot; + hmac.new(secret.encode(), body, hashlib.sha256).hexdigest()
+    return hmac.compare_digest(expected, signature_header)
+</code></pre>
+<h3 id="delivery-semantics">Delivery semantics</h3>
+<p>At-least-once — consumers should dedupe on <code>X-IPForge-Delivery</code>. Failed
+deliveries retry at 1m/5m/15m/1h/6h and are dead-lettered after the 6th failed
+attempt; dead and failed deliveries can be manually redelivered from the
+per-endpoint delivery log. Delivered history is kept 30 days (dead-letters are
+kept until redelivered or manually deleted). Claims stranded by a crash (e.g.
+the dispatcher dies mid-delivery) are automatically recovered after 15
+minutes; a delivery whose endpoint is deleted mid-flight is dead-lettered
+with error <code>endpoint deleted</code> rather than left stuck.</p>
 <hr>
 <h2 id="search">Search</h2>
 <p>The global search bar (top of every page) searches across subnets, addresses, DNS records, and DHCP leases simultaneously.</p>
