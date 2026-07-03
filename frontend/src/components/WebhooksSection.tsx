@@ -8,8 +8,7 @@ import Collapsible from './Collapsible'
 import ModalDialog from './ModalDialog'
 import ConfirmModal from './ConfirmModal'
 
-const LAST_STATUS_BADGE: Record<string, string> = { sent: 'badge-green', failed: 'badge-red' }
-const DELIVERY_STATUS_BADGE: Record<string, string> = { delivered: 'badge-green', pending: 'badge-yellow', dead: 'badge-red' }
+const DELIVERY_STATUS_BADGE: Record<string, string> = { delivered: 'badge-green', pending: 'badge-yellow', delivering: 'badge-yellow', dead: 'badge-red' }
 
 function parseHeaders(text: string): Record<string, string> {
   const out: Record<string, string> = {}
@@ -143,7 +142,7 @@ export default function WebhooksSection() {
                   </button>
                 </td>
                 <td>
-                  <span className={`badge ${ep.last_status ? (LAST_STATUS_BADGE[ep.last_status] ?? 'badge-gray') : 'badge-gray'}`}>
+                  <span className={`badge ${ep.last_status ? (DELIVERY_STATUS_BADGE[ep.last_status] ?? 'badge-gray') : 'badge-gray'}`}>
                     {ep.last_status ?? 'never'}
                   </span>
                 </td>
