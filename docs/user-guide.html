@@ -1103,7 +1103,8 @@ def verify(secret: str, body: bytes, signature_header: str) -&gt; bool:
 </code></pre>
 <h3 id="delivery-semantics">Delivery semantics</h3>
 <p>At-least-once — consumers should dedupe on <code>X-IPForge-Delivery</code>. Failed
-deliveries retry at 1m/5m/15m/1h/6h and are dead-lettered after the 6th failed
+deliveries retry at 1m/5m/15m/1h/6h (a ≈7.5-hour total retry window) and are
+dead-lettered after the 6th failed
 attempt; dead and failed deliveries can be manually redelivered from the
 per-endpoint delivery log. Delivered history is kept 30 days (dead-letters are
 kept until redelivered or manually deleted). Claims stranded by a crash (e.g.
