@@ -3,6 +3,7 @@
 enqueue_webhooks() is called from write_audit() with the caller's session, so
 delivery rows commit/roll back atomically with the audited write.
 """
+import json
 import uuid
 from sqlalchemy.orm import Session
 
@@ -38,19 +39,26 @@ def enqueue_webhooks(
         if not matches(ep, resource_type, action):
             continue
         delivery_uuid = str(uuid.uuid4())
+        payload = {
+            "id": delivery_uuid,
+            "event": event,
+            "timestamp": utcnow().isoformat() + "Z",
+            "actor": username,
+            "resource_type": resource_type,
+            "resource_id": resource_id,
+            "summary": summary,
+            "before": before,
+            "after": after,
+        }
+        # Guaranteed plain-JSON-serializable: SQLAlchemy flushes this JSON column
+        # with plain json.dumps (no `default=`) in the caller's commit — a raw
+        # datetime/enum in before/after would raise TypeError and fail the whole
+        # audited transaction. Round-trip through json.dumps(default=str) here,
+        # inside our own try/except in write_audit(), instead.
+        payload = json.loads(json.dumps(payload, default=str))
         db.add(WebhookDelivery(
             uuid=delivery_uuid,
             endpoint_id=ep.id,
             event_type=event,
-            payload={
-                "id": delivery_uuid,
-                "event": event,
-                "timestamp": utcnow().isoformat(),
-                "actor": username,
-                "resource_type": resource_type,
-                "resource_id": resource_id,
-                "summary": summary,
-                "before": before,
-                "after": after,
-            },
+            payload=payload,
         ))

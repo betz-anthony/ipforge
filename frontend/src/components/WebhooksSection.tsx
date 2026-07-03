@@ -287,7 +287,7 @@ function WebhookEditorModal({
             <input value={resourceTypesText} onChange={e => setResourceTypesText(e.target.value)} placeholder="address, subnet" />
           </Field>
           <Field label="Actions" hint="comma-separated, empty = all">
-            <input value={actionsText} onChange={e => setActionsText(e.target.value)} placeholder="created, updated, deleted" />
+            <input value={actionsText} onChange={e => setActionsText(e.target.value)} placeholder="create, update, delete" />
           </Field>
           <div className="form-field">
             <label className="checkbox-label">

@@ -116,3 +116,18 @@ def test_requires_admin(client_operator, db):
     assert r.status_code == 403
     r = client_operator.post("/api/v1/webhooks", json={"name": "x", "url": "https://x/h"})
     assert r.status_code == 403
+
+
+def test_redeliver_in_flight_409(client, db):
+    ep = _create(client)
+    d = WebhookDelivery(endpoint_id=ep["id"], event_type="x.y",
+                        payload={"id": "u", "event": "x.y"}, status="delivering")
+    db.add(d); db.commit()
+    r = client.post(f"/api/v1/webhooks/deliveries/{d.id}/redeliver")
+    assert r.status_code == 409
+
+
+def test_delivery_log_negative_params_clamped(client, db):
+    ep = _create(client)
+    r = client.get(f"/api/v1/webhooks/{ep['id']}/deliveries?limit=-5&offset=-3")
+    assert r.status_code == 200
