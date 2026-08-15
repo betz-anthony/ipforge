@@ -138,6 +138,32 @@ def test_tick_skips_not_due_and_disabled(db):
     post.assert_not_called()
 
 
+def test_endpoint_disabled_after_claim_not_delivered(db):
+    # Endpoint enabled at claim time, disabled out-of-band before its POST.
+    # d1 delivers; while it does, ep2 is disabled — d2 must NOT be POSTed and
+    # must return to pending (fires again once re-enabled).
+    ep1, d1 = _seed(db)
+    ep2, d2 = _seed(db, payload={"id": "u-2", "event": "x.y"})
+    posted = []
+
+    def flaky(url, **kw):
+        posted.append(url)
+        if len(posted) == 1:  # during d1's POST, disable ep2 out of band
+            db.query(WebhookEndpoint).filter(WebhookEndpoint.id == ep2.id) \
+              .update({"enabled": False}, synchronize_session=False)
+            db.commit()
+        return _resp(200)
+
+    with patch("app.webhook_dispatcher.requests.post", side_effect=flaky):
+        dispatch_tick(db)
+    assert posted == [ep1.url]          # ep2 never hit
+    db.refresh(d1)
+    db.refresh(d2)
+    assert d1.status == "delivered"
+    assert d2.status == "pending"       # re-queued, not delivered
+    assert d2.attempts == 0             # not counted as a failure
+
+
 def test_fifth_failure_schedules_final_6h_backoff(db):
     ep, d = _seed(db, attempts=4)
     with patch("app.webhook_dispatcher.requests.post", return_value=_resp(500)):
