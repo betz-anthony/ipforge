@@ -24,33 +24,66 @@ def _404():
     raise HTTPException(404, "webhook endpoint not found")
 
 
-def _out(db: Session, ep: WebhookEndpoint) -> WebhookEndpointOut:
-    last = (
-        db.query(WebhookDelivery.status)
-        .filter(WebhookDelivery.endpoint_id == ep.id)
-        .order_by(WebhookDelivery.id.desc())
-        .first()
-    )
-    dead = (
-        db.query(func.count(WebhookDelivery.id))
-        .filter(WebhookDelivery.endpoint_id == ep.id, WebhookDelivery.status == "dead")
-        .scalar()
-    )
+_UNSET = object()
+
+
+def _out(db: Session, ep: WebhookEndpoint, *, last_status=_UNSET, dead_count=_UNSET) -> WebhookEndpointOut:
+    # Single-endpoint callers (create/update/get) leave the stats unset and pay
+    # two small queries; list_endpoints precomputes them in aggregate to avoid an
+    # N+1. Sentinel (not None) so a real "no deliveries yet" last_status=None is
+    # not mistaken for "not provided".
+    if last_status is _UNSET:
+        last = (
+            db.query(WebhookDelivery.status)
+            .filter(WebhookDelivery.endpoint_id == ep.id)
+            .order_by(WebhookDelivery.id.desc())
+            .first()
+        )
+        last_status = last[0] if last else None
+    if dead_count is _UNSET:
+        dead_count = (
+            db.query(func.count(WebhookDelivery.id))
+            .filter(WebhookDelivery.endpoint_id == ep.id, WebhookDelivery.status == "dead")
+            .scalar()
+        ) or 0
     return WebhookEndpointOut(
         id=ep.id, name=ep.name, url=ep.url, enabled=ep.enabled,
         has_secret=bool(ep.secret_enc),
         custom_headers=ep.custom_headers or {},
         resource_types=ep.resource_types or [],
         actions=ep.actions or [],
-        last_status=last[0] if last else None,
-        dead_count=dead or 0,
+        last_status=last_status,
+        dead_count=dead_count,
         created_at=ep.created_at, updated_at=ep.updated_at,
     )
 
 
 @router.get("", response_model=list[WebhookEndpointOut])
 def list_endpoints(db: Session = Depends(get_db)):
-    return [_out(db, ep) for ep in db.query(WebhookEndpoint).order_by(WebhookEndpoint.name).all()]
+    endpoints = db.query(WebhookEndpoint).order_by(WebhookEndpoint.name).all()
+    # Two grouped queries feed all rows — total query count is constant, not O(N).
+    latest_id = (
+        db.query(WebhookDelivery.endpoint_id,
+                 func.max(WebhookDelivery.id).label("max_id"))
+        .group_by(WebhookDelivery.endpoint_id)
+        .subquery()
+    )
+    last_status = {
+        eid: status
+        for eid, status in db.query(latest_id.c.endpoint_id, WebhookDelivery.status)
+        .join(WebhookDelivery, WebhookDelivery.id == latest_id.c.max_id)
+        .all()
+    }
+    dead_counts = dict(
+        db.query(WebhookDelivery.endpoint_id, func.count(WebhookDelivery.id))
+        .filter(WebhookDelivery.status == "dead")
+        .group_by(WebhookDelivery.endpoint_id)
+        .all()
+    )
+    return [
+        _out(db, ep, last_status=last_status.get(ep.id), dead_count=dead_counts.get(ep.id, 0))
+        for ep in endpoints
+    ]
 
 
 @router.post("", response_model=WebhookEndpointOut)

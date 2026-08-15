@@ -111,6 +111,51 @@ def test_endpoint_summary_dead_count(client, db):
     assert r.json()[0]["dead_count"] == 1
 
 
+def _count_selects(engine):
+    from contextlib import contextmanager
+    from sqlalchemy import event
+
+    @contextmanager
+    def counter():
+        n = {"selects": 0}
+
+        def before(conn, cursor, statement, *a):
+            if statement.lstrip().upper().startswith("SELECT"):
+                n["selects"] += 1
+
+        event.listen(engine, "before_cursor_execute", before)
+        try:
+            yield n
+        finally:
+            event.remove(engine, "before_cursor_execute", before)
+
+    return counter()
+
+
+def test_list_endpoints_is_not_n_plus_1(client, db):
+    # Query count for the list endpoint must not grow with the number of rows.
+    for i in range(3):
+        e = _create(client, name=f"ep{i}")
+        db.add_all([
+            WebhookDelivery(endpoint_id=e["id"], event_type="x.y",
+                            payload={"id": f"u{i}", "event": "x.y"}, status="dead", attempts=5),
+            WebhookDelivery(endpoint_id=e["id"], event_type="x.y",
+                            payload={"id": f"v{i}", "event": "x.y"}, status="delivered"),
+        ])
+    db.commit()
+
+    engine = db.get_bind()
+    with _count_selects(engine) as n:
+        r = client.get("/api/v1/webhooks")
+    assert r.status_code == 200
+    rows = r.json()
+    assert len(rows) == 3
+    # newest delivery per endpoint was the "delivered" one; each has 1 dead row
+    assert all(x["last_status"] == "delivered" and x["dead_count"] == 1 for x in rows)
+    # endpoints + last-status + dead-count = a small constant, nowhere near 1 + 2*N
+    assert n["selects"] <= 5, f"expected constant query count, got {n['selects']}"
+
+
 def test_requires_admin(client_operator, db):
     r = client_operator.get("/api/v1/webhooks")
     assert r.status_code == 403

@@ -83,36 +83,47 @@ def dispatch_tick(db: Session) -> int:
     db.commit()
 
     for d in rows:
-        try:
-            ep = db.get(WebhookEndpoint, d.endpoint_id)
-            if ep is None:
-                d.status = "dead"
-                d.last_error = "endpoint deleted"
-                db.commit()
-                continue
-            # Re-read: the endpoint may have been disabled out-of-band between
-            # the claim and now (batch POSTs run seconds apart). Don't deliver
-            # to a disabled endpoint — re-queue so it fires once re-enabled.
-            db.refresh(ep)
-            if not ep.enabled:
-                d.status = "pending"
-                d.last_error = "endpoint disabled after claim"
-                db.commit()
-                continue
-            body, headers = build_request(ep, d.payload)
-            r = requests.post(ep.url, data=body, headers=headers, timeout=10)
-            d.response_status = r.status_code
-            if 200 <= r.status_code < 300:
-                d.status = "delivered"
-                d.delivered_at = utcnow()
-                d.last_error = None
-            else:
-                _schedule_retry(d, f"HTTP {r.status_code}: {r.text[:200]}")
-        except Exception as exc:
-            d.response_status = None
-            _schedule_retry(d, str(exc))
-        db.commit()
+        _deliver_one(db, d)
     return len(rows)
+
+
+def _deliver_one(db: Session, d: WebhookDelivery) -> None:
+    """Deliver a single claimed row, committing its terminal state.
+
+    Re-reads the endpoint (populate_existing overwrites the identity-map copy
+    loaded at claim time) so an out-of-band delete or disable between claim and
+    POST is honored: deleted -> dead, disabled -> re-queued to pending.
+    """
+    try:
+        ep = (
+            db.query(WebhookEndpoint)
+            .filter(WebhookEndpoint.id == d.endpoint_id)
+            .populate_existing()
+            .one_or_none()
+        )
+        if ep is None:
+            d.status = "dead"
+            d.last_error = "endpoint deleted"
+            db.commit()
+            return
+        if not ep.enabled:
+            d.status = "pending"
+            d.last_error = "endpoint disabled after claim"
+            db.commit()
+            return
+        body, headers = build_request(ep, d.payload)
+        r = requests.post(ep.url, data=body, headers=headers, timeout=10)
+        d.response_status = r.status_code
+        if 200 <= r.status_code < 300:
+            d.status = "delivered"
+            d.delivered_at = utcnow()
+            d.last_error = None
+        else:
+            _schedule_retry(d, f"HTTP {r.status_code}: {r.text[:200]}")
+    except Exception as exc:
+        d.response_status = None
+        _schedule_retry(d, str(exc))
+    db.commit()
 
 
 def _schedule_retry(d: WebhookDelivery, error: str) -> None:

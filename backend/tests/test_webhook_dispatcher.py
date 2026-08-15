@@ -58,7 +58,9 @@ from unittest.mock import MagicMock, patch
 
 from app.core.time import utcnow
 from app.models.webhook import WebhookDelivery
-from app.webhook_dispatcher import dispatch_tick, purge_delivered, BACKOFF_MINUTES, MAX_ATTEMPTS
+from app.webhook_dispatcher import (
+    dispatch_tick, purge_delivered, _deliver_one, BACKOFF_MINUTES, MAX_ATTEMPTS,
+)
 
 
 def _seed(db, *, enabled=True, **delivery_kw):
@@ -162,6 +164,22 @@ def test_endpoint_disabled_after_claim_not_delivered(db):
     assert d1.status == "delivered"
     assert d2.status == "pending"       # re-queued, not delivered
     assert d2.attempts == 0             # not counted as a failure
+
+
+def test_deliver_one_dead_letters_when_endpoint_deleted(db):
+    # Endpoint deleted out-of-band after the row was claimed: no POST, row goes
+    # straight to dead (its FK CASCADE only fires in Postgres; here it orphans).
+    ep, d = _seed(db, status="delivering")
+    db.query(WebhookEndpoint).filter(WebhookEndpoint.id == ep.id) \
+      .delete(synchronize_session=False)
+    db.commit()
+    db.expire_all()  # drop the claim-time cached endpoint so the re-read sees None
+    with patch("app.webhook_dispatcher.requests.post", return_value=_resp(200)) as post:
+        _deliver_one(db, d)
+    post.assert_not_called()
+    db.refresh(d)
+    assert d.status == "dead"
+    assert d.last_error == "endpoint deleted"
 
 
 def test_fifth_failure_schedules_final_6h_backoff(db):
