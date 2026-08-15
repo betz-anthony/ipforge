@@ -25,7 +25,12 @@ MAX_ATTEMPTS = 6  # 5 backoff waits (1m/5m/15m/1h/6h), dead on the 6th failed at
 TICK_SECONDS = 5
 RETENTION_DAYS = 30
 PURGE_INTERVAL_SECONDS = 3600  # retention purge cadence; delivery still ticks every TICK_SECONDS
-CLAIM_TIMEOUT_MINUTES = 15  # worst case: 50-row batch * 10s timeout ~= 8.3min in-flight
+REQUEST_TIMEOUT = (5, 10)  # (connect, read) seconds — bounds per-row worst case
+# Stranded-claim recovery cutoff. Only ever fires across a process restart: the
+# single dispatcher loop runs ticks sequentially, so stale-recovery (start of a
+# tick) can never reclaim a row the live process is still delivering. Sized above
+# a full batch's in-flight time: 50 rows * (5+10)s = 12.5min < 15min.
+CLAIM_TIMEOUT_MINUTES = 15
 
 _RESERVED_HEADERS = {"content-type", "x-ipforge-event", "x-ipforge-delivery", "x-ipforge-signature-256"}
 
@@ -112,7 +117,7 @@ def _deliver_one(db: Session, d: WebhookDelivery) -> None:
             db.commit()
             return
         body, headers = build_request(ep, d.payload)
-        r = requests.post(ep.url, data=body, headers=headers, timeout=10)
+        r = requests.post(ep.url, data=body, headers=headers, timeout=REQUEST_TIMEOUT)
         d.response_status = r.status_code
         if 200 <= r.status_code < 300:
             d.status = "delivered"

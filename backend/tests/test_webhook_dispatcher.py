@@ -94,7 +94,7 @@ def test_tick_delivers_success(db):
     assert d.delivered_at is not None
     args, kwargs = post.call_args
     assert args[0] == "https://recv.local/hook"
-    assert kwargs["timeout"] == 10
+    assert kwargs["timeout"] == (5, 10)          # (connect, read)
     assert isinstance(kwargs["data"], bytes)          # signed raw body, not json=
     assert kwargs["headers"]["X-IPForge-Event"] == "address.update"
 
