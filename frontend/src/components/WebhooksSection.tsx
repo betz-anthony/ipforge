@@ -1,6 +1,6 @@
-import { useState, useId, isValidElement, cloneElement } from 'react'
+import { useState, useEffect, useId, isValidElement, cloneElement } from 'react'
 import type React from 'react'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient, keepPreviousData } from '@tanstack/react-query'
 import { Plus, Pencil, Trash2, Send, ScrollText, Check, X, RefreshCw } from 'lucide-react'
 import { webhooksApi, type WebhookEndpoint, type WebhookEndpointIn, type WebhookDelivery } from '../api/client'
 import { useToast } from '../contexts/ToastContext'
@@ -75,7 +75,8 @@ export default function WebhooksSection() {
   const testMut = useMutation({
     mutationFn: (id: number) => webhooksApi.test(id),
     onSuccess: (r) => {
-      invalidate()
+      // Test pings are never persisted, so nothing in ['webhooks'] changes —
+      // no invalidate.
       showToast(
         r.status === 'sent' ? `Test delivered (HTTP ${r.response_status})` : `Test failed: ${r.error}`,
         r.status === 'sent' ? 'success' : 'error',
@@ -311,14 +312,25 @@ function WebhookEditorModal({
 
 // ── Delivery log modal ───────────────────────────────────────────────────────
 
+const DELIVERY_PAGE_SIZE = 50
+
 function DeliveryLogModal({ endpoint, onClose }: { endpoint: WebhookEndpoint; onClose: () => void }) {
   const qc = useQueryClient()
   const { showToast } = useToast()
   const [status, setStatus] = useState('')
+  const [page, setPage] = useState(0)
+
+  // Filter changes reset to the first page.
+  useEffect(() => { setPage(0) }, [status])
 
   const { data, isLoading } = useQuery({
-    queryKey: ['webhook-deliveries', endpoint.id, status],
-    queryFn: () => webhooksApi.deliveries(endpoint.id, { ...(status ? { status } : {}), limit: 100 }),
+    queryKey: ['webhook-deliveries', endpoint.id, status, page],
+    queryFn: () => webhooksApi.deliveries(endpoint.id, {
+      ...(status ? { status } : {}),
+      limit: DELIVERY_PAGE_SIZE,
+      offset: page * DELIVERY_PAGE_SIZE,
+    }),
+    placeholderData: keepPreviousData,   // keep prior rows visible across filter/page switches
   })
 
   const invalidate = () => {
@@ -338,6 +350,11 @@ function DeliveryLogModal({ endpoint, onClose }: { endpoint: WebhookEndpoint; on
   })
 
   const items: WebhookDelivery[] = data?.items ?? []
+  const total = data?.total ?? 0
+  const rangeStart = total === 0 ? 0 : page * DELIVERY_PAGE_SIZE + 1
+  const rangeEnd = page * DELIVERY_PAGE_SIZE + items.length
+  const hasPrev = page > 0
+  const hasNext = rangeEnd < total
 
   return (
     <ModalDialog title={`Delivery Log — ${endpoint.name}`} onClose={onClose}>
@@ -346,6 +363,7 @@ function DeliveryLogModal({ endpoint, onClose }: { endpoint: WebhookEndpoint; on
         <select id="webhook-log-status" value={status} onChange={e => setStatus(e.target.value)}>
           <option value="">All</option>
           <option value="pending">Pending</option>
+          <option value="delivering">Delivering</option>
           <option value="delivered">Delivered</option>
           <option value="dead">Dead</option>
         </select>
@@ -408,6 +426,19 @@ function DeliveryLogModal({ endpoint, onClose }: { endpoint: WebhookEndpoint; on
             ))}
           </tbody>
         </table>
+      </div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginTop: '0.75rem' }}>
+        <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>
+          {total === 0 ? 'No deliveries' : `${rangeStart}–${rangeEnd} of ${total}`}
+        </span>
+        <div style={{ display: 'flex', gap: '0.3rem', marginLeft: 'auto' }}>
+          <button className="btn-ghost btn-sm" onClick={() => setPage(p => Math.max(0, p - 1))} disabled={!hasPrev}>
+            Prev
+          </button>
+          <button className="btn-ghost btn-sm" onClick={() => setPage(p => p + 1)} disabled={!hasNext}>
+            Next
+          </button>
+        </div>
       </div>
       <div className="modal-actions">
         <button className="btn btn-ghost" onClick={onClose}>Close</button>
