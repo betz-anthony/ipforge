@@ -24,6 +24,7 @@ BACKOFF_MINUTES = [1, 5, 15, 60, 360]
 MAX_ATTEMPTS = 6  # 5 backoff waits (1m/5m/15m/1h/6h), dead on the 6th failed attempt
 TICK_SECONDS = 5
 RETENTION_DAYS = 30
+PURGE_INTERVAL_SECONDS = 3600  # retention purge cadence; delivery still ticks every TICK_SECONDS
 CLAIM_TIMEOUT_MINUTES = 15  # worst case: 50-row batch * 10s timeout ~= 8.3min in-flight
 
 _RESERVED_HEADERS = {"content-type", "x-ipforge-event", "x-ipforge-delivery", "x-ipforge-signature-256"}
@@ -89,6 +90,15 @@ def dispatch_tick(db: Session) -> int:
                 d.last_error = "endpoint deleted"
                 db.commit()
                 continue
+            # Re-read: the endpoint may have been disabled out-of-band between
+            # the claim and now (batch POSTs run seconds apart). Don't deliver
+            # to a disabled endpoint — re-queue so it fires once re-enabled.
+            db.refresh(ep)
+            if not ep.enabled:
+                d.status = "pending"
+                d.last_error = "endpoint disabled after claim"
+                db.commit()
+                continue
             body, headers = build_request(ep, d.payload)
             r = requests.post(ep.url, data=body, headers=headers, timeout=10)
             d.response_status = r.status_code
@@ -129,11 +139,17 @@ def purge_delivered(db: Session) -> int:
 
 def webhook_dispatcher_loop() -> None:
     logger.info("webhook dispatcher started (tick %ss)", TICK_SECONDS)
+    # Delivery must run every tick; retention purge is a slow janitor — hourly is
+    # plenty and keeps it off the hot delivery path.
+    next_purge = utcnow()
     while not _stop.wait(TICK_SECONDS):
         db = SessionLocal()
         try:
             dispatch_tick(db)
-            purge_delivered(db)
+            now = utcnow()
+            if now >= next_purge:
+                purge_delivered(db)
+                next_purge = now + timedelta(seconds=PURGE_INTERVAL_SECONDS)
         except Exception:
             logger.exception("webhook dispatcher tick failed")
         finally:
