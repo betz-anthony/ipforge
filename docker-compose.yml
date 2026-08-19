@@ -16,9 +16,18 @@ services:
   api:
     build: ./backend
     environment:
-      DATABASE_URL: postgresql://ipam:${DB_PASSWORD:-ipam}@db:5432/ipam
+      # Passed as discrete parts, not a URL: the app percent-encodes them, so
+      # a password containing "@" or ":" survives. Set DATABASE_URL to
+      # override with a verbatim connection string.
+      DB_USER: ipam
+      DB_PASSWORD: ${DB_PASSWORD:-ipam}
+      DB_HOST: db
+      DB_PORT: 5432
+      DB_NAME: ipam
+      DATABASE_URL: ${DATABASE_URL:-}
       JWT_SECRET_KEY: ${JWT_SECRET_KEY:-}
       SECRET_KEY: ${SECRET_KEY:-}
+      DEFAULT_ADMIN_PASSWORD: ${DEFAULT_ADMIN_PASSWORD:-admin}
     depends_on:
       db:
         condition: service_healthy
