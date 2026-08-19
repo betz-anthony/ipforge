@@ -1,4 +1,3 @@
-import os
 from logging.config import fileConfig
 from sqlalchemy import engine_from_config, pool
 from alembic import context
@@ -10,13 +9,16 @@ if config.config_file_name is not None:
 
 # Import all models so their metadata is populated
 import app.models  # noqa: F401
+from app.config import settings
 from app.database import Base
 
 target_metadata = Base.metadata
 
 
 def get_url():
-    return os.environ.get("DATABASE_URL", "postgresql://ipam:ipam@localhost:5432/ipam")
+    # Single source of truth: Settings honours DATABASE_URL when set and
+    # otherwise assembles it from DB_* with the credentials percent-encoded.
+    return settings.database_url
 
 
 def run_migrations_offline() -> None:
