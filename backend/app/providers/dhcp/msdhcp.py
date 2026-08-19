@@ -1,9 +1,9 @@
 import json
 import threading
-import winrm
 from winrm.exceptions import WinRMTransportError
 from app.providers.dhcp.base import DHCPProvider, DHCPScope, DHCPReservation
 from app.providers._ps import ps_quote
+from app.providers._winrm import build_session, check_result
 
 try:
     from spnego.exceptions import BadMICError as _BadMICError
@@ -30,10 +30,11 @@ class MSDHCPProvider(DHCPProvider):
     @property
     def session(self):
         if self._session is None:
-            self._session = winrm.Session(
+            self._session = build_session(
                 self._winrm_host,
-                auth=(self._winrm_user, self._winrm_password),
-                transport=self._winrm_transport,
+                self._winrm_user,
+                self._winrm_password,
+                self._winrm_transport,
             )
         return self._session
 
@@ -44,9 +45,7 @@ class MSDHCPProvider(DHCPProvider):
             except _WINRM_RETRY:
                 self._session = None
                 result = self.session.run_ps(ps)
-            if result.status_code != 0:
-                raise RuntimeError(result.std_err.decode())
-            return result.std_out.decode()
+            return check_result(result)
 
     def _parse_json(self, out: str) -> list:
         if not out.strip():
