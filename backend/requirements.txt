@@ -6,7 +6,7 @@ psycopg2-binary==2.9.9
 pydantic==2.7.1
 pydantic-settings==2.2.1
 netaddr==1.2.1
-pywinrm==0.4.3
+pywinrm[kerberos,credssp]==0.4.3
 cryptography==46.0.5
 alembic==1.13.1
 requests==2.32.3

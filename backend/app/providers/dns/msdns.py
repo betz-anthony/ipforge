@@ -1,9 +1,9 @@
 import json
 import threading
-import winrm
 from winrm.exceptions import WinRMTransportError
 from app.providers.dns.base import DNSProvider, DNSRecord
 from app.providers._ps import ps_quote
+from app.providers._winrm import build_session, check_result
 
 try:
     from spnego.exceptions import BadMICError as _BadMICError
@@ -26,10 +26,11 @@ class MSDNSProvider(DNSProvider):
     @property
     def session(self):
         if self._session is None:
-            self._session = winrm.Session(
+            self._session = build_session(
                 self._winrm_host,
-                auth=(self._winrm_user, self._winrm_password),
-                transport=self._winrm_transport,
+                self._winrm_user,
+                self._winrm_password,
+                self._winrm_transport,
             )
         return self._session
 
@@ -40,17 +41,22 @@ class MSDNSProvider(DNSProvider):
             except _WINRM_RETRY:
                 self._session = None
                 result = self.session.run_ps(ps)
-            if result.status_code != 0:
-                raise RuntimeError(result.std_err.decode())
-            return result.std_out.decode()
+            return check_result(result)
+
+    def _parse_json(self, out: str) -> list:
+        # An empty pipeline produces no ConvertTo-Json output at all — a
+        # server with zero zones/records is not an error.
+        if not out.strip():
+            return []
+        data = json.loads(out)
+        return data if isinstance(data, list) else [data]
 
     def get_zones(self) -> list[str]:
         out = self._run(
             f"Get-DnsServerZone -ComputerName {ps_quote(self._dns_server)} "
             "| Select-Object -ExpandProperty ZoneName | ConvertTo-Json"
         )
-        data = json.loads(out)
-        return data if isinstance(data, list) else [data]
+        return self._parse_json(out)
 
     def get_records(self, zone: str) -> list[DNSRecord]:
         ps = f"""
