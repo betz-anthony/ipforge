@@ -20,6 +20,10 @@ pip install -r requirements.txt
 uvicorn app.main:app --reload   # http://localhost:8000, docs at /docs
 ```
 
+`pywinrm[kerberos]` builds `pykerberos` from source, so a first install needs
+the krb5 headers and a compiler — `apt install gcc libkrb5-dev` on Debian/
+Ubuntu, `dnf install gcc krb5-devel` on RHEL, `brew install krb5` on macOS.
+
 Frontend only (proxies /api to localhost:8000):
 
 ```bash
