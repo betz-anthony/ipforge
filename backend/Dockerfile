@@ -7,6 +7,7 @@ COPY requirements.txt .
 # run time. Runtime packages are installed first so autoremove keeps them,
 # then the build-only ones are dropped in the same layer.
 RUN apt-get update \
+ && apt-get upgrade -y \
  && apt-get install -y --no-install-recommends \
       iputils-ping libkrb5-3 libgssapi-krb5-2 krb5-user \
  && apt-get install -y --no-install-recommends \

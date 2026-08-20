@@ -16,7 +16,10 @@ ENV DEBIAN_FRONTEND=noninteractive
 # libkrb5-3/libgssapi-krb5-2 are what the copied pykerberos extension links
 # against at run time; krb5-user supplies kinit/klist for debugging. Kerberos
 # realm config still comes from a mounted /etc/krb5.conf.
+# upgrade picks up base-image security fixes the tag itself lags behind —
+# python:3.12-slim ships whatever was current when it was built.
 RUN apt-get update \
+ && apt-get upgrade -y \
  && apt-get install -y --no-install-recommends \
       iputils-ping curl libkrb5-3 libgssapi-krb5-2 krb5-user \
  && rm -rf /var/lib/apt/lists/* \
