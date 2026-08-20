@@ -1,9 +1,8 @@
-import json
 import threading
 from winrm.exceptions import WinRMTransportError
 from app.providers.dhcp.base import DHCPProvider, DHCPScope, DHCPReservation
 from app.providers._ps import ps_quote
-from app.providers._winrm import build_session, check_result
+from app.providers._winrm import build_session, check_result, parse_ps_json
 
 try:
     from spnego.exceptions import BadMICError as _BadMICError
@@ -48,10 +47,7 @@ class MSDHCPProvider(DHCPProvider):
             return check_result(result)
 
     def _parse_json(self, out: str) -> list:
-        if not out.strip():
-            return []
-        data = json.loads(out)
-        return data if isinstance(data, list) else [data]
+        return parse_ps_json(out)
 
     def get_scopes(self) -> list[DHCPScope]:
         return self._get_v4_scopes() + self._get_v6_scopes()

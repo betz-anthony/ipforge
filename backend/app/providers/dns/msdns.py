@@ -1,9 +1,8 @@
-import json
 import threading
 from winrm.exceptions import WinRMTransportError
 from app.providers.dns.base import DNSProvider, DNSRecord
 from app.providers._ps import ps_quote
-from app.providers._winrm import build_session, check_result
+from app.providers._winrm import build_session, check_result, parse_ps_json
 
 try:
     from spnego.exceptions import BadMICError as _BadMICError
@@ -44,12 +43,7 @@ class MSDNSProvider(DNSProvider):
             return check_result(result)
 
     def _parse_json(self, out: str) -> list:
-        # An empty pipeline produces no ConvertTo-Json output at all — a
-        # server with zero zones/records is not an error.
-        if not out.strip():
-            return []
-        data = json.loads(out)
-        return data if isinstance(data, list) else [data]
+        return parse_ps_json(out)
 
     def get_zones(self) -> list[str]:
         out = self._run(
@@ -81,11 +75,7 @@ Get-DnsServerResourceRecord -ZoneName {ps_quote(zone)} -ComputerName {ps_quote(s
 }} | ConvertTo-Json
 """
         out = self._run(ps)
-        if not out.strip():
-            return []
-        records = json.loads(out)
-        if isinstance(records, dict):
-            records = [records]
+        records = self._parse_json(out)
         return [
             DNSRecord(
                 name=r["HostName"],
