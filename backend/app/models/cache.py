@@ -1,5 +1,5 @@
 from datetime import datetime
-from sqlalchemy import Column, Integer, String, Boolean, DateTime
+from sqlalchemy import Column, Integer, BigInteger, String, Boolean, DateTime
 from app.database import Base
 
 
@@ -44,7 +44,7 @@ class CachedDHCPLease(Base):
     ip_address  = Column(String, nullable=False)
     mac_address = Column(String, default="")
     client_duid = Column(String, default="")
-    iaid        = Column(Integer, default=0)
+    iaid        = Column(BigInteger, default=0)  # DHCPv6 IAID is uint32 (RFC 8415)
     name        = Column(String, default="")
     description = Column(String, default="")
     source      = Column(String, nullable=False)

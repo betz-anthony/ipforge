@@ -126,6 +126,10 @@ def _backfill_dhcp_providers(db) -> None:
 
 
 def _set_status(db, key: str, status: str, error: str | None = None) -> None:
+    # Callers include the sync error handlers, where a prior flush may have left
+    # the session's transaction in a doomed state. Roll back first so the status
+    # write itself can't raise PendingRollbackError and mask the original error.
+    db.rollback()
     row = db.get(SyncStatus, key)
     if row is None:
         row = SyncStatus(key=key)
