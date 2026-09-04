@@ -127,6 +127,21 @@ def test_output_without_json_reports_what_it_got():
         parse_ps_json("Access is denied.")
 
 
+def test_banner_only_output_is_an_empty_result():
+    # An empty zone/scope: the pipeline emits nothing, so stdout is just the
+    # logon banner. That is a zero-row result, not a failure.
+    assert parse_ps_json(BANNER) == []
+    assert parse_ps_json(
+        "Type logoff and press Enter when ready to exit this server.\r\n"
+    ) == []
+
+
+def test_banner_plus_real_error_still_raises():
+    # Banner noise must not swallow a genuine non-JSON message.
+    with pytest.raises(RuntimeError, match="Access is denied"):
+        parse_ps_json(BANNER + "Access is denied.")
+
+
 def test_ntlm_transport_needs_no_extra():
     assert check_transport("ntlm") is None
 

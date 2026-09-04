@@ -83,14 +83,24 @@ def check_result(result) -> str:
     return stdout
 
 
+# Lines a telnet-style logon session prints into stdout around the pipeline
+# output. When the pipeline itself yields nothing (an empty zone or DHCP
+# scope) stdout is *only* these lines, so "no JSON" here means zero rows, not
+# a failure. Any other non-JSON text is still surfaced.
+_BANNER_LINE_RE = re.compile(
+    r"^Type logoff and press Enter when ready to exit this server\.?$"
+)
+
+
 def parse_ps_json(out: str) -> list:
-    """Parse ConvertTo-Json output, tolerating anything printed ahead of it.
+    """Parse ConvertTo-Json output, tolerating anything printed around it.
 
     Logon banners and $PROFILE output share stdout with the pipeline, so the
     JSON is not necessarily at offset 0 — a "Type logoff and press Enter..."
     notice in front of it made json.loads fail at char 0. Scan for the first
     bracket that actually starts valid JSON rather than trusting the offset.
-    An empty pipeline produces no output at all and is not an error.
+    An empty pipeline produces no JSON at all: stdout is empty, or holds only
+    the logon banner. Either is a zero-row result, not an error.
     """
     text = out.lstrip("﻿").strip()
     if not text:
@@ -104,4 +114,11 @@ def parse_ps_json(out: str) -> list:
         except ValueError:
             continue
         return data if isinstance(data, list) else [data]
-    raise RuntimeError(f"expected JSON from PowerShell, got: {text[:200]}")
+    residual = "\n".join(
+        line
+        for line in text.splitlines()
+        if line.strip() and not _BANNER_LINE_RE.match(line.strip())
+    )
+    if not residual:
+        return []
+    raise RuntimeError(f"expected JSON from PowerShell, got: {residual[:200]}")
