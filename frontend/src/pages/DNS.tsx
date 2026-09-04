@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from 'react'
+import { useState, useMemo, useEffect, useRef } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { SlidersHorizontal, Plus, X, Trash2, Pencil, Globe } from 'lucide-react'
 import { dnsApi, providersApi, addressesApi, subnetsApi, type DNSRecord, type DNSZone } from '../api/client'
@@ -145,6 +145,7 @@ export default function DNS() {
   const [showSystemZones, setShowSystemZones] = useState(false)
   const [confirmRecord, setConfirmRecord] = useState<DNSRecord | null>(null)
   const [editingRecord, setEditingRecord] = useState<DNSRecord | null>(null)
+  const editFormRef = useRef<HTMLDivElement>(null)
   const [editForm, setEditForm]           = useState(emptyForm)
   const [editNameError, setEditNameError] = useState('')
   const [editValueError, setEditValueError] = useState('')
@@ -194,6 +195,10 @@ export default function DNS() {
   })
 
   useEffect(() => { setRecordsPage(1) }, [selectedZone])
+
+  useEffect(() => {
+    if (editingRecord) editFormRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+  }, [editingRecord])
 
   const createMutation = useMutation({
     mutationFn: () => dnsApi.createRecord(selectedZone!, {
@@ -717,7 +722,7 @@ export default function DNS() {
               )}
 
               {editingRecord && (
-                <div className="inline-form">
+                <div className="inline-form" ref={editFormRef}>
                   <div className="form-grid">
                     <div className={`form-field${editNameError ? ' form-field-error' : ''}`}>
                       <label htmlFor="dns-edit-name">Name</label>

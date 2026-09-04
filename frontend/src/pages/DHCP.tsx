@@ -1,4 +1,4 @@
-import { useMemo, useState, useEffect } from 'react'
+import { useMemo, useState, useEffect, useRef } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Plus, X, Pencil, Search, ArrowUp, ArrowDown, ArrowUpDown, Network } from 'lucide-react'
 import { dhcpApi, providersApi, addressesApi, subnetsApi, type DHCPReservation, type DHCPScope } from '../api/client'
@@ -33,6 +33,7 @@ export default function DHCP() {
   const [selectedLease, setSelectedLease] = useState<DHCPReservation | null>(null)
   const [confirmIp, setConfirmIp] = useState<string | null>(null)
   const [editingLease, setEditingLease] = useState<DHCPReservation | null>(null)
+  const editFormRef = useRef<HTMLDivElement>(null)
   const [editForm, setEditForm]         = useState(emptyForm)
   const { showToast } = useToast()
   const [editingNotes, setEditingNotes]       = useState(false)
@@ -77,6 +78,10 @@ export default function DHCP() {
   })
 
   useEffect(() => { setLeasesPage(1) }, [selectedScope?.scope_id])
+
+  useEffect(() => {
+    if (editingLease) editFormRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+  }, [editingLease])
 
   const addMutation = useMutation({
     mutationFn: () => dhcpApi.addReservation(
@@ -481,7 +486,7 @@ export default function DHCP() {
               )}
 
               {editingLease && (
-                <div className="inline-form">
+                <div className="inline-form" ref={editFormRef}>
                   <div className="form-grid">
                     <div className="form-field">
                       <label htmlFor="dhcp-edit-ip">IP Address</label>
