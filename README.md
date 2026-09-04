@@ -36,7 +36,7 @@ https://github.com/user-attachments/assets/7538725d-68dd-4a66-809e-f17aed4fa066
 ## Features
 
 - **IPAM core** — subnet hierarchy, reserved ranges, address-space heatmap, VLANs, custom fields + tags, and an idempotent allocation API (keyed by hostname, optional DNS/DHCP registration with rollback).
-- **DDI providers** — pluggable DNS (`msdns`, `bind`, `pihole`, `cloudflare`, `route53`, `azure_dns`, `gcp_dns`) and DHCP (`msdhcp`, `keadhcp`, `pihole`), configured at runtime in **Settings → Providers** (not env vars), credentials Fernet-encrypted at rest.
+- **DDI providers** — pluggable DNS (`msdns`, `bind`, `pihole`, `cloudflare`, `route53`, `azure_dns`, `gcp_dns`) and DHCP (`msdhcp`, `keadhcp`, `pihole`), configured at runtime in **Settings → Providers** (not env vars), credentials Fernet-encrypted at rest. Records and reservations edit in place — no delete-and-recreate — with PTR/linked-record follow-through and atomic updates where the provider API supports it.
 - **Drift reconciliation** — continuous multi-way diff across IPAM ↔ DNS ↔ DHCP ↔ live scan, with per-category auto-remediation policies (dry-run by default, gitops-aware).
 - **Continuous scanning** — per-subnet ping sweep + scheduler, reachability history, alert events.
 - **Discovery & security** — SNMP ARP/FDB discovery (IP ↔ MAC ↔ switchport ↔ VLAN); rogue-device / MAC-move / IP-conflict detection with reversible quarantine.
