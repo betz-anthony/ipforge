@@ -148,6 +148,7 @@ export default function DNS() {
   const [editForm, setEditForm]           = useState(emptyForm)
   const [editNameError, setEditNameError] = useState('')
   const [editValueError, setEditValueError] = useState('')
+  const [editUpdatePtr, setEditUpdatePtr] = useState(false)
   const [registerPtr, setRegisterPtr]   = useState(false)
   const [deletePtr, setDeletePtr]       = useState(true)
   const { showToast } = useToast()
@@ -211,10 +212,11 @@ export default function DNS() {
     mutationFn: () => dnsApi.updateRecord(selectedZone!, editingRecord!, {
       name: editForm.name, record_type: editForm.record_type,
       value: editForm.value, ttl: editForm.ttl,
-    }),
+    }, { update_ptr: editUpdatePtr }),
     onSuccess: (result) => {
       qc.invalidateQueries({ queryKey: ['dns-records', selectedZone] })
       setEditingRecord(null)
+      setEditUpdatePtr(false)
       if (result.ptr_stale) {
         showToast('Record updated — the matching PTR record was not updated. Check Drift.', 'success')
       } else {
@@ -388,7 +390,7 @@ export default function DNS() {
     setShowForm(false)
     setEditingRecord(r)
     setEditForm({ name: r.name, record_type: r.record_type, value: r.value, ttl: r.ttl, source: r.source })
-    setEditNameError(''); setEditValueError('')
+    setEditNameError(''); setEditValueError(''); setEditUpdatePtr(false)
   }
 
   const setEdit = (key: keyof typeof emptyForm) =>
@@ -752,6 +754,17 @@ export default function DNS() {
                       <input value={`${editingRecord.zone} / ${SOURCE_LABEL[editForm.source] ?? editForm.source}`} disabled />
                     </div>
                   </div>
+                  {['A', 'AAAA'].includes(editForm.record_type) && editForm.value !== editingRecord.value && (
+                    <div className="form-field form-field-wide">
+                      <PtrCheckbox
+                        label="Also update matching PTR record"
+                        checked={editUpdatePtr}
+                        onChange={setEditUpdatePtr}
+                        disabled={selectedZoneIsPihole}
+                        disabledNote="(provider does not support PTR)"
+                      />
+                    </div>
+                  )}
                   <div className="form-actions">
                     <button
                       className="btn-primary btn-sm"
@@ -764,7 +777,7 @@ export default function DNS() {
                     >
                       {updateMutation.isPending ? 'Saving…' : 'Save'}
                     </button>
-                    <button className="btn-ghost btn-sm" onClick={() => setEditingRecord(null)}>
+                    <button className="btn-ghost btn-sm" onClick={() => { setEditingRecord(null); setEditUpdatePtr(false) }}>
                       <X size={13} /> Cancel
                     </button>
                     {updateMutation.isError && (

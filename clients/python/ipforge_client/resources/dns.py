@@ -37,10 +37,10 @@ class DNS:
             body["delete_ptr"] = True
         self._t.request("DELETE", f"/dns/zones/{zone}/records", json=body)
 
-    def update_record(self, zone: str, record, **changes) -> DNSRecord:
+    def update_record(self, zone: str, record, update_ptr: bool = False, **changes) -> DNSRecord:
         old = dict(record.raw) if isinstance(record, Model) else dict(record)
         new = {**old, **changes}
-        body = {"old": old, "new": new}
+        body = {"old": old, "new": new, "update_ptr": update_ptr}
         return DNSRecord(self._t.request("PUT", f"/dns/zones/{zone}/records", json=body))
 
     def by_ip(self, ip: str) -> List[DNSRecord]:

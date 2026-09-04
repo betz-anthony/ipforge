@@ -243,9 +243,6 @@ def update_record(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_operator),
 ):
-    if body.update_ptr:
-        raise HTTPException(400, "update_ptr is not yet supported (P2)")
-
     old, new = body.old, body.new
     if new.zone != old.zone:
         raise HTTPException(422, "zone cannot change on an edit — delete and recreate instead")
@@ -267,18 +264,57 @@ def update_record(
     if row is None:
         raise HTTPException(404, "record not found")
 
+    follow_ptr = (
+        body.update_ptr
+        and old.record_type in ("A", "AAAA")
+        and new.record_type in ("A", "AAAA")
+        and target.supports_ptr
+    )
+    if body.update_ptr and not follow_ptr:
+        raise HTTPException(400, "update_ptr only applies to an A/AAAA record on a provider that supports PTR")
+
     try:
         target.update_record(old, new)
     except Exception as e:
         raise_provider_error(e, step="dns", user=current_user)
 
-    # P1 does not follow PTR through an edit; surface staleness so the UI/drift
-    # can flag it instead of silently leaving a mismatched reverse record.
-    ptr_stale = (
-        new.record_type in ("A", "AAAA")
-        and target.supports_ptr
-        and find_reverse_zone(old.value, _zone_names(db, target)) is not None
-    )
+    zones_avail = _zone_names(db, target)
+    old_ptr = new_ptr = None
+    ptr_action: str | None = None  # "update" | "recreate" | "delete" | "add"
+    ptr_stale = False
+
+    if follow_ptr:
+        old_rz = find_reverse_zone(old.value, zones_avail)
+        new_rz = find_reverse_zone(new.value, zones_avail)
+        old_ptr = build_ptr_record(old.value, old.name, old_rz, target.source) if old_rz else None
+        new_ptr = build_ptr_record(new.value, new.name, new_rz, target.source) if new_rz else None
+
+        try:
+            if old_ptr is not None and new_ptr is not None and old_ptr.zone == new_ptr.zone:
+                target.update_record(old_ptr, new_ptr)
+                ptr_action = "update"
+            elif old_ptr is not None and new_ptr is not None:
+                target.delete_record(old_ptr)
+                target.add_record(new_ptr)
+                ptr_action = "recreate"
+            elif old_ptr is not None:
+                target.delete_record(old_ptr)
+                ptr_action = "delete"
+            elif new_ptr is not None:
+                target.add_record(new_ptr)
+                ptr_action = "add"
+        except Exception as e:
+            _undo_provider(target, new, "update", reverse_to=old)
+            logger.error("DNS update_record PTR reconciliation failed: %s", e, exc_info=True)
+            raise_provider_error(e, step="dns", user=current_user)
+    else:
+        # P1 behavior — no PTR follow-through, surface staleness so the UI/drift
+        # can flag it instead of silently leaving a mismatched reverse record.
+        ptr_stale = (
+            new.record_type in ("A", "AAAA")
+            and target.supports_ptr
+            and find_reverse_zone(old.value, zones_avail) is not None
+        )
 
     now = utcnow()
     try:
@@ -287,6 +323,32 @@ def update_record(
         row.value = new.value
         row.ttl = new.ttl
         row.synced_at = now
+
+        if ptr_action in ("update", "recreate", "delete"):
+            ptr_row = db.query(CRow).filter_by(
+                name=old_ptr.name, record_type="PTR", zone=old_ptr.zone, source=target.source,
+            ).first()
+            if ptr_action == "delete":
+                if ptr_row is not None:
+                    db.delete(ptr_row)
+            else:
+                if ptr_row is not None:
+                    ptr_row.name = new_ptr.name
+                    ptr_row.value = new_ptr.value
+                    ptr_row.zone = new_ptr.zone
+                    ptr_row.ttl = new_ptr.ttl
+                    ptr_row.synced_at = now
+                elif ptr_action == "recreate":
+                    db.add(CRow(name=new_ptr.name, record_type="PTR", value=new_ptr.value,
+                                zone=new_ptr.zone, ttl=new_ptr.ttl, source=target.source, synced_at=now))
+                if ptr_action in ("update", "recreate") and db.get(CachedDNSZone, (new_ptr.zone, target.source)) is None:
+                    db.add(CachedDNSZone(zone=new_ptr.zone, source=target.source, synced_at=now))
+        elif ptr_action == "add":
+            db.add(CRow(name=new_ptr.name, record_type="PTR", value=new_ptr.value,
+                        zone=new_ptr.zone, ttl=new_ptr.ttl, source=target.source, synced_at=now))
+            if db.get(CachedDNSZone, (new_ptr.zone, target.source)) is None:
+                db.add(CachedDNSZone(zone=new_ptr.zone, source=target.source, synced_at=now))
+
         write_audit(db, current_user.username, "update", "dns_record",
                     f"{new.name}/{new.record_type}",
                     f"{old.name} {old.record_type} {old.value} -> {new.name} {new.record_type} {new.value}",
@@ -295,6 +357,15 @@ def update_record(
     except Exception as e:
         db.rollback()
         _undo_provider(target, new, "update", reverse_to=old)
+        if ptr_action == "update":
+            _undo_provider(target, new_ptr, "update", reverse_to=old_ptr)
+        elif ptr_action == "recreate":
+            _undo_provider(target, new_ptr, "delete")
+            _undo_provider(target, old_ptr, "add")
+        elif ptr_action == "delete":
+            _undo_provider(target, old_ptr, "add")
+        elif ptr_action == "add":
+            _undo_provider(target, new_ptr, "delete")
         logger.error("DNS update_record cache update failed: %s", e, exc_info=True)
         raise HTTPException(502, f"DNS record update failed: {e}")
 

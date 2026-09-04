@@ -190,16 +190,6 @@ def test_update_record_ptr_stale_false_when_provider_lacks_ptr_support(client, d
     assert r.json()["ptr_stale"] is False
 
 
-def test_update_record_update_ptr_true_rejected(client, db):
-    _add_zone(db, "example.com")
-    _seed_record(db)
-    prov = _provider()
-    with patch("app.api.dns.get_dns_providers", return_value=[prov]):
-        r = _put(client, update_ptr=True)
-    assert r.status_code == 400
-    prov.update_record.assert_not_called()
-
-
 def test_update_record_requires_operator(client_gr, db):
     _add_zone(db, "example.com")
     _seed_record(db)

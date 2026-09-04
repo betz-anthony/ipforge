@@ -39,3 +39,13 @@ def test_update_record_sends_old_and_new(fake):
     assert body["new"]["value"] == "10.0.0.9" and body["new"]["name"] == "web"
     assert result.value == "10.0.0.9"
     assert result.get("ptr_stale") is True
+
+
+def test_update_record_passes_update_ptr(fake):
+    old = DNSRecord({"name": "web", "record_type": "A", "value": "10.0.0.5",
+                     "zone": "ex.com", "ttl": 3600, "source": "bind01"})
+    fake.set("PUT", "/dns/zones/ex.com/records", {"name": "web", "value": "10.0.0.9"})
+    DNS(fake).update_record("ex.com", old, update_ptr=True, value="10.0.0.9")
+    body = fake.calls[0][3]
+    assert body["update_ptr"] is True
+    assert body["new"]["value"] == "10.0.0.9"
