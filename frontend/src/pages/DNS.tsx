@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { SlidersHorizontal, Plus, X, Trash2, Globe } from 'lucide-react'
+import { SlidersHorizontal, Plus, X, Trash2, Pencil, Globe } from 'lucide-react'
 import { dnsApi, providersApi, addressesApi, subnetsApi, type DNSRecord, type DNSZone } from '../api/client'
 import { usePagedQuery } from '../hooks/usePagedQuery'
 import { Pager } from '../components/Pager'
@@ -144,6 +144,10 @@ export default function DNS() {
   const [zoneSearch, setZoneSearch]       = useState('')
   const [showSystemZones, setShowSystemZones] = useState(false)
   const [confirmRecord, setConfirmRecord] = useState<DNSRecord | null>(null)
+  const [editingRecord, setEditingRecord] = useState<DNSRecord | null>(null)
+  const [editForm, setEditForm]           = useState(emptyForm)
+  const [editNameError, setEditNameError] = useState('')
+  const [editValueError, setEditValueError] = useState('')
   const [registerPtr, setRegisterPtr]   = useState(false)
   const [deletePtr, setDeletePtr]       = useState(true)
   const { showToast } = useToast()
@@ -200,6 +204,26 @@ export default function DNS() {
       setForm(f => ({ ...emptyForm, source: f.source }))
       setRegisterPtr(false)
       setShowForm(false)
+    },
+  })
+
+  const updateMutation = useMutation({
+    mutationFn: () => dnsApi.updateRecord(selectedZone!, editingRecord!, {
+      name: editForm.name, record_type: editForm.record_type,
+      value: editForm.value, ttl: editForm.ttl,
+    }),
+    onSuccess: (result) => {
+      qc.invalidateQueries({ queryKey: ['dns-records', selectedZone] })
+      setEditingRecord(null)
+      if (result.ptr_stale) {
+        showToast('Record updated — the matching PTR record was not updated. Check Drift.', 'success')
+      } else {
+        showToast('Record updated', 'success')
+      }
+    },
+    onError: (err: any) => {
+      const e = apiError(err, 'Update failed')
+      showToast(e.message, 'error', { hint: e.hint, detail: e.detail })
     },
   })
 
@@ -357,8 +381,19 @@ export default function DNS() {
     setSelectedZone(z)
     setSelectedZoneSource(source ?? filteredZones.find(fz => fz.zone === z)?.source ?? null)
     setRecordsQ(''); setTypeFilter('')
-    setRecordsPage(1); setShowForm(false); setSelectedRecord(null)
+    setRecordsPage(1); setShowForm(false); setSelectedRecord(null); setEditingRecord(null)
   }
+
+  const startEdit = (r: DNSRecord) => {
+    setShowForm(false)
+    setEditingRecord(r)
+    setEditForm({ name: r.name, record_type: r.record_type, value: r.value, ttl: r.ttl, source: r.source })
+    setEditNameError(''); setEditValueError('')
+  }
+
+  const setEdit = (key: keyof typeof emptyForm) =>
+    (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
+      setEditForm(f => ({ ...f, [key]: key === 'ttl' ? Number(e.target.value) : e.target.value }))
 
   const thProps = (col: SortCol) => ({
     className: 'sortable' + (recordsSort === col ? ' sorted' : ''),
@@ -413,7 +448,14 @@ export default function DNS() {
                   )}
                 </td>
               )}
-              <td onClick={e => e.stopPropagation()}>
+              <td onClick={e => e.stopPropagation()} style={{ display: 'flex', gap: '0.3rem' }}>
+                <button
+                  className="btn-ghost btn-sm"
+                  aria-label={`Edit ${r.record_type} record ${r.name}`}
+                  onClick={() => startEdit(r)}
+                >
+                  <Pencil size={12} />
+                </button>
                 <button
                   className="btn-danger btn-sm"
                   aria-label={`Delete ${r.record_type} record ${r.name}`}
@@ -562,6 +604,7 @@ export default function DNS() {
                         const defaultSource = selectedZoneSource ?? dnsProviders[0] ?? ''
                         setForm({ ...emptyForm, source: defaultSource })
                         setShowForm(true)
+                        setEditingRecord(null)
                       }}
                     >
                       <Plus size={13} /> Add Record
@@ -665,6 +708,68 @@ export default function DNS() {
                     {createMutation.isError && (
                       <span className="feedback-error">
                         {String((createMutation.error as Error).message)}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {editingRecord && (
+                <div className="inline-form">
+                  <div className="form-grid">
+                    <div className={`form-field${editNameError ? ' form-field-error' : ''}`}>
+                      <label htmlFor="dns-edit-name">Name</label>
+                      <input
+                        id="dns-edit-name"
+                        value={editForm.name}
+                        onChange={e => { setEdit('name')(e); if (editNameError) setEditNameError('') }}
+                        onBlur={() => setEditNameError(editForm.name && !isValidHostname(editForm.name) ? 'Invalid hostname' : '')}
+                      />
+                      {editNameError && <span className="form-field-error-msg">{editNameError}</span>}
+                    </div>
+                    <div className="form-field">
+                      <label htmlFor="dns-edit-type">Type</label>
+                      <select id="dns-edit-type" value={editForm.record_type} disabled>
+                        <option value={editForm.record_type}>{editForm.record_type}</option>
+                      </select>
+                    </div>
+                    <div className={`form-field${editValueError ? ' form-field-error' : ''}`}>
+                      <label htmlFor="dns-edit-value">Value</label>
+                      <input
+                        id="dns-edit-value"
+                        value={editForm.value}
+                        onChange={e => { setEdit('value')(e); if (editValueError) setEditValueError('') }}
+                        onBlur={() => setEditValueError(dnsValueError(editForm.record_type, editForm.value))}
+                      />
+                      {editValueError && <span className="form-field-error-msg">{editValueError}</span>}
+                    </div>
+                    <div className="form-field">
+                      <label htmlFor="dns-edit-ttl">TTL (seconds)</label>
+                      <input id="dns-edit-ttl" type="number" value={editForm.ttl} onChange={setEdit('ttl')} />
+                    </div>
+                    <div className="form-field">
+                      <label>Zone / Source</label>
+                      <input value={`${editingRecord.zone} / ${SOURCE_LABEL[editForm.source] ?? editForm.source}`} disabled />
+                    </div>
+                  </div>
+                  <div className="form-actions">
+                    <button
+                      className="btn-primary btn-sm"
+                      onClick={() => updateMutation.mutate()}
+                      disabled={
+                        updateMutation.isPending || !editForm.name || !editForm.value ||
+                        !!dnsValueError(editForm.record_type, editForm.value) ||
+                        (!!editForm.name && !isValidHostname(editForm.name))
+                      }
+                    >
+                      {updateMutation.isPending ? 'Saving…' : 'Save'}
+                    </button>
+                    <button className="btn-ghost btn-sm" onClick={() => setEditingRecord(null)}>
+                      <X size={13} /> Cancel
+                    </button>
+                    {updateMutation.isError && (
+                      <span className="feedback-error">
+                        {String((updateMutation.error as Error).message)}
                       </span>
                     )}
                   </div>

@@ -1,7 +1,7 @@
 import logging
 import re
 from fastapi import APIRouter, HTTPException, Depends, Query
-from pydantic import field_validator
+from pydantic import BaseModel, field_validator
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
 from app.database import get_db
@@ -30,37 +30,68 @@ DNS_SORT_MAP = {
 }
 
 
+def _validate_name(v: str) -> str:
+    v = v.strip()
+    if not _DNS_NAME_RE.match(v):
+        raise ValueError("name must be 1-255 chars: letters, digits, . _ - * @")
+    return v
+
+
+def _validate_record_type(v: str) -> str:
+    if v not in _VALID_RECORD_TYPES:
+        raise ValueError(f"record_type must be one of {sorted(_VALID_RECORD_TYPES)}")
+    return v
+
+
+def _validate_value(v: str) -> str:
+    v = v.strip()
+    if not v or len(v) > 512:
+        raise ValueError("value must be 1-512 characters")
+    if any(ord(c) < 32 for c in v):
+        raise ValueError("value must not contain control characters")
+    return v
+
+
 class CreateRecordRequest(DNSRecord):
     register_ptr: bool = False
 
     @field_validator("name")
     @classmethod
-    def _validate_name(cls, v: str) -> str:
-        v = v.strip()
-        if not _DNS_NAME_RE.match(v):
-            raise ValueError("name must be 1-255 chars: letters, digits, . _ - * @")
-        return v
+    def _check_name(cls, v: str) -> str:
+        return _validate_name(v)
 
     @field_validator("record_type")
     @classmethod
-    def _validate_record_type(cls, v: str) -> str:
-        if v not in _VALID_RECORD_TYPES:
-            raise ValueError(f"record_type must be one of {sorted(_VALID_RECORD_TYPES)}")
-        return v
+    def _check_record_type(cls, v: str) -> str:
+        return _validate_record_type(v)
 
     @field_validator("value")
     @classmethod
-    def _validate_value(cls, v: str) -> str:
-        v = v.strip()
-        if not v or len(v) > 512:
-            raise ValueError("value must be 1-512 characters")
-        if any(ord(c) < 32 for c in v):
-            raise ValueError("value must not contain control characters")
-        return v
+    def _check_value(cls, v: str) -> str:
+        return _validate_value(v)
 
 
 class DeleteRecordRequest(DNSRecord):
     delete_ptr: bool = False
+
+
+class UpdateRecordRequest(BaseModel):
+    old: DNSRecord
+    new: DNSRecord
+    update_ptr: bool = False
+
+    @field_validator("new")
+    @classmethod
+    def _check_new(cls, v: DNSRecord) -> DNSRecord:
+        return v.model_copy(update={
+            "name": _validate_name(v.name),
+            "record_type": _validate_record_type(v.record_type),
+            "value": _validate_value(v.value),
+        })
+
+
+class UpdateRecordResponse(DNSRecord):
+    ptr_stale: bool = False
 
 
 def _cached_zone_names(db: Session, source: str) -> list[str]:
@@ -73,11 +104,13 @@ def _zone_names(db: Session, target) -> list[str]:
     return cached if cached else target.get_zones()
 
 
-def _undo_provider(target, record: DNSRecord, op: str) -> None:
+def _undo_provider(target, record: DNSRecord, op: str, reverse_to: DNSRecord | None = None) -> None:
     """Best-effort reversal of a provider mutation after a failed DB transaction."""
     try:
         if op == "delete":
             target.delete_record(record)
+        elif op == "update":
+            target.update_record(record, reverse_to)
         else:
             target.add_record(record)
     except Exception as exc:
@@ -201,6 +234,71 @@ def create_record(
         logger.error("DNS create_record failed: %s", e, exc_info=True)
         raise HTTPException(502, f"DNS record creation failed: {e}")
     return record
+
+
+@router.put("/zones/{zone}/records", response_model=UpdateRecordResponse)
+def update_record(
+    zone: str,
+    body: UpdateRecordRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_operator),
+):
+    if body.update_ptr:
+        raise HTTPException(400, "update_ptr is not yet supported (P2)")
+
+    old, new = body.old, body.new
+    if new.zone != old.zone:
+        raise HTTPException(422, "zone cannot change on an edit — delete and recreate instead")
+    if new.source != old.source:
+        raise HTTPException(422, "source cannot change on an edit — delete and recreate instead")
+
+    old.zone = zone
+    new.zone = zone
+
+    providers = get_dns_providers()
+    target = next((p for p in providers if p.source == old.source), None) or (providers[0] if providers else None)
+    if not target:
+        provider_unconfigured("dns")
+
+    row = db.query(CRow).filter_by(
+        name=old.name, record_type=old.record_type, value=old.value,
+        zone=zone, source=old.source,
+    ).first()
+    if row is None:
+        raise HTTPException(404, "record not found")
+
+    try:
+        target.update_record(old, new)
+    except Exception as e:
+        raise_provider_error(e, step="dns", user=current_user)
+
+    # P1 does not follow PTR through an edit; surface staleness so the UI/drift
+    # can flag it instead of silently leaving a mismatched reverse record.
+    ptr_stale = (
+        new.record_type in ("A", "AAAA")
+        and target.supports_ptr
+        and find_reverse_zone(old.value, _zone_names(db, target)) is not None
+    )
+
+    now = utcnow()
+    try:
+        row.name = new.name
+        row.record_type = new.record_type
+        row.value = new.value
+        row.ttl = new.ttl
+        row.synced_at = now
+        write_audit(db, current_user.username, "update", "dns_record",
+                    f"{new.name}/{new.record_type}",
+                    f"{old.name} {old.record_type} {old.value} -> {new.name} {new.record_type} {new.value}",
+                    before=old.model_dump(), after=new.model_dump())
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        _undo_provider(target, new, "update", reverse_to=old)
+        logger.error("DNS update_record cache update failed: %s", e, exc_info=True)
+        raise HTTPException(502, f"DNS record update failed: {e}")
+
+    return UpdateRecordResponse(**new.model_dump(), ptr_stale=ptr_stale)
 
 
 @router.delete("/zones/{zone}/records", status_code=204)

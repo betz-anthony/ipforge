@@ -110,6 +110,9 @@ class _StickyClient:
     def delete(self, *args, **kwargs):
         self._install(); return self._tc.delete(*args, **kwargs)
 
+    def request(self, *args, **kwargs):
+        self._install(); return self._tc.request(*args, **kwargs)
+
 
 def _make_client_for_role(db, role: str):
     return _StickyClient(db, role)

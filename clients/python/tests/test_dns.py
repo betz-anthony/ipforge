@@ -24,3 +24,18 @@ def test_delete_record_sends_record_body(fake):
     m, p, params, body = fake.calls[0]
     assert (m, p) == ("DELETE", "/dns/zones/ex.com/records")
     assert body["name"] == "web" and body["delete_ptr"] is True
+
+
+def test_update_record_sends_old_and_new(fake):
+    old = DNSRecord({"name": "web", "record_type": "A", "value": "10.0.0.5",
+                     "zone": "ex.com", "ttl": 3600, "source": "bind01"})
+    fake.set("PUT", "/dns/zones/ex.com/records",
+             {"name": "web", "record_type": "A", "value": "10.0.0.9",
+              "zone": "ex.com", "ttl": 3600, "source": "bind01", "ptr_stale": True})
+    result = DNS(fake).update_record("ex.com", old, value="10.0.0.9")
+    m, p, params, body = fake.calls[0]
+    assert (m, p) == ("PUT", "/dns/zones/ex.com/records")
+    assert body["old"]["name"] == "web" and body["old"]["value"] == "10.0.0.5"
+    assert body["new"]["value"] == "10.0.0.9" and body["new"]["name"] == "web"
+    assert result.value == "10.0.0.9"
+    assert result.get("ptr_stale") is True

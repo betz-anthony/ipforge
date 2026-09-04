@@ -29,7 +29,7 @@ COVERED = {
     # dns
     ("GET", "/dns/zones"),
     ("GET", "/dns/zones/{}/records"), ("POST", "/dns/zones/{}/records"),
-    ("DELETE", "/dns/zones/{}/records"),
+    ("PUT", "/dns/zones/{}/records"), ("DELETE", "/dns/zones/{}/records"),
     ("GET", "/dns/by-ip/{}"),
     # dhcp
     ("GET", "/dhcp/scopes"),

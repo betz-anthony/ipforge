@@ -552,6 +552,11 @@ export const dnsApi = {
     api.get<Paged<DNSRecord>>(`/dns/zones/${zone}/records`, { params }).then(r => r.data),
   createRecord: (zone: string, data: Omit<DNSRecord, 'zone'> & { register_ptr?: boolean }) =>
     api.post<DNSRecord>(`/dns/zones/${zone}/records`, data).then(r => r.data),
+  updateRecord: (zone: string, oldRecord: DNSRecord, changes: Partial<Pick<DNSRecord, 'name' | 'record_type' | 'value' | 'ttl'>>) =>
+    api.put<DNSRecord & { ptr_stale?: boolean }>(`/dns/zones/${zone}/records`, {
+      old: oldRecord,
+      new: { ...oldRecord, ...changes },
+    }).then(r => r.data),
   deleteRecord: (zone: string, record: DNSRecord, opts?: { delete_ptr?: boolean }) =>
     api.delete(`/dns/zones/${zone}/records`, { data: { ...record, ...opts } }),
   byIp: (address: string) =>
