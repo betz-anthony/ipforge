@@ -1,6 +1,6 @@
 from typing import List, Optional
 
-from ..models import DHCPLease
+from ..models import DHCPLease, Model
 from ..pagination import Page, PageIterator
 
 
@@ -37,6 +37,15 @@ class DHCP:
         params = {"source": source} if source else None
         self._t.request(
             "DELETE", f"/dhcp/scopes/{scope_id}/reservations/{ip_address}", params=params)
+
+    def update_reservation(self, scope_id: str, reservation, source: Optional[str] = None, **changes) -> DHCPLease:
+        old = dict(reservation.raw) if isinstance(reservation, Model) else dict(reservation)
+        new = {**old, **changes}
+        params = {"source": source} if source else None
+        body = {"old": old, "new": new}
+        return DHCPLease(self._t.request(
+            "PUT", f"/dhcp/scopes/{scope_id}/reservations/{old['ip_address']}",
+            params=params, json=body))
 
     def by_ip(self, ip: str) -> List[DHCPLease]:
         return [DHCPLease(x) for x in self._t.request("GET", f"/dhcp/by-ip/{ip}")]

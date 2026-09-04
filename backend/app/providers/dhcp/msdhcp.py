@@ -178,3 +178,31 @@ class MSDHCPProvider(DHCPProvider):
                 f"-Name {ps_quote(name)} "
                 f"-ComputerName {ps_quote(self._dhcp_server)}"
             )
+
+    def update_reservation(self, old: DHCPReservation, new: DHCPReservation) -> None:
+        is_v6 = _is_v6(old.scope_id)
+        # The client identifier (MAC / DUID+IAID) is the reservation's key on
+        # MS DHCP — Set-* cannot change it, so fall back to delete + add.
+        identifier_changed = (
+            (old.client_duid != new.client_duid or old.iaid != new.iaid) if is_v6
+            else old.mac_address != new.mac_address
+        )
+        if identifier_changed:
+            self.delete_reservation(old.scope_id, old.ip_address)
+            new.scope_id = old.scope_id
+            self.add_reservation(new)
+            return
+        if is_v6:
+            self._run(
+                f"Set-DhcpServerv6Reservation -IPAddress {ps_quote(old.ip_address)} "
+                f"-Name {ps_quote(new.name)} "
+                f"-Description {ps_quote(new.description)} "
+                f"-ComputerName {ps_quote(self._dhcp_server)}"
+            )
+        else:
+            self._run(
+                f"Set-DhcpServerv4Reservation -IPAddress {ps_quote(old.ip_address)} "
+                f"-Name {ps_quote(new.name)} "
+                f"-Description {ps_quote(new.description)} "
+                f"-ComputerName {ps_quote(self._dhcp_server)}"
+            )

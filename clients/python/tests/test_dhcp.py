@@ -1,3 +1,4 @@
+from ipforge_client.models import DHCPLease
 from ipforge_client.resources.dhcp import DHCP
 
 
@@ -23,3 +24,16 @@ def test_add_reservation_with_source(fake):
 def test_delete_reservation(fake):
     DHCP(fake).delete_reservation("scope1", "10.0.0.5")
     assert fake.calls[0][:2] == ("DELETE", "/dhcp/scopes/scope1/reservations/10.0.0.5")
+
+
+def test_update_reservation_sends_old_and_new(fake):
+    old = DHCPLease({"scope_id": "scope1", "ip_address": "10.0.0.5",
+                     "mac_address": "aa:bb:cc:dd:ee:ff", "name": "old"})
+    fake.set("PUT", "/dhcp/scopes/scope1/reservations/10.0.0.5",
+             {"ip_address": "10.0.0.5", "name": "new", "dns_stale": True})
+    result = DHCP(fake).update_reservation("scope1", old, source="kea01", name="new")
+    m, p, params, body = fake.calls[0]
+    assert (m, p) == ("PUT", "/dhcp/scopes/scope1/reservations/10.0.0.5")
+    assert params == {"source": "kea01"}
+    assert body["old"]["name"] == "old" and body["new"]["name"] == "new"
+    assert result.get("dns_stale") is True

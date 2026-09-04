@@ -1,6 +1,6 @@
 import { useMemo, useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Plus, X, Search, ArrowUp, ArrowDown, ArrowUpDown, Network } from 'lucide-react'
+import { Plus, X, Pencil, Search, ArrowUp, ArrowDown, ArrowUpDown, Network } from 'lucide-react'
 import { dhcpApi, providersApi, addressesApi, subnetsApi, type DHCPReservation, type DHCPScope } from '../api/client'
 import { rangeSize, ipInCidr, ipToNum, isValidIPv4, isValidIPv6, isValidEUI48, isValidEUI64 } from '../utils/ip'
 import { usePagedQuery } from '../hooks/usePagedQuery'
@@ -32,6 +32,8 @@ export default function DHCP() {
   const [viewMode, setViewMode]           = useState<ViewMode>('combined')
   const [selectedLease, setSelectedLease] = useState<DHCPReservation | null>(null)
   const [confirmIp, setConfirmIp] = useState<string | null>(null)
+  const [editingLease, setEditingLease] = useState<DHCPReservation | null>(null)
+  const [editForm, setEditForm]         = useState(emptyForm)
   const { showToast } = useToast()
   const [editingNotes, setEditingNotes]       = useState(false)
   const [notesValue, setNotesValue]           = useState('')
@@ -87,6 +89,30 @@ export default function DHCP() {
       setForm(emptyForm)
       setDnsLink({ register_dns: false, dns_zone: '' })
       setShowForm(false)
+    },
+  })
+
+  const updateMutation = useMutation({
+    mutationFn: () => dhcpApi.updateReservation(
+      selectedScope!.scope_id, editingLease!,
+      {
+        mac_address: editForm.mac_address, client_duid: editForm.client_duid,
+        iaid: editForm.iaid, name: editForm.name, description: editForm.description,
+      },
+      selectedScope!.source,
+    ),
+    onSuccess: (result) => {
+      qc.invalidateQueries({ queryKey: ['dhcp-leases', selectedScope?.scope_id, selectedScope?.source] })
+      setEditingLease(null)
+      if (result.dns_stale) {
+        showToast('Reservation updated — the matching DNS record was not updated. Check Drift.', 'success')
+      } else {
+        showToast('Reservation updated', 'success')
+      }
+    },
+    onError: (err: any) => {
+      const e = apiError(err, 'Update failed')
+      showToast(e.message, 'error', { hint: e.hint, detail: e.detail })
     },
   })
 
@@ -177,6 +203,38 @@ export default function DHCP() {
     (e: React.ChangeEvent<HTMLInputElement>) =>
       setForm(f => ({ ...f, [key]: key === 'iaid' ? Number(e.target.value) : e.target.value }))
 
+  const setEdit = (key: keyof typeof emptyForm) =>
+    (e: React.ChangeEvent<HTMLInputElement>) =>
+      setEditForm(f => ({ ...f, [key]: key === 'iaid' ? Number(e.target.value) : e.target.value }))
+
+  const startEdit = (l: DHCPReservation) => {
+    setShowForm(false)
+    setEditingLease(l)
+    setEditForm({
+      ip_address: l.ip_address, mac_address: l.mac_address, client_duid: l.client_duid,
+      iaid: l.iaid, name: l.name, description: l.description,
+    })
+  }
+
+  const editMacError = useMemo(() => {
+    if (isV6(selectedScope)) {
+      const duid = editForm.client_duid
+      if (!duid) return null
+      if (!isValidEUI48(duid) && !isValidEUI64(duid))
+        return 'Client DUID must be EUI-48 or EUI-64 format'
+    } else {
+      const mac = editForm.mac_address
+      if (!mac) return null
+      if (!isValidEUI48(mac))
+        return 'MAC must be EUI-48 (AA:BB:CC:DD:EE:FF, AA-BB-CC-DD-EE-FF, or AABB.CCDD.EEFF)'
+    }
+    return null
+  }, [editForm.mac_address, editForm.client_duid, selectedScope])
+
+  const editCanSubmit = editForm.name && !editMacError && (
+    isV6(selectedScope) ? editForm.client_duid : editForm.mac_address
+  )
+
   const ipError = useMemo(() => {
     const ip = form.ip_address
     if (!ip) return null
@@ -221,7 +279,7 @@ export default function DHCP() {
       className={'panel-list-item' + (
         selectedScope?.scope_id === s.scope_id && selectedScope?.source === s.source ? ' active' : ''
       )}
-      onClick={() => { setSelectedScope(s); setShowForm(false); setForm(emptyForm); setDnsLink({ register_dns: false, dns_zone: '' }); setSelectedLease(null) }}
+      onClick={() => { setSelectedScope(s); setShowForm(false); setForm(emptyForm); setDnsLink({ register_dns: false, dns_zone: '' }); setSelectedLease(null); setEditingLease(null) }}
     >
       <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
         <span className={`badge ${s.ip_version === 6 ? 'badge-blue' : 'badge-green'}`} style={{ fontSize: '0.6rem' }}>
@@ -312,7 +370,7 @@ export default function DHCP() {
                 </div>
                 <div className="page-header-actions">
                   {!showForm && (
-                    <button className="btn-primary btn-sm" onClick={() => setShowForm(true)}>
+                    <button className="btn-primary btn-sm" onClick={() => { setShowForm(true); setEditingLease(null) }}>
                       <Plus size={13} /> Add Reservation
                     </button>
                   )}
@@ -416,6 +474,76 @@ export default function DHCP() {
                     {addMutation.isError && (
                       <span className="feedback-error">
                         {String((addMutation.error as Error).message)}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {editingLease && (
+                <div className="inline-form">
+                  <div className="form-grid">
+                    <div className="form-field">
+                      <label htmlFor="dhcp-edit-ip">IP Address</label>
+                      <input id="dhcp-edit-ip" value={editForm.ip_address} disabled />
+                    </div>
+
+                    {isV6(selectedScope) ? (
+                      <>
+                        <div className="form-field">
+                          <label htmlFor="dhcp-edit-duid">Client DUID</label>
+                          <input
+                            id="dhcp-edit-duid"
+                            value={editForm.client_duid}
+                            onChange={setEdit('client_duid')}
+                          />
+                          {editMacError && <span className="feedback-error" style={{ fontSize: '0.72rem' }}>{editMacError}</span>}
+                        </div>
+                        <div className="form-field">
+                          <label htmlFor="dhcp-edit-iaid">IAID</label>
+                          <input
+                            id="dhcp-edit-iaid"
+                            type="number"
+                            value={editForm.iaid || ''}
+                            onChange={setEdit('iaid')}
+                          />
+                        </div>
+                      </>
+                    ) : (
+                      <div className="form-field">
+                        <label htmlFor="dhcp-edit-mac">MAC Address</label>
+                        <input
+                          id="dhcp-edit-mac"
+                          value={editForm.mac_address}
+                          onChange={setEdit('mac_address')}
+                        />
+                        {editMacError && <span className="feedback-error" style={{ fontSize: '0.72rem' }}>{editMacError}</span>}
+                      </div>
+                    )}
+
+                    <div className="form-field">
+                      <label htmlFor="dhcp-edit-name">Hostname / Name</label>
+                      <input id="dhcp-edit-name" value={editForm.name} onChange={setEdit('name')} />
+                    </div>
+                    <div className="form-field">
+                      <label htmlFor="dhcp-edit-desc">Description</label>
+                      <input id="dhcp-edit-desc" value={editForm.description} onChange={setEdit('description')} />
+                    </div>
+                  </div>
+                  <div className="form-actions">
+                    <button
+                      className="btn-primary btn-sm"
+                      onClick={() => updateMutation.mutate()}
+                      disabled={updateMutation.isPending || !editCanSubmit}
+                    >
+                      {updateMutation.isPending ? 'Saving…' : 'Save'}
+                    </button>
+                    <button className="btn-ghost btn-sm" onClick={() => setEditingLease(null)}>
+                      <X size={13} /> Cancel
+                    </button>
+                    {updateMutation.isError && (
+                      <span className="feedback-error">
+                        {String((updateMutation.error as Error).message)}
                       </span>
                     )}
                   </div>
@@ -527,7 +655,14 @@ export default function DHCP() {
                           )}
                           <td>{l.name || <span className="text-muted">—</span>}</td>
                           <td>{l.description || <span className="text-muted">—</span>}</td>
-                          <td onClick={e => e.stopPropagation()}>
+                          <td onClick={e => e.stopPropagation()} style={{ display: 'flex', gap: '0.3rem' }}>
+                            <button
+                              className="btn-ghost btn-sm"
+                              aria-label={`Edit reservation ${l.ip_address}`}
+                              onClick={() => startEdit(l)}
+                            >
+                              <Pencil size={12} />
+                            </button>
                             <button
                               className="btn-danger btn-sm"
                               onClick={() => setConfirmIp(l.ip_address)}

@@ -123,6 +123,25 @@ def test_update_reservation_name_v6_preserves_duid():
     assert host["ip-addresses"] == ["2001:db8::5"]
 
 
+def test_update_reservation_deletes_then_adds():
+    p = _provider_with_stub({
+        ("subnet4-list", "dhcp4"): {"subnets": [{"subnet": "10.0.0.0/24", "id": 1, "pools": []}]},
+        ("reservation-del", "dhcp4"): {},
+        ("reservation-add", "dhcp4"): {},
+    })
+    old = DHCPReservation(scope_id="10.0.0.0/24", ip_address="10.0.0.5",
+                          mac_address="aa:bb:cc:dd:ee:ff", name="old")
+    new = DHCPReservation(scope_id="10.0.0.0/24", ip_address="10.0.0.5",
+                          mac_address="aa:bb:cc:dd:ee:ff", name="new")
+    p.update_reservation(old, new)
+    cmds = [c for c, _, _ in p.calls]
+    assert cmds.index("reservation-del") < cmds.index("reservation-add")
+    del_call = next(c for c in p.calls if c[0] == "reservation-del")
+    assert del_call[2]["ip-address"] == "10.0.0.5"
+    add_call = next(c for c in p.calls if c[0] == "reservation-add")
+    assert add_call[2]["reservation"]["hostname"] == "new"
+
+
 def test_delete_reservation_v6_routes_to_dhcp6():
     p = _provider_with_stub({
         ("subnet6-list", "dhcp6"): {"subnets": [{"subnet": "2001:db8::/64", "id": 2, "pools": []}]},

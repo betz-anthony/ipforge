@@ -41,3 +41,6 @@ class DHCPProvider(ABC):
 
     @abstractmethod
     def update_reservation_name(self, scope_id: str, ip_address: str, name: str) -> None: ...
+
+    @abstractmethod
+    def update_reservation(self, old: DHCPReservation, new: DHCPReservation) -> None: ...

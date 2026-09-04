@@ -196,3 +196,9 @@ class KeaDHCPProvider(DHCPProvider):
         existing.scope_id = scope_id
         existing.name = name
         self.add_reservation(existing)
+
+    def update_reservation(self, old: DHCPReservation, new: DHCPReservation) -> None:
+        # Kea has no in-place reservation update — delete and re-add.
+        self.delete_reservation(old.scope_id, old.ip_address)
+        new.scope_id = old.scope_id
+        self.add_reservation(new)

@@ -93,3 +93,8 @@ class PiholeDHCPProvider(DHCPProvider):
                 self._req("PUT", f"/config/dhcp/hosts/{quote(new_entry, safe='')}")
                 return
         raise RuntimeError(f"No static reservation found for {ip_address}")
+
+    def update_reservation(self, old: DHCPReservation, new: DHCPReservation) -> None:
+        # No in-place update on the config-list API — delete and re-add.
+        self.delete_reservation(old.scope_id, old.ip_address)
+        self.add_reservation(new)

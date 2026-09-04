@@ -1,5 +1,6 @@
 import logging
 from fastapi import APIRouter, HTTPException, Depends, Query
+from pydantic import BaseModel
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
 from app.database import get_db
@@ -190,6 +191,82 @@ def add_reservation(
                 after={**reservation.model_dump(), "dns_registered": a_record is not None})
     db.commit()
     return reservation
+
+
+class UpdateReservationRequest(BaseModel):
+    old: DHCPReservation
+    new: DHCPReservation
+
+
+class UpdateReservationResponse(DHCPReservation):
+    dns_stale: bool = False
+
+
+@router.put("/scopes/{scope_id:path}/reservations/{ip_address}", response_model=UpdateReservationResponse)
+def update_reservation(
+    scope_id: str,
+    ip_address: str,
+    body: UpdateReservationRequest,
+    source: str = Query(""),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_operator),
+):
+    old, new = body.old, body.new
+    if new.ip_address != old.ip_address:
+        raise HTTPException(422, "ip_address cannot change on an edit — delete and recreate instead")
+
+    old.scope_id = scope_id
+    old.ip_address = ip_address
+    new.scope_id = scope_id
+    new.ip_address = ip_address
+
+    providers = get_dhcp_providers()
+    target = next((p for p in providers if p.source == source), None) or (providers[0] if providers else None)
+    if not target:
+        provider_unconfigured("dhcp")
+
+    lease = db.query(CachedDHCPLease).filter_by(
+        scope_id=scope_id, ip_address=ip_address, source=target.source,
+    ).first()
+    if lease is None:
+        raise HTTPException(404, "reservation not found")
+
+    try:
+        target.update_reservation(old, new)
+    except Exception as e:
+        raise_provider_error(e, step="dhcp", user=current_user)
+
+    # DHCP-DNS-LINK-001: a hostname change can leave a co-managed A/AAAA
+    # record stale. P3 does not follow it through — surface staleness like
+    # DNS's ptr_stale, so the UI/drift can flag it instead of hiding it.
+    dns_stale = (
+        new.name != old.name
+        and db.query(CachedDNSRecord).filter_by(name=old.name, value=ip_address).first() is not None
+    )
+
+    now = utcnow()
+    try:
+        lease.mac_address = new.mac_address
+        lease.client_duid = new.client_duid
+        lease.iaid = new.iaid
+        lease.name = new.name
+        lease.description = new.description
+        lease.synced_at = now
+        write_audit(db, current_user.username, "update", "dhcp_reservation",
+                    ip_address, f"{ip_address} ({old.name} -> {new.name})",
+                    before=old.model_dump(), after=new.model_dump())
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        try:
+            target.update_reservation(new, old)
+        except Exception as exc:
+            logger.warning("provider update_reservation undo failed for %s/%s: %s",
+                           scope_id, ip_address, exc)
+        logger.error("DHCP update_reservation cache update failed: %s", e, exc_info=True)
+        raise HTTPException(502, f"DHCP reservation update failed: {e}")
+
+    return UpdateReservationResponse(**new.model_dump(), dns_stale=dns_stale)
 
 
 @router.delete("/scopes/{scope_id:path}/reservations/{ip_address}", status_code=204)

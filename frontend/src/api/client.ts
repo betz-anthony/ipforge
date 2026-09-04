@@ -530,6 +530,16 @@ export const dhcpApi = {
           : {}),
       },
     }).then(r => r.data),
+  updateReservation: (
+    scope_id: string, oldReservation: DHCPReservation,
+    changes: Partial<Pick<DHCPReservation, 'mac_address' | 'client_duid' | 'iaid' | 'name' | 'description'>>,
+    source: string,
+  ) =>
+    api.put<DHCPReservation & { dns_stale?: boolean }>(
+      `/dhcp/scopes/${scope_id}/reservations/${oldReservation.ip_address}`,
+      { old: oldReservation, new: { ...oldReservation, ...changes } },
+      { params: { source } },
+    ).then(r => r.data),
   deleteReservation: (scope_id: string, ip_address: string, source: string) =>
     api.delete(`/dhcp/scopes/${scope_id}/reservations/${ip_address}`, { params: { source } }),
   byIp: (address: string) =>

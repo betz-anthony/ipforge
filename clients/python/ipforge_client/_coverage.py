@@ -35,7 +35,7 @@ COVERED = {
     ("GET", "/dhcp/scopes"),
     ("GET", "/dhcp/scopes/{}/leases"),
     ("POST", "/dhcp/scopes/{}/reservations"),
-    ("DELETE", "/dhcp/scopes/{}/reservations/{}"),
+    ("PUT", "/dhcp/scopes/{}/reservations/{}"), ("DELETE", "/dhcp/scopes/{}/reservations/{}"),
     ("GET", "/dhcp/by-ip/{}"),
     # read-only
     ("GET", "/drift"),
