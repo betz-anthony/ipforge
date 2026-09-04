@@ -81,3 +81,26 @@ def test_gcp_add_record_change():
     c.zone.return_value = zone
     _gcp(c).add_record(DNSRecord(name="web.example.com", record_type="A", value="10.0.0.9", zone="example.com", ttl=120))
     assert zone.changes.called
+
+
+def test_gcp_update_record_single_changes_request():
+    c = MagicMock()
+    zone = MagicMock()
+    changes = MagicMock()
+    zone.changes.return_value = changes
+    c.list_zones.return_value = [SimpleNamespace(name="z1", dns_name="example.com.")]
+    c.zone.return_value = zone
+
+    old = DNSRecord(name="web.example.com", record_type="A", value="10.0.0.5", zone="example.com", ttl=120)
+    new = DNSRecord(name="web.example.com", record_type="A", value="10.0.0.9", zone="example.com", ttl=120)
+    _gcp(c).update_record(old, new)
+
+    # one Changes object carrying both operations, one create() call — atomic
+    # server-side, unlike two separate add/delete changes requests.
+    assert zone.changes.call_count == 1
+    assert changes.delete_record_set.call_count == 1
+    assert changes.add_record_set.call_count == 1
+    assert changes.create.call_count == 1
+    rrset_calls = [c.args for c in zone.resource_record_set.call_args_list]
+    assert ("web.example.com.", "A", 120, ["10.0.0.5"]) in rrset_calls
+    assert ("web.example.com.", "A", 120, ["10.0.0.9"]) in rrset_calls

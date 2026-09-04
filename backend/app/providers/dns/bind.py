@@ -92,5 +92,10 @@ class BINDDNSProvider(DNSProvider):
         self._send_update(update)
 
     def update_record(self, old: DNSRecord, new: DNSRecord) -> None:
-        self.delete_record(old)
-        self.add_record(new)
+        # One RFC 2136 message carrying both the delete and the add — applied
+        # atomically by the server, unlike two separate delete_record/add_record
+        # round-trips which can leave the zone missing the record if interrupted.
+        update = self._update(old.zone)
+        update.delete(old.name, old.record_type, old.value)
+        update.add(new.name, new.ttl, new.record_type, new.value)
+        self._send_update(update)

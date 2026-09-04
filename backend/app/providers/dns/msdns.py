@@ -124,6 +124,41 @@ Get-DnsServerResourceRecord -ZoneName {ps_quote(zone)} -ComputerName {ps_quote(s
             f"-ComputerName {ps_quote(self._dns_server)}"
         )
 
+    # RecordData field name + whether it's an IPAddress object (needs ::Parse
+    # and .IPAddressToString to compare/assign) vs a plain string field.
+    _RECORD_DATA_FIELD = {
+        "A": ("IPv4Address", True),
+        "AAAA": ("IPv6Address", True),
+        "PTR": ("PtrDomainName", False),
+        "CNAME": ("HostNameAlias", False),
+    }
+
     def update_record(self, old: DNSRecord, new: DNSRecord) -> None:
-        self.delete_record(old)
-        self.add_record(new)
+        field = self._RECORD_DATA_FIELD.get(old.record_type)
+        if old.record_type != new.record_type or field is None:
+            # No atomic clone path across record types (different RecordData
+            # shape) — fall back to the two-step delete+add.
+            self.delete_record(old)
+            self.add_record(new)
+            return
+
+        field_name, is_ip = field
+        compare_suffix = ".IPAddressToString" if is_ip else ""
+        new_value_expr = (
+            f"[System.Net.IPAddress]::Parse({ps_quote(new.value)})" if is_ip else ps_quote(new.value)
+        )
+        ttl = f"([System.TimeSpan]::FromSeconds({new.ttl}))"
+        self._run(
+            f"$rec = Get-DnsServerResourceRecord -ZoneName {ps_quote(old.zone)} "
+            f"-Name {ps_quote(old.name)} -RRType {ps_quote(old.record_type)} "
+            f"-ComputerName {ps_quote(self._dns_server)} | "
+            f"Where-Object {{ $_.RecordData.{field_name}{compare_suffix} -eq {ps_quote(old.value)} }} | "
+            "Select-Object -First 1\n"
+            "if (-not $rec) { throw 'record not found' }\n"
+            "$new = $rec.Clone()\n"
+            f"$new.HostName = {ps_quote(new.name)}\n"
+            f"$new.RecordData.{field_name} = {new_value_expr}\n"
+            f"$new.TimeToLive = {ttl}\n"
+            f"Set-DnsServerResourceRecord -ZoneName {ps_quote(old.zone)} "
+            f"-OldInputObject $rec -NewInputObject $new -ComputerName {ps_quote(self._dns_server)}"
+        )

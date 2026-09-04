@@ -69,5 +69,14 @@ class GCPDNSProvider(DNSProvider):
         self._change(record, "delete")
 
     def update_record(self, old: DNSRecord, new: DNSRecord) -> None:
-        self.delete_record(old)
-        self.add_record(new)
+        # One Changes request carrying both deletions and additions is atomic
+        # server-side — unlike two separate add_record/delete_record calls,
+        # which can leave the zone missing the record if interrupted.
+        client = self._client()
+        gz = self._zone(client, old.zone)
+        old_rrset = gz.resource_record_set(_dotted(old.name), old.record_type, old.ttl, [old.value])
+        new_rrset = gz.resource_record_set(_dotted(new.name), new.record_type, new.ttl, [new.value])
+        changes = gz.changes()
+        changes.delete_record_set(old_rrset)
+        changes.add_record_set(new_rrset)
+        changes.create()
