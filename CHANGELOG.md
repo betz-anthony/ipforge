@@ -7,6 +7,45 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-09-05
+
+### Added
+
+**DNS/DHCP record editing**
+- DNS records and DHCP reservations can now be edited in place instead of
+  delete-and-recreate. Zone/scope/IP identity stays locked; PTR records and
+  linked DNS records can follow through on request; MS DNS, BIND, and GCP
+  DNS updates are atomic where the provider API supports it.
+- DHCP reservations can also register a matching DNS record inline
+  (previously only available through the allocation flow).
+
+**Outbound webhooks**
+- Every audited write fires a signed HTTP webhook
+  (`X-IPForge-Signature-256`), delivered via a transactional outbox with
+  retry/backoff and dead-lettering. Settings → Webhooks UI for endpoint
+  CRUD, test ping, and a paginated delivery log with redeliver.
+
+**Python client library**
+- `ipforge-client` on PyPI — a typed sync wrapper over the full `/api/v1`
+  surface (subnets, addresses, VLANs, DNS, DHCP, drift, discovery, audit),
+  with pagination iterators and a typed exception hierarchy.
+
+**Drift detection**
+- Cross-DNS-provider conflict detection (`dns_source_conflict`): flags an IP
+  carrying an A/AAAA record in more than one configured DNS provider.
+
+**Accessibility**
+- WCAG 2.1 AA: keyboard-navigable tables, dialog focus traps, ARIA labeling
+  across all data tables and forms, contrast fixes in both themes.
+
+**Operations**
+- `scripts/backup.sh` / `scripts/restore.sh` — Postgres dump/restore for
+  both Docker Compose and Kubernetes, with migration-ordering guardrails.
+- One-command demo environment (`scripts/demo-up.sh`) against real BIND,
+  Kea, and Pi-hole backends.
+- Published, reproducible scale benchmark: 100k addresses / 500 subnets on
+  Postgres 16 (see `docs/scaling.md`).
+
 ## [1.1.0] - 2026-06-10
 
 ### Added
@@ -80,6 +119,7 @@ Fernet-encrypted at rest)
 - Docker Compose (prod images from `backend/Dockerfile.prod` +
   `frontend/Dockerfile`), Kubernetes/Kustomize manifests, public images on GHCR.
 
-[Unreleased]: https://github.com/betz-anthony/ipforge/compare/v1.1.0...HEAD
+[Unreleased]: https://github.com/betz-anthony/ipforge/compare/v1.2.0...HEAD
+[1.2.0]: https://github.com/betz-anthony/ipforge/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/betz-anthony/ipforge/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/betz-anthony/ipforge/releases/tag/v1.0.0
