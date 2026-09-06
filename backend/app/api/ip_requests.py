@@ -1,4 +1,4 @@
-"""IP-REQUEST-001 — request/approval workflow API."""
+"""IP-REQUEST-001 — request/approval workflow."""
 from fastapi import APIRouter, Depends, HTTPException, Response
 from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import desc

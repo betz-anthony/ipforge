@@ -1,4 +1,4 @@
-"""IP-REQUEST-001 — request/approval workflow model."""
+"""IP-REQUEST-001 — request/approval workflow."""
 from datetime import datetime
 from typing import Literal
 from sqlalchemy import String, Integer, Text, DateTime, ForeignKey, Index
