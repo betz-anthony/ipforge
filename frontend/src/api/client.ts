@@ -227,6 +227,7 @@ export interface SubnetForecast {
 }
 
 export const subnetsApi = {
+  get: (id: number) => api.get<Subnet>(`/subnets/${id}`).then(r => r.data),
   list: () => api.get<Subnet[]>('/subnets').then(r => r.data),
   forecast: (id: number) => api.get<SubnetForecast>(`/subnets/${id}/forecast`).then(r => r.data),
   forecasts: (limit = 5) =>
@@ -392,6 +393,7 @@ export const tagsApi = {
 }
 
 export const addressesApi = {
+  get: (id: number) => api.get<IPAddress>(`/addresses/${id}`).then(r => r.data),
   list: (params?: {
     subnet_id?: number
     status?: string

@@ -1,9 +1,12 @@
 import { useState, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { Search } from 'lucide-react'
 import { searchApi } from '../api/client'
+import { rowActivation } from '../utils/a11y'
 
 export default function SearchPage() {
+  const navigate = useNavigate()
   const [input, setInput]           = useState('')
   const [debouncedQ, setDebouncedQ] = useState('')
 
@@ -64,7 +67,7 @@ export default function SearchPage() {
                   </thead>
                   <tbody>
                     {data.subnets.map(s => (
-                      <tr key={s.id}>
+                      <tr key={s.id} className="clickable" {...rowActivation(() => navigate(`/subnets?edit=${s.id}`))}>
                         <td><span className="font-mono">{s.cidr}</span></td>
                         <td>{s.name}</td>
                         <td><span className="badge badge-blue">IPv{s.ip_version}</span></td>
@@ -88,7 +91,7 @@ export default function SearchPage() {
                   </thead>
                   <tbody>
                     {data.addresses.map(a => (
-                      <tr key={a.id}>
+                      <tr key={a.id} className="clickable" {...rowActivation(() => navigate(`/addresses?edit=${a.id}`))}>
                         <td><span className="font-mono">{a.address}</span></td>
                         <td>{a.hostname ?? <span className="text-muted">—</span>}</td>
                         <td><span className="badge badge-blue">{a.status}</span></td>
@@ -112,7 +115,9 @@ export default function SearchPage() {
                   </thead>
                   <tbody>
                     {data.leases.map(l => (
-                      <tr key={`${l.source}:${l.ip_address}`}>
+                      <tr key={`${l.source}:${l.ip_address}`} className="clickable" {...rowActivation(() => navigate(
+                        `/dhcp?scope=${encodeURIComponent(l.scope_id)}&source=${encodeURIComponent(l.source)}&ip=${encodeURIComponent(l.ip_address)}`
+                      ))}>
                         <td><span className="font-mono">{l.ip_address}</span></td>
                         <td>{l.name ?? <span className="text-muted">—</span>}</td>
                         <td><span className="font-mono">{l.mac_address ?? <span className="text-muted">—</span>}</span></td>
@@ -136,7 +141,9 @@ export default function SearchPage() {
                   </thead>
                   <tbody>
                     {data.records.map(r => (
-                      <tr key={`${r.zone}:${r.record_type}:${r.name}:${r.value}`}>
+                      <tr key={`${r.zone}:${r.record_type}:${r.name}:${r.value}`} className="clickable" {...rowActivation(() => navigate(
+                        `/dns?zone=${encodeURIComponent(r.zone)}&source=${encodeURIComponent(r.source)}&name=${encodeURIComponent(r.name)}&type=${encodeURIComponent(r.record_type)}&value=${encodeURIComponent(r.value)}`
+                      ))}>
                         <td><span className="font-mono">{r.name}</span></td>
                         <td><span className="badge badge-gray">{r.record_type}</span></td>
                         <td className="col-value"><span className="font-mono">{r.value}</span></td>

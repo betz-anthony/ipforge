@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Plus, X, Download, Upload, Server, ArrowUp, ArrowDown, ArrowUpDown } from 'lucide-react'
 import { addressesApi, subnetsApi, dnsApi, dhcpApi, scanHistoryApi, importExportApi, customFieldsApi, discoveryApi, type IPAddress, type ImportResult, type DeletePreview } from '../api/client'
@@ -40,6 +41,7 @@ export default function Addresses() {
   const [filterStatus, setFilter]             = useState('')
   const [filterSubnet, setFilterSubnet]       = useState<number | ''>('')
   const [selectedAddress, setSelectedAddress] = useState<IPAddress | null>(null)
+  const [searchParams, setSearchParams] = useSearchParams()
   const [editForm, setEditForm]               = useState(emptyEditForm)
   const [cfValues, setCfValues]               = useState<Record<string, string>>({})
   const [tagsText, setTagsText]               = useState('')
@@ -208,6 +210,13 @@ export default function Addresses() {
     setCfValues(a.custom_fields ?? {})
     setTagsText((a.tags ?? []).join(', '))
   }
+
+  useEffect(() => {
+    const editId = searchParams.get('edit')
+    if (!editId) return
+    addressesApi.get(Number(editId)).then(openDrawer).catch(() => {})
+    setSearchParams(prev => { prev.delete('edit'); return prev }, { replace: true })
+  }, [searchParams])
 
 
   const SOURCE_LABEL: Record<string, string> = {

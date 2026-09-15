@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect, useRef } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Plus, X, Scan, AlertTriangle, GitBranch, Download, Upload, Network } from 'lucide-react'
 import { subnetsApi, dhcpApi, addressesApi, scanApi, settingsApi, importExportApi, grantsApi, groupsApi, usersApi, vlansApi, customFieldsApi, providersApi, type Subnet, type DHCPScope, type Collision, type ImportResult } from '../api/client'
@@ -90,6 +91,7 @@ export default function Subnets() {
   const [showForm, setShowForm]             = useState(false)
   const [form, setForm]                     = useState(emptyForm)
   const [selectedSubnet, setSelectedSubnet] = useState<Subnet | null>(null)
+  const [searchParams, setSearchParams] = useSearchParams()
   const [editForm, setEditForm]             = useState(emptyEditForm)
   const [cfValues, setCfValues]             = useState<Record<string, string>>({})
   const [tagsText, setTagsText]             = useState('')
@@ -346,6 +348,13 @@ export default function Subnets() {
     setShowRangePicker(false)
     setRangeForm({ start_ip: '', end_ip: '' })
   }
+
+  useEffect(() => {
+    const editId = searchParams.get('edit')
+    if (!editId) return
+    subnetsApi.get(Number(editId)).then(openDrawer).catch(() => {})
+    setSearchParams(prev => { prev.delete('edit'); return prev }, { replace: true })
+  }, [searchParams])
 
   const collisionCountForSubnet = (subnet: Subnet): number => {
     if (!allUnresolvedCollisions) return 0

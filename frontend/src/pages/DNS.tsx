@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect, useRef } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { SlidersHorizontal, Plus, X, Trash2, Pencil, Globe } from 'lucide-react'
 import { dnsApi, providersApi, addressesApi, subnetsApi, type DNSRecord, type DNSZone } from '../api/client'
@@ -132,6 +133,7 @@ function PtrCheckbox({ label, checked, onChange, disabled = false, disabledNote 
 
 export default function DNS() {
   const [selectedZone, setSelectedZone]         = useState<string | null>(null)
+  const [searchParams, setSearchParams] = useSearchParams()
   const [selectedZoneSource, setSelectedZoneSource] = useState<string | null>(null)
   const [typeFilter, setTypeFilter]         = useState<string>('')
   const [showForm, setShowForm]             = useState(false)
@@ -397,6 +399,24 @@ export default function DNS() {
     setEditForm({ name: r.name, record_type: r.record_type, value: r.value, ttl: r.ttl, source: r.source })
     setEditNameError(''); setEditValueError(''); setEditUpdatePtr(false)
   }
+
+  useEffect(() => {
+    const zone   = searchParams.get('zone')
+    const source = searchParams.get('source')
+    const name   = searchParams.get('name')
+    const type   = searchParams.get('type')
+    const value  = searchParams.get('value')
+    if (!zone || !source || !name || !type || !value) return
+    resetZone(zone, source)
+    dnsApi.listRecords(zone, { q: name, limit: 100 }).then(page => {
+      const match = page.items.find(r => r.name === name && r.record_type === type && r.value === value)
+      if (match) startEdit(match)
+    }).catch(() => {})
+    setSearchParams(prev => {
+      prev.delete('zone'); prev.delete('source'); prev.delete('name'); prev.delete('type'); prev.delete('value')
+      return prev
+    }, { replace: true })
+  }, [searchParams])
 
   const setEdit = (key: keyof typeof emptyForm) =>
     (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>

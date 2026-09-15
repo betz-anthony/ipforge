@@ -1,4 +1,5 @@
 import { useMemo, useState, useEffect, useRef } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Plus, X, Pencil, Search, ArrowUp, ArrowDown, ArrowUpDown, Network } from 'lucide-react'
 import { dhcpApi, providersApi, addressesApi, subnetsApi, type DHCPReservation, type DHCPScope } from '../api/client'
@@ -26,6 +27,7 @@ const emptyForm = {
 
 export default function DHCP() {
   const [selectedScope, setSelectedScope] = useState<DHCPScope | null>(null)
+  const [searchParams, setSearchParams] = useSearchParams()
   const [showForm, setShowForm]           = useState(false)
   const [form, setForm]                   = useState(emptyForm)
   const [dnsLink, setDnsLink]             = useState({ register_dns: false, dns_zone: '' })
@@ -220,6 +222,22 @@ export default function DHCP() {
       iaid: l.iaid, name: l.name, description: l.description,
     })
   }
+
+  useEffect(() => {
+    const scopeId = searchParams.get('scope')
+    const source  = searchParams.get('source')
+    const ip      = searchParams.get('ip')
+    if (!scopeId || !source || !ip || !scopes) return
+    const scope = scopes.find(s => s.scope_id === scopeId && s.source === source)
+    if (!scope) return
+    setSelectedScope(scope); setShowForm(false); setForm(emptyForm)
+    setDnsLink({ register_dns: false, dns_zone: '' }); setSelectedLease(null); setEditingLease(null)
+    dhcpApi.byIp(ip).then(matches => {
+      const match = matches.find(l => l.source === source)
+      if (match) startEdit(match)
+    }).catch(() => {})
+    setSearchParams(prev => { prev.delete('scope'); prev.delete('source'); prev.delete('ip'); return prev }, { replace: true })
+  }, [searchParams, scopes])
 
   const editMacError = useMemo(() => {
     if (isV6(selectedScope)) {
