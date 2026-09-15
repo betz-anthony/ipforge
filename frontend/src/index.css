@@ -221,6 +221,7 @@ tbody td {
   color: var(--text); font-size: 0.8125rem;
   border-bottom: 1px solid var(--border);
 }
+.col-value { max-width: 28rem; word-break: break-all; }
 tbody tr:last-child td { border-bottom: none; }
 tbody tr:hover td { background: var(--surface-2); }
 tbody tr.row-selected td {

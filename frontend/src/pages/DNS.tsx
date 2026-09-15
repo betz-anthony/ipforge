@@ -444,7 +444,7 @@ export default function DNS() {
                   {r.record_type}
                 </span>
               </td>
-              <td><span className="font-mono">{r.value}</span></td>
+              <td className="col-value"><span className="font-mono">{r.value}</span></td>
               <td><span className="text-muted">{r.ttl}</span></td>
               {multiProvider && (
                 <td>

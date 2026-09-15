@@ -139,7 +139,7 @@ export default function SearchPage() {
                       <tr key={`${r.zone}:${r.record_type}:${r.name}:${r.value}`}>
                         <td><span className="font-mono">{r.name}</span></td>
                         <td><span className="badge badge-gray">{r.record_type}</span></td>
-                        <td><span className="font-mono">{r.value}</span></td>
+                        <td className="col-value"><span className="font-mono">{r.value}</span></td>
                         <td>{r.zone}</td>
                       </tr>
                     ))}
