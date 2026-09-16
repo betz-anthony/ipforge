@@ -35,7 +35,15 @@ def build_session(host: str, user: str, password: str, transport: str):
     import winrm
 
     check_transport(transport)
-    return winrm.Session(host, auth=(user, password), transport=transport)
+    # pywinrm's defaults (20s operation / 30s read) are tuned for short commands.
+    # Get-DnsServerResourceRecord | ConvertTo-Json on a zone with thousands of
+    # records can run past that, especially once CNAME/NS rows are no longer
+    # filtered out client-side — a timeout here throws, and the caller (sync_dns)
+    # treats that zone as failed rather than a valid empty result.
+    return winrm.Session(
+        host, auth=(user, password), transport=transport,
+        operation_timeout_sec=60, read_timeout_sec=70,
+    )
 
 
 # PowerShell wraps the non-stdout streams as CLIXML. Progress records land

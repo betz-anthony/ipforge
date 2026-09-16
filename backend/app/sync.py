@@ -178,8 +178,21 @@ def sync_dns() -> None:
                 if zones_count > 0 and not zone_records:
                     logger.warning("DNS %s: %d zones listed but 0 records fetched, preserving cache", p.source, zones_count)
                     continue
-                db.query(CachedDNSZone).filter_by(source=p.source).delete()
-                db.query(CachedDNSRecord).filter_by(source=p.source).delete()
+                if len(zone_records) < zones_count:
+                    logger.warning(
+                        "DNS %s: %d/%d zones fetched successfully — leaving the rest as last-known-good",
+                        p.source, len(zone_records), zones_count,
+                    )
+                # Scope the delete to zones that actually fetched this pass — a zone whose
+                # get_records() failed keeps its last-known-good cache instead of being wiped
+                # with nothing to replace it.
+                synced_zones = [zone for zone, _ in zone_records]
+                db.query(CachedDNSZone).filter(
+                    CachedDNSZone.source == p.source, CachedDNSZone.zone.in_(synced_zones)
+                ).delete(synchronize_session=False)
+                db.query(CachedDNSRecord).filter(
+                    CachedDNSRecord.source == p.source, CachedDNSRecord.zone.in_(synced_zones)
+                ).delete(synchronize_session=False)
                 for zone, records in zone_records:
                     db.add(CachedDNSZone(zone=zone, source=p.source, synced_at=now))
                     for r in records:
