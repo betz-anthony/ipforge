@@ -71,7 +71,7 @@ Get-DnsServerResourceRecord -ZoneName {ps_quote(zone)} -ComputerName {ps_quote(s
             HostName   = $_.HostName
             RecordType = $_.RecordType
             Data       = $data
-            TTL        = [int]$_.TimeToLive.TotalSeconds
+            TTL        = [int64]$_.TimeToLive.TotalSeconds
         }}
     }}
 }} | ConvertTo-Json

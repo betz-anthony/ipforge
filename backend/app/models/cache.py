@@ -17,7 +17,7 @@ class CachedDNSRecord(Base):
     record_type = Column(String, nullable=False)
     value       = Column(String, nullable=False)
     zone        = Column(String, nullable=False, index=True)
-    ttl         = Column(Integer, default=3600)
+    ttl         = Column(BigInteger, default=3600)  # spec allows up to uint32; overflows a plain Integer
     source      = Column(String, nullable=False, index=True)
     synced_at   = Column(DateTime, nullable=False)
 
