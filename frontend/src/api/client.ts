@@ -556,12 +556,15 @@ export const dnsApi = {
   listZones: () => api.get<DNSZone[]>('/dns/zones').then(r => r.data),
   listRecords: (zone: string, params?: {
     q?: string
+    record_type?: string
     sort?: string
     dir?: 'asc' | 'desc'
     limit?: number
     offset?: number
   }) =>
     api.get<Paged<DNSRecord>>(`/dns/zones/${zone}/records`, { params }).then(r => r.data),
+  recordTypeCounts: (zone: string) =>
+    api.get<{ record_type: string; count: number }[]>(`/dns/zones/${zone}/record-type-counts`).then(r => r.data),
   createRecord: (zone: string, data: Omit<DNSRecord, 'zone'> & { register_ptr?: boolean }) =>
     api.post<DNSRecord>(`/dns/zones/${zone}/records`, data).then(r => r.data),
   updateRecord: (zone: string, oldRecord: DNSRecord, changes: Partial<Pick<DNSRecord, 'name' | 'record_type' | 'value' | 'ttl'>>, opts?: { update_ptr?: boolean }) =>

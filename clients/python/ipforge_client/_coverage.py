@@ -45,6 +45,8 @@ COVERED = {
 }
 
 DEFERRED = {
+    # dns — UI-only aggregate, not a resource operation
+    ("GET", "/dns/zones/{}/record-type-counts"),
     # subnets — capacity/suggestions
     ("GET", "/subnets/suggest-parent"),
     ("GET", "/subnets/forecasts"),

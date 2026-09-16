@@ -2,7 +2,7 @@ import logging
 import re
 from fastapi import APIRouter, HTTPException, Depends, Query
 from pydantic import BaseModel, field_validator
-from sqlalchemy import or_
+from sqlalchemy import or_, func
 from sqlalchemy.orm import Session
 from app.database import get_db
 from app.models.user import User
@@ -134,6 +134,7 @@ def list_zones(db: Session = Depends(get_db)):
 def list_records(
     zone: str,
     q: str | None = None,
+    record_type: str | None = None,
     sort: str = "",
     dir: str = Query("asc", pattern="^(asc|desc)$"),
     limit: int = Query(50, ge=1, le=200),
@@ -147,6 +148,8 @@ def list_records(
             CRow.name.ilike(pattern),
             CRow.value.ilike(pattern),
         ))
+    if record_type:
+        query = query.filter(CRow.record_type == record_type)
     result = paginate(query, limit=limit, offset=offset,
                       sort_map=DNS_SORT_MAP, sort=sort, dir=dir,
                       tiebreaker=CRow.id.asc())
@@ -160,6 +163,18 @@ def list_records(
     ]
     return {"items": items, "total": result["total"],
             "limit": result["limit"], "offset": result["offset"]}
+
+
+@router.get("/zones/{zone}/record-type-counts")
+def record_type_counts(zone: str, db: Session = Depends(get_db)):
+    rows = (
+        db.query(CRow.record_type, func.count(CRow.id))
+        .filter(CRow.zone == zone)
+        .group_by(CRow.record_type)
+        .order_by(CRow.record_type)
+        .all()
+    )
+    return [{"record_type": rt, "count": c} for rt, c in rows]
 
 
 @router.get("/by-ip/{address}")

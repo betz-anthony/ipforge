@@ -193,10 +193,18 @@ export default function DNS() {
     queryFn: (params) => selectedZone
       ? dnsApi.listRecords(selectedZone, params)
       : Promise.resolve({ items: [], total: 0, limit: params.limit, offset: params.offset }),
+    filters: { record_type: typeFilter || undefined },
     defaultSort: 'name',
   })
 
+  const { data: typeCounts } = useQuery({
+    queryKey: ['dns-record-type-counts', selectedZone],
+    queryFn: () => dnsApi.recordTypeCounts(selectedZone!),
+    enabled: !!selectedZone,
+  })
+
   useEffect(() => { setRecordsPage(1) }, [selectedZone])
+  useEffect(() => { setRecordsPage(1) }, [typeFilter])
 
   useEffect(() => {
     if (editingRecord) editFormRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
@@ -209,6 +217,7 @@ export default function DNS() {
     }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['dns-records', selectedZone] })
+      qc.invalidateQueries({ queryKey: ['dns-record-type-counts', selectedZone] })
       setForm(f => ({ ...emptyForm, source: f.source }))
       setRegisterPtr(false)
       setShowForm(false)
@@ -222,6 +231,7 @@ export default function DNS() {
     }, { update_ptr: editUpdatePtr }),
     onSuccess: (result) => {
       qc.invalidateQueries({ queryKey: ['dns-records', selectedZone] })
+      qc.invalidateQueries({ queryKey: ['dns-record-type-counts', selectedZone] })
       setEditingRecord(null)
       setEditUpdatePtr(false)
       if (result.ptr_stale) {
@@ -245,6 +255,7 @@ export default function DNS() {
       ),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['dns-records', selectedZone] })
+      qc.invalidateQueries({ queryKey: ['dns-record-type-counts', selectedZone] })
       setConfirmRecord(null)
       setDeletePtr(true)
       showToast('Record deleted', 'success')
@@ -352,25 +363,15 @@ export default function DNS() {
     [filteredZones]
   )
 
-  const presentTypes = useMemo(
-    () => [...new Set(records.map(r => r.record_type))].sort(),
-    [records]
-  )
-
-  const processed = useMemo(
-    () => typeFilter ? records.filter(r => r.record_type === typeFilter) : records,
-    [records, typeFilter]
-  )
-
   const groupedByServer = useMemo(() => {
     const groups = new Map<string, DNSRecord[]>()
-    for (const r of processed) {
+    for (const r of records) {
       const src = r.source || 'unknown'
       if (!groups.has(src)) groups.set(src, [])
       groups.get(src)!.push(r)
     }
     return groups
-  }, [processed])
+  }, [records])
 
   const recordSources = useMemo(
     () => new Set(records.map(r => r.source).filter(Boolean)),
@@ -640,21 +641,21 @@ export default function DNS() {
                 </div>
               </div>
 
-              {presentTypes.length > 0 && (
+              {(typeCounts ?? []).length > 0 && (
                 <div className="type-chips">
                   <button
                     className={'type-chip' + (!typeFilter ? ' active' : '')}
                     onClick={() => setTypeFilter('')}
                   >
-                    All ({records.length})
+                    All ({(typeCounts ?? []).reduce((sum, t) => sum + t.count, 0)})
                   </button>
-                  {presentTypes.map(t => (
+                  {(typeCounts ?? []).map(t => (
                     <button
-                      key={t}
-                      className={'type-chip' + (typeFilter === t ? ' active' : '')}
-                      onClick={() => setTypeFilter(typeFilter === t ? '' : t)}
+                      key={t.record_type}
+                      className={'type-chip' + (typeFilter === t.record_type ? ' active' : '')}
+                      onClick={() => setTypeFilter(typeFilter === t.record_type ? '' : t.record_type)}
                     >
-                      {t} ({records.filter(r => r.record_type === t).length})
+                      {t.record_type} ({t.count})
                     </button>
                   ))}
                 </div>
@@ -817,7 +818,7 @@ export default function DNS() {
               {loadingRecords ? (
                 <p className="loading">Loading records…</p>
               ) : viewMode === 'combined' ? (
-                renderTable(processed)
+                renderTable(records)
               ) : (
                 <>
                   {[...groupedByServer.entries()].map(([src, recs]) => (
