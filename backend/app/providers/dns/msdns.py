@@ -60,6 +60,7 @@ Get-DnsServerResourceRecord -ZoneName {ps_quote(zone)} -ComputerName {ps_quote(s
     elseif ($rd.IPv6Address)  {{ $data = $rd.IPv6Address.IPAddressToString }}
     elseif ($rd.NameHost)     {{ $data = $rd.NameHost }}
     elseif ($rd.HostNameAlias){{ $data = $rd.HostNameAlias }}
+    elseif ($rd.NameServer)   {{ $data = $rd.NameServer }}
     elseif ($rd.PtrDomainName){{ $data = $rd.PtrDomainName }}
     elseif ($rd.DomainName)   {{ $data = $rd.DomainName }}
     elseif ($rd.MailExchange) {{ $data = $rd.MailExchange }}
