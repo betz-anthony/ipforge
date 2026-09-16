@@ -95,6 +95,7 @@ ul, ol { padding-left: 1.5rem; }
 <li><a href="#webhooks">Webhooks</a></li>
 <li><a href="#search">Search</a></li>
 <li><a href="#import--export">Import / Export</a></li>
+<li><a href="#backup--restore">Backup &amp; Restore</a></li>
 <li><a href="#audit-log">Audit Log</a></li>
 <li><a href="#api-tokens">API Tokens</a></li>
 <li><a href="#prometheus-metrics">Prometheus Metrics</a></li>
@@ -688,6 +689,13 @@ in the drawer; new tags are created automatically. Creating tags requires operat
 <h3 id="ansible-example">Ansible example</h3>
 <p>See <code>docs/examples/ansible/allocate.yml</code>. Key point:
 - <code>status_code: [200, 201]</code> — the task succeeds on both new allocation and idempotent hit. Playbooks are safe to re-run.</p>
+<h3 id="python-client">Python client</h3>
+<p><code>ipforge-client</code> on PyPI (<code>pip install ipforge-client</code>, source in <code>clients/python/</code>) — a typed, sync wrapper over the full <code>/api/v1</code> surface (subnets, addresses, VLANs, DNS, DHCP, drift, discovery, audit), with auto-paginating list iterators and a typed exception hierarchy. Only dependency is <code>requests</code>.</p>
+<pre><code class="language-python">from ipforge_client import IPForge
+
+client = IPForge(&quot;https://ipforge.example.com&quot;, token=&quot;ipfg_...&quot;)
+result = client.subnets.allocate(3, hostname=&quot;web-01&quot;, register_dns=True, dns_zone=&quot;example.com&quot;)
+</code></pre>
 <hr>
 <h2 id="dns">DNS</h2>
 <p>The DNS page shows zones and records synced from your configured DNS providers.</p>
@@ -698,6 +706,8 @@ in the drawer; new tags are created automatically. Creating tags requires operat
 <p>Records are displayed with name, type, value, TTL, and source. Use the search box to filter within a zone.</p>
 <h3 id="adding-a-record">Adding a record</h3>
 <p>Click <strong>Add Record</strong>. Specify name, type (A, AAAA, CNAME, MX, etc.), value, and TTL. The record is written to the provider immediately.</p>
+<h3 id="editing-a-record">Editing a record</h3>
+<p>Click the pencil icon on a record row to edit it in place — no more delete-and-recreate. Name, value, and TTL are editable; type and zone/source are fixed. Updates are atomic where the provider API supports it (MS DNS, BIND, GCP DNS). If you change the value of an A/AAAA record, an <strong>Also update matching PTR record</strong> checkbox appears to keep the reverse-zone record in sync (disabled on providers without PTR support, e.g. Pi-hole).</p>
 <h3 id="deleting-a-record">Deleting a record</h3>
 <p>Click the delete icon on any record row. Confirmation required.</p>
 <blockquote>
@@ -715,7 +725,9 @@ in the drawer; new tags are created automatically. Creating tags requires operat
 <h3 id="leases-reservations">Leases / Reservations</h3>
 <p>Click a scope to see its leases and reservations. Shows IP, MAC, name, and description.</p>
 <h3 id="adding-a-reservation">Adding a reservation</h3>
-<p>Click <strong>Add Reservation</strong> from within a scope. Specify IP, MAC, name, and description. The reservation is written to the DHCP provider immediately.</p>
+<p>Click <strong>Add Reservation</strong> from within a scope. Specify IP, MAC, name, and description. The reservation is written to the DHCP provider immediately. Optionally register a matching DNS record in the same step.</p>
+<h3 id="editing-a-reservation">Editing a reservation</h3>
+<p>Click the pencil icon on a lease/reservation row to edit it in place. IP address is fixed (it's the reservation's key). MAC address (IPv4 scopes) or Client DUID + IAID (IPv6 scopes), name, and description are editable.</p>
 <h3 id="deleting-a-reservation">Deleting a reservation</h3>
 <p>Click the delete icon on any reservation row. Confirmation required.</p>
 <hr>
@@ -786,6 +798,26 @@ place and lets you remediate them.</p>
 <td><code>mac_mismatch</code></td>
 <td>warning</td>
 <td>IPAM MAC differs from the DHCP reservation MAC</td>
+</tr>
+<tr>
+<td><code>missing_dhcp</code></td>
+<td>warning</td>
+<td>assigned/reserved IPAM address has no DHCP lease/reservation</td>
+</tr>
+<tr>
+<td><code>ptr_mismatch</code></td>
+<td>warning</td>
+<td>PTR record doesn't match the forward A/AAAA record's hostname</td>
+</tr>
+<tr>
+<td><code>unreachable_assigned</code></td>
+<td>info</td>
+<td>IPAM address marked assigned/reserved but doesn't respond to ping</td>
+</tr>
+<tr>
+<td><code>dns_source_conflict</code></td>
+<td>warning</td>
+<td>IP carries an A/AAAA record in more than one configured DNS provider</td>
 </tr>
 </tbody>
 </table>
@@ -1113,12 +1145,11 @@ minutes; a delivery whose endpoint is deleted mid-flight is dead-lettered
 with error <code>endpoint deleted</code> rather than left stuck.</p>
 <hr>
 <h2 id="search">Search</h2>
-<p>The global search bar (top of every page) searches across subnets, addresses, DNS records, and DHCP leases simultaneously.</p>
-<p>Results are grouped by type. Click any result to navigate to it.</p>
-<p>Search is server-side with a 50-item cap per type. Results are debounced 250ms.</p>
+<p>Open <strong>Search</strong> from the sidebar. Type at least 2 characters to search across subnets, addresses, DNS records, and DHCP leases/reservations simultaneously — server-side, debounced 250ms, capped at 50 results per type.</p>
+<p>Results are grouped by type in a table per category. Click the pencil (Edit) icon on a result row to jump to that record on its owning page with its edit form already open; Search itself is read-only.</p>
 <hr>
 <h2 id="import-export">Import / Export</h2>
-<p>Bulk-load data from CSV or extract the full database for backup or migration.</p>
+<p>Bulk-load subnets or addresses from CSV, or export them. This is a data migration/seeding tool, not a database backup — for that, see <a href="#backup--restore">Backup &amp; Restore</a> below.</p>
 <h3 id="export">Export</h3>
 <p>On the Subnets or Addresses page, click <strong>Export CSV</strong>. Downloads all records immediately.</p>
 <p><strong>Subnets CSV columns:</strong> <code>name</code>, <code>cidr</code>, <code>ip_version</code>, <code>vlan_id</code>, <code>description</code>, <code>notes</code>, <code>parent_cidr</code>, <code>scan_interval_minutes</code>, <code>dns_provider_name</code>, <code>dhcp_provider_name</code></p>
@@ -1132,6 +1163,15 @@ with error <code>endpoint deleted</code> rather than left stuck.</p>
 - Rows with validation errors are skipped; a per-row error list is shown in the result banner.
 - Import requires operator role.</p>
 <p><strong>Import order matters for hierarchical subnets:</strong> parents must appear before children in the CSV, or already exist in the database.</p>
+<hr>
+<h2 id="backup-restore">Backup &amp; Restore</h2>
+<p>Full-database disaster-recovery, separate from CSV import/export above. Runbook: <code>scripts/backup.sh</code> / <code>scripts/restore.sh</code>, full detail in <code>docs/operations.md</code>.</p>
+<ul>
+<li><strong>Backup:</strong> <code>scripts/backup.sh --target compose|k8s --out ./backups</code> — Postgres dump (<code>pg_dump -Fc</code>) plus a manifest (schema revision, pg version) for a safety check on restore.</li>
+<li><strong>Restore:</strong> <code>scripts/restore.sh --target compose|k8s ./backups/ipforge-backup-&lt;ts&gt;.dump</code> — interactive confirmation required (<code>--yes</code> to skip for scripted recovery). Restart the app after so migrations run to head.</li>
+<li><strong>Back up the Fernet <code>SECRET_KEY</code> separately</strong> — it encrypts provider credentials and the LDAP bind password, is <em>not</em> in the database dump, and is unrecoverable if lost.</li>
+<li>Both are CLI/shell operations today — there is no in-app backup/restore button.</li>
+</ul>
 <hr>
 <h2 id="audit-log">Audit Log</h2>
 <p>Every write operation is recorded. Go to <strong>Audit</strong> to view the log.</p>
