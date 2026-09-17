@@ -1,8 +1,12 @@
+import logging
 import threading
 from winrm.exceptions import WinRMTransportError
+from app.core.mac import normalize_mac
 from app.providers.dhcp.base import DHCPProvider, DHCPScope, DHCPReservation
 from app.providers._ps import ps_quote
 from app.providers._winrm import build_session, check_result, parse_ps_json
+
+logger = logging.getLogger(__name__)
 
 try:
     from spnego.exceptions import BadMICError as _BadMICError
@@ -13,6 +17,22 @@ except ImportError:
 
 def _is_v6(scope_id: str) -> bool:
     return ":" in scope_id
+
+
+def _v4_client_mac(client_id: str) -> str:
+    """Get-DhcpServerv4Lease's ClientId is the raw DHCP option-61 value — for a
+    normal client that's the 6-byte hardware MAC, but a client can (and newer
+    Windows guest OSes commonly do) send a DUID-based client identifier for
+    IPv4 instead, which is a different shape entirely. Only accept it as a MAC
+    if it actually is one; otherwise leave it blank rather than mislabel it."""
+    if not client_id:
+        return ""
+    try:
+        normalize_mac(client_id)
+    except ValueError:
+        logger.warning("msdhcp: ClientId %r is not a MAC (likely a DUID-based client-id) — leaving blank", client_id)
+        return ""
+    return client_id
 
 
 class MSDHCPProvider(DHCPProvider):
@@ -108,7 +128,7 @@ class MSDHCPProvider(DHCPProvider):
             DHCPReservation(
                 scope_id=scope_id,
                 ip_address=l["IPAddress"]["IPAddressToString"],
-                mac_address=l.get("ClientId") or "",
+                mac_address=_v4_client_mac(l.get("ClientId") or ""),
                 name=l.get("HostName") or "",
             )
             for l in self._parse_json(out)
