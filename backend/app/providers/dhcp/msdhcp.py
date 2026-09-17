@@ -181,7 +181,7 @@ class MSDHCPProvider(DHCPProvider):
             )
         else:
             self._run(
-                f"Remove-DhcpServerv4Reservation -IPAddress {ps_quote(ip_address)} -Force "
+                f"Remove-DhcpServerv4Reservation -IPAddress {ps_quote(ip_address)} "
                 f"-ComputerName {ps_quote(self._dhcp_server)}"
             )
 

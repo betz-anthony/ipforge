@@ -32,6 +32,9 @@ def test_update_reservation_mac_change_falls_back_to_delete_add():
     p.update_reservation(old, new)
     assert len(p.calls) == 2
     assert "Remove-DhcpServerv4Reservation" in p.calls[0]
+    # Remove-DhcpServerv4Reservation has no -Force parameter — passing one
+    # throws ParameterBindingException and aborts the whole mac-change edit.
+    assert "-Force" not in p.calls[0]
     assert "Add-DhcpServerv4Reservation" in p.calls[1]
     assert "-ClientId '11-22-33-44-55-66'" in p.calls[1]
 
