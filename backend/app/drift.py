@@ -44,6 +44,15 @@ def _subnet_for_ip(subnets: list[Subnet], ip: str) -> int | None:
     return None
 
 
+def _short_name(name: str) -> str:
+    """First label only, lowercased — Windows DNS record names are always
+    zone-relative (a bare HostName, never the FQDN), while IPAM/DHCP commonly
+    store the full FQDN. Comparing raw strings makes every address in an MS
+    DNS zone a guaranteed hostname_mismatch false positive; comparing just
+    the host label is what both sides actually agree or disagree on."""
+    return name.split(".")[0].lower()
+
+
 def detect_drift(db, subnet_id: int | None = None) -> None:
     """Detect all drift categories. If subnet_id is given, scope to that subnet;
     otherwise evaluate every subnet's address space and all cached records."""
@@ -172,12 +181,14 @@ def detect_drift(db, subnet_id: int | None = None) -> None:
     for a in addresses:
         if not a.hostname:
             continue
-        ipam_name = a.hostname.lower()
+        ipam_short = _short_name(a.hostname)
         lease = lease_by_ip.get(a.address)
         dhcp_name = lease.name.lower() if (lease and lease.name) else None
         rec = dns_by_value.get(a.address)
         dns_name = rec.name.lower() if (rec and rec.name) else None
-        if (dhcp_name and dhcp_name != ipam_name) or (dns_name and dns_name != ipam_name):
+        dhcp_mismatch = dhcp_name and _short_name(dhcp_name) != ipam_short
+        dns_mismatch = dns_name and _short_name(dns_name) != ipam_short
+        if dhcp_mismatch or dns_mismatch:
             _upsert(a.address, DriftCategory.hostname_mismatch, {
                 "ipam": a.hostname,
                 "dhcp": lease.name if (lease and lease.name) else None,

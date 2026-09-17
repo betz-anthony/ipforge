@@ -71,6 +71,27 @@ def test_mac_match_no_drift(db):
     assert ("10.0.0.5", DriftCategory.mac_mismatch.value) not in _cats(db)
 
 
+def test_hostname_mismatch_fqdn_vs_short_name_not_flagged(db):
+    # IPAM/DHCP store the FQDN; MS DNS's HostName is always zone-relative
+    # (short) — same host, not a real mismatch.
+    s = _subnet(db)
+    db.add(IPAddress(address="10.0.0.5", subnet_id=s.id, status=AddressStatus.assigned, hostname="host1.drake.edu"))
+    db.add(CachedDHCPLease(scope_id="s", ip_address="10.0.0.5", name="host1.drake.edu", source="msdhcp", synced_at=utcnow()))
+    db.add(CachedDNSRecord(name="host1", record_type="A", value="10.0.0.5", zone="drake.edu", source="msdns", synced_at=utcnow()))
+    db.commit()
+    detect_drift(db)
+    assert ("10.0.0.5", DriftCategory.hostname_mismatch.value) not in _cats(db)
+
+
+def test_hostname_mismatch_genuinely_different_host_still_flagged(db):
+    s = _subnet(db)
+    db.add(IPAddress(address="10.0.0.5", subnet_id=s.id, status=AddressStatus.assigned, hostname="host1.drake.edu"))
+    db.add(CachedDNSRecord(name="wrong-host", record_type="A", value="10.0.0.5", zone="drake.edu", source="msdns", synced_at=utcnow()))
+    db.commit()
+    detect_drift(db)
+    assert ("10.0.0.5", DriftCategory.hostname_mismatch.value) in _cats(db)
+
+
 def test_active_but_available_carried(db):
     s = _subnet(db)
     db.add(IPAddress(address="10.0.0.5", subnet_id=s.id, status=AddressStatus.available))
