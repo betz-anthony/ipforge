@@ -10,6 +10,61 @@ def _provider():
     return p
 
 
+def test_update_reservation_mac_change_restores_old_on_add_failure():
+    # The delete already committed on the live server before add_reservation
+    # ever runs. If add fails (bad ClientId, WinRM blip, whatever), the old
+    # reservation must be recreated instead of being left permanently gone.
+    p = _provider()
+
+    def _run(ps):
+        p.calls.append(ps)
+        if "11-22-33-44-55-66" in ps:
+            raise RuntimeError("Add-DhcpServerv4Reservation failed")
+        return ""
+    p._run = _run
+
+    old = DHCPReservation(scope_id="10.0.0.0/24", ip_address="10.0.0.5",
+                          mac_address="aa-bb-cc-dd-ee-ff", name="host")
+    new = DHCPReservation(scope_id="10.0.0.0/24", ip_address="10.0.0.5",
+                          mac_address="11-22-33-44-55-66", name="host")
+
+    try:
+        p.update_reservation(old, new)
+        assert False, "expected the original add failure to propagate"
+    except RuntimeError:
+        pass
+
+    assert len(p.calls) == 3
+    assert "Remove-DhcpServerv4Reservation" in p.calls[0]
+    assert "Add-DhcpServerv4Reservation" in p.calls[1] and "11-22-33-44-55-66" in p.calls[1]
+    assert "Add-DhcpServerv4Reservation" in p.calls[2] and "aa-bb-cc-dd-ee-ff" in p.calls[2]
+
+
+def test_update_reservation_mac_change_logs_when_restore_also_fails(caplog):
+    p = _provider()
+
+    def _run(ps):
+        p.calls.append(ps)
+        if "Add-DhcpServerv4Reservation" in ps:
+            raise RuntimeError("boom")
+        return ""
+    p._run = _run
+
+    old = DHCPReservation(scope_id="10.0.0.0/24", ip_address="10.0.0.5",
+                          mac_address="aa-bb-cc-dd-ee-ff", name="host")
+    new = DHCPReservation(scope_id="10.0.0.0/24", ip_address="10.0.0.5",
+                          mac_address="11-22-33-44-55-66", name="host")
+
+    try:
+        p.update_reservation(old, new)
+        assert False, "expected the original add failure to propagate"
+    except RuntimeError:
+        pass
+
+    assert len(p.calls) == 3  # delete, failed add(new), failed restore add(old)
+    assert any("gone from the DHCP server" in r.message for r in caplog.records)
+
+
 def test_add_reservation_v4_sends_dash_delimited_client_id():
     # Add-DhcpServerv4Reservation's -ClientId only accepts dash-delimited
     # hex — IPForge's own canonical MAC form (core.mac.normalize_mac) is

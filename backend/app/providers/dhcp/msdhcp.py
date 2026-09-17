@@ -218,7 +218,23 @@ class MSDHCPProvider(DHCPProvider):
         if identifier_changed:
             self.delete_reservation(old.scope_id, old.ip_address)
             new.scope_id = old.scope_id
-            self.add_reservation(new)
+            try:
+                self.add_reservation(new)
+            except Exception:
+                # The delete already committed on the live server — try to
+                # restore the original reservation so a failed add doesn't
+                # leave it permanently gone. Re-raise either way so the
+                # caller still sees the real failure and never writes the
+                # (never-applied) change into IPAM's own cache.
+                try:
+                    self.add_reservation(old)
+                except Exception as undo_exc:
+                    logger.error(
+                        "msdhcp: add_reservation failed AND restoring the deleted "
+                        "reservation for %s/%s also failed — it is gone from the "
+                        "DHCP server: %s", old.scope_id, old.ip_address, undo_exc,
+                    )
+                raise
             return
         if is_v6:
             self._run(
