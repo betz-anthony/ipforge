@@ -10,6 +10,18 @@ def _provider():
     return p
 
 
+def test_add_reservation_v4_sends_dash_delimited_client_id():
+    # Add-DhcpServerv4Reservation's -ClientId only accepts dash-delimited
+    # hex — IPForge's own canonical MAC form (core.mac.normalize_mac) is
+    # colon-delimited, and passing that straight through throws a
+    # CimException ("not in valid format"), not a friendly error.
+    p = _provider()
+    reservation = DHCPReservation(scope_id="10.10.0.0/24", ip_address="10.10.0.152",
+                                   mac_address="02:ec:02:3d:00:66", name="newvm")
+    p.add_reservation(reservation)
+    assert "-ClientId '02-ec-02-3d-00-66'" in p.calls[0]
+
+
 def test_update_reservation_same_mac_uses_set_command():
     p = _provider()
     old = DHCPReservation(scope_id="10.0.0.0/24", ip_address="10.0.0.5",

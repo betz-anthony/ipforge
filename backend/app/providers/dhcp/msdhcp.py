@@ -19,6 +19,14 @@ def _is_v6(scope_id: str) -> bool:
     return ":" in scope_id
 
 
+def _dash_mac(mac: str) -> str:
+    """Add/Set-DhcpServerv4Reservation's -ClientId requires dash-delimited
+    hex (aa-bb-cc-dd-ee-ff) — IPForge's own canonical MAC form is colon-
+    delimited (core.mac.normalize_mac), which Windows rejects outright with
+    a CimException rather than accepting or reformatting it."""
+    return normalize_mac(mac).replace(":", "-")
+
+
 def _v4_client_mac(client_id: str) -> str:
     """Get-DhcpServerv4Lease's ClientId is the raw DHCP option-61 value — for a
     normal client that's the 6-byte hardware MAC, but a client can (and newer
@@ -166,7 +174,7 @@ class MSDHCPProvider(DHCPProvider):
             self._run(
                 f"Add-DhcpServerv4Reservation -ScopeId {ps_quote(reservation.scope_id)} "
                 f"-IPAddress {ps_quote(reservation.ip_address)} "
-                f"-ClientId {ps_quote(reservation.mac_address)} "
+                f"-ClientId {ps_quote(_dash_mac(reservation.mac_address))} "
                 f"-Name {ps_quote(reservation.name)} "
                 f"-Description {ps_quote(reservation.description)} "
                 f"-ComputerName {ps_quote(self._dhcp_server)}"
