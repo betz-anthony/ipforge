@@ -2,11 +2,13 @@ import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Plus, Trash2 } from 'lucide-react'
 import { subnetRangesApi, addressesApi, type Subnet, type RangeKind, type MapCell } from '../api/client'
-import { isValidIPv4, isValidIPv6 } from '../utils/ip'
+import { isValidIPv4, isValidIPv6, isValidEUI48 } from '../utils/ip'
 import { useToast } from '../contexts/ToastContext'
 import { apiError } from '../utils/apiError'
 
 const KINDS: RangeKind[] = ['gateway', 'dhcp_pool', 'static', 'reserved']
+const STATUSES = ['reserved', 'assigned', 'available'] as const
+const emptyNewAddrForm = { status: 'reserved' as string, hostname: '', mac_address: '', description: '' }
 
 const STATUS_COLOR: Record<string, string> = {
   free:       'var(--surface-2)',
@@ -38,6 +40,8 @@ export default function SubnetSpace({ subnet }: { subnet: Subnet }) {
   const [label, setLabel] = useState('')
   const [ipErr, setIpErr] = useState('')
   const [selected, setSelected] = useState<MapCell | null>(null)
+  const [newAddrForm, setNewAddrForm] = useState(emptyNewAddrForm)
+  const [macError, setMacError] = useState('')
 
   const validIp = (v: string) => isV6 ? isValidIPv6(v) : isValidIPv4(v)
 
@@ -73,12 +77,19 @@ export default function SubnetSpace({ subnet }: { subnet: Subnet }) {
   })
 
   const createAddr = useMutation({
-    mutationFn: (ip: string) => addressesApi.create({ address: ip, subnet_id: subnet.id, status: 'reserved' } as any),
+    mutationFn: (ip: string) => addressesApi.create({
+      address: ip, subnet_id: subnet.id,
+      status: newAddrForm.status as any,
+      hostname: newAddrForm.hostname || null,
+      mac_address: newAddrForm.mac_address || null,
+      description: newAddrForm.description || null,
+    } as any),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['subnet-map', subnet.id] })
       qc.invalidateQueries({ queryKey: ['subnets'] })
       qc.invalidateQueries({ queryKey: ['addresses'] })
       setSelected(null)
+      setNewAddrForm(emptyNewAddrForm)
       showToast('Address created', 'success')
     },
     onError: (err: any) => {
@@ -159,7 +170,7 @@ export default function SubnetSpace({ subnet }: { subnet: Subnet }) {
               <button
                 key={c.ip}
                 title={`${c.ip} · ${c.status}${c.collision ? ' · collision' : ''}`}
-                onClick={() => setSelected(c)}
+                onClick={() => { setSelected(c); setNewAddrForm(emptyNewAddrForm); setMacError('') }}
                 style={{
                   width: 14, height: 14, padding: 0, borderRadius: 2, cursor: 'pointer',
                   background: STATUS_COLOR[c.status] ?? 'var(--surface-2)',
@@ -187,11 +198,50 @@ export default function SubnetSpace({ subnet }: { subnet: Subnet }) {
               <span className="font-mono">{selected.ip}</span> · {selected.status}
               {selected.collision && <span className="badge badge-red" style={{ marginLeft: '0.4rem' }}>collision</span>}
               {selected.status === 'free' && (
-                <button className="btn-primary btn-sm" style={{ marginLeft: '0.6rem' }}
-                  disabled={createAddr.isPending}
-                  onClick={() => createAddr.mutate(selected.ip)}>
-                  Create address here
-                </button>
+                <div style={{ marginTop: '0.5rem', display: 'flex', flexWrap: 'wrap', gap: '0.4rem', alignItems: 'flex-start' }}>
+                  <select
+                    aria-label="Status"
+                    value={newAddrForm.status}
+                    onChange={e => setNewAddrForm(f => ({ ...f, status: e.target.value }))}
+                    style={{ width: '110px' }}
+                  >
+                    {STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
+                  </select>
+                  <input
+                    aria-label="Hostname"
+                    placeholder="Hostname (optional)"
+                    value={newAddrForm.hostname}
+                    onChange={e => setNewAddrForm(f => ({ ...f, hostname: e.target.value }))}
+                    style={{ width: '160px' }}
+                  />
+                  <div>
+                    <input
+                      aria-label="MAC address"
+                      placeholder="MAC (optional)"
+                      value={newAddrForm.mac_address}
+                      onChange={e => { setNewAddrForm(f => ({ ...f, mac_address: e.target.value })); if (macError) setMacError('') }}
+                      onBlur={() => setMacError(newAddrForm.mac_address && !isValidEUI48(newAddrForm.mac_address) ? 'Invalid MAC' : '')}
+                      style={{ width: '150px' }}
+                    />
+                    {macError && <div className="form-field-error-msg" style={{ fontSize: '0.7rem' }}>{macError}</div>}
+                  </div>
+                  <input
+                    aria-label="Description"
+                    placeholder="Description (optional)"
+                    value={newAddrForm.description}
+                    onChange={e => setNewAddrForm(f => ({ ...f, description: e.target.value }))}
+                    style={{ width: '160px' }}
+                  />
+                  <button className="btn-primary btn-sm"
+                    disabled={createAddr.isPending || !!macError}
+                    onClick={() => createAddr.mutate(selected.ip)}>
+                    Create address here
+                  </button>
+                  <button className="btn-ghost btn-sm"
+                    onClick={() => { setSelected(null); setNewAddrForm(emptyNewAddrForm); setMacError('') }}>
+                    Cancel
+                  </button>
+                </div>
               )}
             </div>
           )}
