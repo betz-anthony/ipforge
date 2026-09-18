@@ -430,7 +430,7 @@ def _range_out(r: SubnetRange) -> dict:
     return {
         "id": r.id, "subnet_id": r.subnet_id,
         "start_ip": r.start_ip, "end_ip": r.end_ip,
-        "kind": r.kind, "label": r.label,
+        "kind": r.kind, "label": r.label, "source": r.source,
     }
 
 

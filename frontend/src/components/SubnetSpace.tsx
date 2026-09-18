@@ -112,6 +112,7 @@ export default function SubnetSpace({ subnet }: { subnet: Subnet }) {
         <div key={r.id} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.8rem', padding: '0.2rem 0' }}>
           <span className="font-mono">{r.start_ip}{r.end_ip !== r.start_ip ? `–${r.end_ip}` : ''}</span>
           <span className="badge badge-gray">{r.kind}</span>
+          {r.source && <span className="badge badge-blue" style={{ fontSize: '0.65rem' }}>synced · {r.source}</span>}
           {r.label && <span style={{ color: 'var(--text-muted)' }}>{r.label}</span>}
           <button className="btn-ghost btn-sm" style={{ marginLeft: 'auto' }} onClick={() => deleteRange.mutate(r.id)}>
             <Trash2 size={12} />

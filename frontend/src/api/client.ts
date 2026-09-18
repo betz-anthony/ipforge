@@ -243,7 +243,7 @@ export const subnetsApi = {
     api.get<Subnet[]>('/subnets', { params }).then(r => r.data),
 }
 
-export type RangeKind = 'gateway' | 'dhcp_pool' | 'static' | 'reserved'
+export type RangeKind = 'gateway' | 'dhcp_pool' | 'static' | 'reserved' | 'excluded'
 
 export interface SubnetRange {
   id: number
@@ -252,6 +252,7 @@ export interface SubnetRange {
   end_ip: string
   kind: RangeKind
   label: string | null
+  source: string | null
 }
 
 export interface MapCell {
