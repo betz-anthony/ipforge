@@ -11,18 +11,33 @@
 # app-level incompatibilities (feature/endpoint removal, irreversible DB
 # migration, config/CLI breaks) — those are the ones that should bump MAJOR.
 #
-# Usage: scripts/suggest-bump.sh
+# Usage: scripts/suggest-bump.sh [<base-tag>] [<head-ref>]
+#   No args            — last v* tag..HEAD (normal interactive use).
+#   <base-tag>         — <base-tag>..HEAD instead of the last tag.
+#   <base-tag> <head>  — <base-tag>..<head-ref> explicitly. Used by
+#                        scripts/verify-release-tag.sh to check one release
+#                        tag's commits against the tag before it,
+#                        non-interactively.
 set -euo pipefail
 
 cd "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
-last="$(git describe --tags --abbrev=0 --match 'v[0-9]*' 2>/dev/null || true)"
+if [ -n "${1:-}" ] && [ -n "${2:-}" ]; then
+  last="$1"
+  head_ref="$2"
+elif [ -n "${1:-}" ]; then
+  last="$1"
+  head_ref="HEAD"
+else
+  last="$(git describe --tags --abbrev=0 --match 'v[0-9]*' 2>/dev/null || true)"
+  head_ref="HEAD"
+fi
 
 if [ -n "$last" ]; then
-  range="${last}..HEAD"
+  range="${last}..${head_ref}"
   base="${last#v}"
 else
-  range="HEAD"
+  range="$head_ref"
   base="0.0.0"
   echo "No v* tag found — treating base version as 0.0.0 over full history."
 fi
