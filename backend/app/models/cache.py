@@ -1,5 +1,5 @@
 from datetime import datetime
-from sqlalchemy import Column, Integer, BigInteger, String, Boolean, DateTime
+from sqlalchemy import Column, Integer, BigInteger, String, Boolean, DateTime, LargeBinary
 from app.database import Base
 
 
@@ -64,6 +64,9 @@ class CachedDHCPLease(Base):
     id          = Column(Integer, primary_key=True, autoincrement=True)
     scope_id    = Column(String, nullable=False, index=True)
     ip_address  = Column(String, nullable=False)
+    # 16-byte packed form for numeric (not lexicographic) sort — see
+    # app/core/ip_sort.py. Kept in sync by an event listener.
+    ip_sort_key = Column(LargeBinary(16), nullable=True, index=True)
     mac_address = Column(String, default="")
     client_duid = Column(String, default="")
     iaid        = Column(BigInteger, default=0)  # DHCPv6 IAID is uint32 (RFC 8415)

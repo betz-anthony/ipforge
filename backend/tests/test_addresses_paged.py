@@ -96,6 +96,30 @@ def test_list_addresses_total_honors_filters(client, db):
     assert all(a["status"] == "assigned" for a in body["items"])
 
 
+def test_list_addresses_sort_address_is_numeric_not_lexicographic(client, db):
+    sn = _subnet(db)
+    for ip in ["10.10.1.100", "10.10.1.1", "10.10.1.103", "10.10.1.11"]:
+        _addr(db, sn.id, ip)
+    r = client.get("/api/v1/addresses?sort=address&dir=asc")
+    addrs = [a["address"] for a in r.json()["items"]]
+    assert addrs == ["10.10.1.1", "10.10.1.11", "10.10.1.100", "10.10.1.103"]
+
+
+def test_address_ip_sort_key_set_on_insert_and_kept_in_sync_on_update(client, db):
+    """The before_insert/before_update event listener (app/core/ip_sort_events.py)
+    is what keeps ip_sort_key correct — every write path relies on it rather
+    than setting the column itself."""
+    from app.core.ip_sort import ip_sort_key as compute_key
+    sn = _subnet(db)
+    a = _addr(db, sn.id, "10.0.0.5")
+    assert a.ip_sort_key == compute_key("10.0.0.5")
+
+    a.address = "10.0.0.200"
+    db.commit()
+    db.refresh(a)
+    assert a.ip_sort_key == compute_key("10.0.0.200")
+
+
 def test_list_addresses_unknown_sort_ignored(client, db):
     sn = _subnet(db)
     _addr(db, sn.id, "10.0.0.1")

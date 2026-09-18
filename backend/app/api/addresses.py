@@ -40,7 +40,9 @@ class PagedAddressRead(BaseModel):
 
 
 ADDR_SORT_MAP = {
-    "address":     IPAddress.address,
+    # ip_sort_key, not address itself — numeric IP order, not lexicographic
+    # string order (see app/core/ip_sort.py).
+    "address":     IPAddress.ip_sort_key,
     "hostname":    IPAddress.hostname,
     "status":      IPAddress.status,
     "mac_address": IPAddress.mac_address,

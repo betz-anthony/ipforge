@@ -1,6 +1,6 @@
 import enum
 from datetime import datetime
-from sqlalchemy import String, Integer, Text, DateTime, ForeignKey, Enum
+from sqlalchemy import String, Integer, Text, DateTime, ForeignKey, Enum, LargeBinary
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.database import Base
 
@@ -18,6 +18,10 @@ class IPAddress(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     address: Mapped[str] = mapped_column(String(50), unique=True, index=True)
+    # 16-byte packed form for numeric (not lexicographic) sort — see
+    # app/core/ip_sort.py. Kept in sync by an event listener, never set
+    # directly by callers.
+    ip_sort_key: Mapped[bytes | None] = mapped_column(LargeBinary(16), nullable=True, index=True)
     subnet_id: Mapped[int] = mapped_column(Integer, ForeignKey("subnets.id"))
     hostname: Mapped[str | None] = mapped_column(String(255), nullable=True)
     status: Mapped[AddressStatus] = mapped_column(Enum(AddressStatus), default=AddressStatus.available)

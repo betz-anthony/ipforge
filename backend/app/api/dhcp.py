@@ -22,7 +22,9 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 DHCP_SORT_MAP = {
-    "ip_address": CachedDHCPLease.ip_address,
+    # ip_sort_key, not ip_address itself — numeric IP order, not
+    # lexicographic string order (see app/core/ip_sort.py).
+    "ip_address": CachedDHCPLease.ip_sort_key,
     "name":       CachedDHCPLease.name,
 }
 

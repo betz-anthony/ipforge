@@ -38,6 +38,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+**Sorting**
+- IP address columns (Addresses list, DHCP lease list, a subnet's Reserved
+  Ranges) sorted lexicographically as text (`10.10.1.1, 10.10.1.100,
+  10.10.1.103, 10.10.1.11`) instead of in real numeric order.
+
 **DNS sync**
 - MS DNS: CNAME and NS records were silently dropped from `get_records()`
   instead of being synced.

@@ -41,6 +41,14 @@ def test_list_leases_sort_ip_asc(client, db):
     assert ips == sorted(ips)
 
 
+def test_list_leases_sort_ip_asc_is_numeric_not_lexicographic(client, db):
+    for ip in ["10.10.1.100", "10.10.1.1", "10.10.1.103", "10.10.1.11"]:
+        _lease(db, ip=ip)
+    r = client.get("/api/v1/dhcp/scopes/scope1/leases?sort=ip_address&dir=asc")
+    ips = [i["ip_address"] for i in r.json()["items"]]
+    assert ips == ["10.10.1.1", "10.10.1.11", "10.10.1.100", "10.10.1.103"]
+
+
 def test_list_leases_unknown_sort_ignored(client, db):
     _lease(db)
     r = client.get("/api/v1/dhcp/scopes/scope1/leases?sort=drop_table")

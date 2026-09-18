@@ -15,6 +15,7 @@ from app.core.deps import get_current_user
 from app.core.audit import write_audit
 from app.core.access import AccessContext, get_access_context
 from app.core.forecast import compute_forecast
+from app.core.ip_sort import ip_sort_key
 from app.config import settings
 from app.models.scan import SubnetUtilizationDay
 from app.scan import subnet_total_count
@@ -455,7 +456,11 @@ def list_ranges(
     if not subnet:
         raise HTTPException(404, "Subnet not found")
     access.require_read(subnet_id)
-    rows = db.query(SubnetRange).filter_by(subnet_id=subnet_id).order_by(SubnetRange.start_ip).all()
+    # A handful of rows per subnet — sort in Python rather than add a
+    # persisted sort-key column; ip_sort_key(None) sorts unparseable values
+    # (there shouldn't be any) first rather than raising.
+    rows = db.query(SubnetRange).filter_by(subnet_id=subnet_id).all()
+    rows.sort(key=lambda r: ip_sort_key(r.start_ip) or b"")
     return [_range_out(r) for r in rows]
 
 

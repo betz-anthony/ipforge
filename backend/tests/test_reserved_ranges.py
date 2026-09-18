@@ -20,6 +20,17 @@ def test_allocate_skips_reserved_range(client, db):
     assert r.json()["address"] == "10.0.1.6"
 
 
+def test_list_ranges_sorted_numerically_not_lexicographically(client, db):
+    s = _subnet(db, cidr="10.10.1.0/24")
+    for ip in ["10.10.1.100", "10.10.1.1", "10.10.1.103", "10.10.1.11"]:
+        db.add(SubnetRange(subnet_id=s.id, start_ip=ip, end_ip=ip, kind="reserved"))
+    db.commit()
+    r = client.get(f"/api/v1/subnets/{s.id}/ranges")
+    assert r.status_code == 200, r.text
+    starts = [row["start_ip"] for row in r.json()]
+    assert starts == ["10.10.1.1", "10.10.1.11", "10.10.1.100", "10.10.1.103"]
+
+
 def test_utilization_reserved_count(client, db):
     s = _subnet(db)
     db.add(IPAddress(address="10.0.1.50", subnet_id=s.id, status=AddressStatus.assigned))
