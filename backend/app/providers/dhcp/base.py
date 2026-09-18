@@ -44,3 +44,14 @@ class DHCPProvider(ABC):
 
     @abstractmethod
     def update_reservation(self, old: DHCPReservation, new: DHCPReservation) -> None: ...
+
+    def get_scope_gateway(self, scope_id: str) -> str | None:
+        """The scope's configured gateway/router IP, if the provider exposes
+        one. Default: not supported by this provider."""
+        return None
+
+    def get_scope_exclusions(self, scope_id: str) -> list[tuple[str, str]]:
+        """(start_ip, end_ip) ranges excluded from dynamic assignment within
+        this scope, if the provider has that concept. Default: not
+        supported by this provider."""
+        return []
