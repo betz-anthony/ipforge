@@ -16,6 +16,15 @@ def _is_v6(scope_id: str) -> bool:
     return ":" in scope_id
 
 
+# Mirrors app/api/subnets.py's MAP_MAX_HOSTS — same "too large to reason about
+# per-host" boundary, established there for the subnet_map heatmap. Deriving
+# exclusion gaps for a subnet above this size would hand the three SubnetRange
+# consumers that materialize every covered IP individually (reserved_ip_set and
+# the allocation candidate search) a range spanning tens of thousands of
+# addresses. Not imported from app/api — providers/ must not depend on api/.
+_MAX_EXCLUSION_HOSTS = 1024
+
+
 def _ip_int(ip: str) -> int:
     import ipaddress
     return int(ipaddress.ip_address(ip))
@@ -167,6 +176,20 @@ class KeaDHCPProvider(DHCPProvider):
     def get_scope_exclusions(self, scope_id: str) -> list[tuple[str, str]]:
         if _is_v6(scope_id):
             return []  # v4 only for this pass — matches msdhcp
+        lo, hi = _host_bounds(scope_id)
+        host_count = hi - lo + 1
+        if host_count > _MAX_EXCLUSION_HOSTS:
+            # A small pool inside a large subnet (e.g. a /24 pool in a /16)
+            # would otherwise derive exclusion ranges spanning tens of
+            # thousands of addresses — same "not ready to evaluate" call as
+            # the zero-pools case below, just for the opposite size extreme.
+            # Skip the get_scope_pools() HTTP round-trip too, since we're
+            # bailing regardless of what it returns.
+            logger.warning(
+                "Kea %s: scope %s has %d hosts (> %d), skipping exclusion derivation",
+                self.source, scope_id, host_count, _MAX_EXCLUSION_HOSTS,
+            )
+            return []
         pools = self.get_scope_pools(scope_id)
         if not pools:
             return []

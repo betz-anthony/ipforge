@@ -38,6 +38,19 @@ class CachedDHCPScope(Base):
 
 
 class CachedDHCPScopePool(Base):
+    """Every pool range configured on a DHCP scope (a Kea subnet can have
+    more than one; msdhcp/pihole get exactly one row each), refreshed every
+    sync pass.
+
+    Currently write-only from the application's perspective: nothing in
+    app/ outside tests reads this table. KeaDHCPProvider.get_scope_exclusions
+    derives its exclusion gaps by calling the provider directly
+    (get_scope_pools), not by reading these cached rows — providers reading
+    back from the app's own DB would be the wrong layering. This table exists
+    as staging for a possible future DHCP-page UI surfacing per-pool detail
+    (the DHCP page currently only shows a scope's collapsed min/max
+    start_range/end_range across all pools).
+    """
     __tablename__ = "cache_dhcp_scope_pools"
     id         = Column(Integer, primary_key=True, autoincrement=True)
     scope_id   = Column(String, nullable=False, index=True)

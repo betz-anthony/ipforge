@@ -252,3 +252,71 @@ def test_sync_aggregates_multiple_scopes_for_same_subnet_without_clobbering():
         assert len(rows) == 3
     finally:
         db.close()
+
+
+def test_write_reserved_ranges_drops_malformed_gateway_and_logs_warning(caplog):
+    """A malformed provider value (e.g. Pi-hole's raw, unvalidated 'router'
+    config string) must not reach SubnetRange.start_ip unparsed — downstream
+    readers (subnet_map, reserved_ip_set, allocation candidate search) assume
+    every row parses cleanly as an IP."""
+    from app import sync as sync_module
+
+    db = TestingSessionLocal()
+    subnet = _seed_subnet(db)
+    subnet_id = subnet.id
+    db.close()
+
+    db = TestingSessionLocal()
+    try:
+        with caplog.at_level("WARNING"):
+            sync_module._write_reserved_ranges(db, subnet_id, "pihole01", "not-an-ip", [])
+        assert any("not-an-ip" in r.message for r in caplog.records)
+        rows = db.query(SubnetRange).filter_by(subnet_id=subnet_id, source="pihole01").all()
+        assert rows == []
+    finally:
+        db.close()
+
+
+def test_write_reserved_ranges_drops_out_of_subnet_exclusion_and_keeps_valid_ones():
+    """A mix of one bad exclusion (outside the subnet CIDR) and one good one —
+    the bad one is dropped, the good one and the gateway still get written
+    exactly as before this fix."""
+    from app import sync as sync_module
+
+    db = TestingSessionLocal()
+    subnet = _seed_subnet(db)
+    subnet_id = subnet.id
+    db.close()
+
+    db = TestingSessionLocal()
+    try:
+        sync_module._write_reserved_ranges(
+            db, subnet_id, "msdhcp01", "10.10.0.1",
+            [("10.10.0.2", "10.10.0.9"), ("192.168.99.1", "192.168.99.5")],
+        )
+        rows = db.query(SubnetRange).filter_by(subnet_id=subnet_id, source="msdhcp01").all()
+        by_kind = {(r.kind, r.start_ip, r.end_ip) for r in rows}
+        assert by_kind == {
+            ("gateway", "10.10.0.1", "10.10.0.1"),
+            ("excluded", "10.10.0.2", "10.10.0.9"),
+        }
+    finally:
+        db.close()
+
+
+def test_write_reserved_ranges_drops_version_mismatch():
+    """A v6 value against a v4 subnet is dropped, not written."""
+    from app import sync as sync_module
+
+    db = TestingSessionLocal()
+    subnet = _seed_subnet(db)
+    subnet_id = subnet.id
+    db.close()
+
+    db = TestingSessionLocal()
+    try:
+        sync_module._write_reserved_ranges(db, subnet_id, "msdhcp01", "fe80::1", [])
+        rows = db.query(SubnetRange).filter_by(subnet_id=subnet_id, source="msdhcp01").all()
+        assert rows == []
+    finally:
+        db.close()

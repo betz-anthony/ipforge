@@ -63,11 +63,50 @@ def _fetch_reserved_range_data(p, scope):
 
 
 def _write_reserved_ranges(db, subnet_id, source, gateway, exclusions) -> None:
-    new_rows: list[tuple[str, str, str]] = []  # (kind, start_ip, end_ip)
+    subnet = db.get(Subnet, subnet_id)
+    if subnet is None:
+        # Resolved earlier this same sync pass, but the row could theoretically be
+        # gone by the time we get here — nothing sane to validate against.
+        logger.warning("DHCP %s: subnet_id %s not found, skipping reserved-range write", source, subnet_id)
+        return
+    network = ipaddress.ip_network(subnet.cidr, strict=False)
+
+    candidates: list[tuple[str, str, str]] = []  # (kind, start_ip, end_ip)
     if gateway:
-        new_rows.append(("gateway", gateway, gateway))
+        candidates.append(("gateway", gateway, gateway))
     for start, end in exclusions:
-        new_rows.append(("excluded", start, end))
+        candidates.append(("excluded", start, end))
+
+    # Provider-sourced values are untrusted input — validate before writing, the
+    # same way the manual create-range API endpoint does. A malformed value from
+    # one provider must not land in start_ip/end_ip unparsed: readers across the
+    # app (subnet_map, reserved_ip_set, allocation candidate search) assume every
+    # SubnetRange row parses cleanly as an IP and 500 the whole subnet list
+    # otherwise.
+    new_rows: list[tuple[str, str, str]] = []
+    for kind, start_ip, end_ip in candidates:
+        try:
+            start = ipaddress.ip_address(start_ip)
+            end = ipaddress.ip_address(end_ip)
+        except ValueError:
+            logger.warning(
+                "DHCP %s: dropping unparseable %s range %r-%r for subnet %s",
+                source, kind, start_ip, end_ip, subnet.cidr,
+            )
+            continue
+        if start.version != subnet.ip_version or end.version != subnet.ip_version:
+            logger.warning(
+                "DHCP %s: dropping %s range %s-%s — IP version mismatch with subnet %s",
+                source, kind, start_ip, end_ip, subnet.cidr,
+            )
+            continue
+        if start not in network or end not in network:
+            logger.warning(
+                "DHCP %s: dropping %s range %s-%s — outside subnet %s",
+                source, kind, start_ip, end_ip, subnet.cidr,
+            )
+            continue
+        new_rows.append((kind, start_ip, end_ip))
 
     manual_ranges = {
         (r.start_ip, r.end_ip)

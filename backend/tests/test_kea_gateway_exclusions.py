@@ -1,4 +1,4 @@
-from unittest.mock import patch
+from unittest.mock import patch, MagicMock
 from app.providers.dhcp.isc import KeaDHCPProvider
 
 
@@ -52,3 +52,28 @@ def test_get_scope_exclusions_empty_when_no_pools():
     p = _provider()
     with patch.object(p, "_get_subnets", return_value=[s]):
         assert p.get_scope_exclusions("10.10.0.0/24") == []
+
+
+def test_get_scope_exclusions_empty_for_oversized_subnet_even_with_pools():
+    # A /16 with a small pool would otherwise derive exclusion ranges spanning
+    # tens of thousands of addresses — those get individually materialized by
+    # SubnetRange consumers (reserved_ip_set, allocation candidate search),
+    # which don't expect a range that large. Guard bails before that happens,
+    # and skips the get_scope_pools() HTTP round-trip entirely since the
+    # decision doesn't depend on what it would return.
+    p = _provider()
+    mock_get_subnets = MagicMock(return_value=[_subnet(["10.10.0.10-10.10.0.200"])])
+    with patch.object(p, "_get_subnets", mock_get_subnets):
+        gaps = p.get_scope_exclusions("10.10.0.0/16")
+    assert gaps == []
+    mock_get_subnets.assert_not_called()
+
+
+def test_get_scope_exclusions_small_subnet_still_derives_gaps():
+    # Regression check: the size guard must not affect the already-covered
+    # small-subnet case.
+    s = _subnet(["10.10.0.10-10.10.0.200"])
+    p = _provider()
+    with patch.object(p, "_get_subnets", return_value=[s]):
+        gaps = p.get_scope_exclusions("10.10.0.0/24")
+    assert gaps == [("10.10.0.1", "10.10.0.9"), ("10.10.0.201", "10.10.0.254")]
