@@ -256,10 +256,10 @@ class MSDHCPProvider(DHCPProvider):
             return None  # v4 only for this pass
         out = self._run(
             f"Get-DhcpServerv4OptionValue -OptionId 3 -ScopeId {ps_quote(scope_id)} "
-            f"-ComputerName {ps_quote(self._dhcp_server)} | ConvertTo-Json"
+            f"-ComputerName {ps_quote(self._dhcp_server)} | ConvertTo-Json -Depth 3"
         )
         results = self._parse_json(out)
-        for r in results if isinstance(results, list) else [results]:
+        for r in results:
             values = r.get("Value") or []
             if values:
                 return values[0]
@@ -270,11 +270,11 @@ class MSDHCPProvider(DHCPProvider):
             return []  # v4 only for this pass
         out = self._run(
             f"Get-DhcpServerv4ExclusionRange -ScopeId {ps_quote(scope_id)} "
-            f"-ComputerName {ps_quote(self._dhcp_server)} | ConvertTo-Json"
+            f"-ComputerName {ps_quote(self._dhcp_server)} | ConvertTo-Json -Depth 3"
         )
         results = self._parse_json(out)
         exclusions: list[tuple[str, str]] = []
-        for r in results if isinstance(results, list) else ([results] if results else []):
+        for r in results:
             start = r.get("StartRange", {}).get("IPAddressToString")
             end = r.get("EndRange", {}).get("IPAddressToString")
             if start and end:
