@@ -937,6 +937,7 @@ export default function Subnets() {
           subtitle={selectedSubnet.cidr}
           viewExtra={subnetViewExtra}
           fields={[
+            { label: 'ID',          value: <span className="font-mono">{selectedSubnet.id}</span> },
             { label: 'Name',        value: selectedSubnet.name },
             { label: 'CIDR',        value: <span className="font-mono">{selectedSubnet.cidr}</span> },
             { label: 'IP Version',  value: <span className="badge badge-blue">IPv{selectedSubnet.ip_version}</span> },
