@@ -16,6 +16,61 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Allocation API stop treating them as free space. Auto-synced ranges are
   read-only in the UI except for delete.
 
+**Search**
+- Search results are now clickable, navigating to the matching record's
+  edit view via an explicit Edit button (DNS records, DHCP reservations,
+  addresses, subnets) instead of dead-ending on a read-only row.
+
+**Subnet map**
+- The heatmap's "Create address here" popup on a free cell is now a real
+  form (status, hostname, MAC, description) instead of creating a bare
+  address with no fields.
+- The subnet detail drawer now shows the subnet's numeric ID.
+
+**Ops**
+- `docs/examples/ansible/get-next-free-ip.yml` and `create-test-vm.yml` —
+  two new standalone Ansible playbook examples for the Allocation API.
+
+### Fixed
+
+**DNS sync**
+- MS DNS: CNAME and NS records were silently dropped from `get_records()`
+  instead of being synced.
+- MS DNS: a record with a TTL above 32 bits (e.g. a huge NS TTL) could
+  throw and abort the entire zone's sync; now handled without losing the
+  rest of the zone.
+- A zone whose fetch failed mid-sync could wipe that zone's previously
+  cached DNS records instead of leaving them in place — sync now only
+  deletes cache rows for zones that fetched successfully this pass.
+- The DNS record-type filter only applied within the current page instead
+  of across the whole zone.
+- A DNS record with a very long value (e.g. a long TXT record) could push
+  the zone header's Add Record button off-screen; values now wrap instead
+  of overflowing.
+
+**DHCP**
+- MS DHCP: `Remove-DhcpServerv4Reservation` was called with an invalid
+  `-Force` flag, failing every delete.
+- MS DHCP: `Add-DhcpServerv4Reservation`'s `-ClientId` requires
+  dash-delimited hex; IPForge's colon-delimited MAC form was rejected
+  outright.
+- MS DHCP: a DUID-based client identifier (common on newer Windows guest
+  OSes) was being stored and displayed as if it were the lease's MAC
+  address.
+- MS DHCP: editing a reservation's MAC address deletes and re-adds it on
+  the DHCP server; if the add failed, the reservation is now restored
+  instead of left permanently deleted.
+
+**Drift**
+- `hostname_mismatch` compared MS-DNS's zone-relative name against IPAM/
+  DHCP's FQDN, flagging nearly every MS-DNS-zone address as a false
+  positive; now compares the host label on both sides.
+
+### Security
+
+- Cleared HIGH-severity CVEs (util-linux/libuuid) in the web container
+  image.
+
 ## [1.2.0] - 2026-09-05
 
 ### Added
