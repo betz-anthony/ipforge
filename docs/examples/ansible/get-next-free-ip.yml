@@ -1,0 +1,54 @@
+---
+# Look up the next free IP in a subnet. Read-only — does not allocate or
+# reserve anything, safe to run repeatedly.
+#
+# Usage:
+#   ansible-playbook get-next-free-ip.yml \
+#     -e ipam_url=https://ipforge.example.com \
+#     -e ipam_token=ipfg_... \
+#     -e subnet_id=3
+#
+# subnet_id is the subnet's numeric ID (visible on the Subnets page detail
+# drawer as of 2026-09-18), not its CIDR.
+
+- hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars:
+    # validate_certs: false   # uncomment for a self-signed / internal cert
+
+  tasks:
+    - name: Fetch the subnet's address map
+      ansible.builtin.uri:
+        url: "{{ ipam_url }}/api/v1/subnets/{{ subnet_id }}/map"
+        method: GET
+        headers:
+          Authorization: "Bearer {{ ipam_token }}"
+        status_code: [200]
+      register: subnet_map
+
+    - name: Fail clearly if the subnet is too large to map
+      ansible.builtin.fail:
+        msg: >
+          Subnet has {{ subnet_map.json.host_count }} hosts — too large for
+          the map endpoint. Use the allocation API directly instead of
+          scanning for a free IP by hand.
+      when: subnet_map.json.too_large
+
+    - name: Collect free cells
+      ansible.builtin.set_fact:
+        free_cells: "{{ subnet_map.json.cells | selectattr('status', 'equalto', 'free') | list }}"
+
+    - name: Fail clearly if the subnet is full
+      ansible.builtin.fail:
+        msg: "No free IPs left in subnet {{ subnet_id }}."
+      when: free_cells | length == 0
+
+    - name: Find the first free cell
+      ansible.builtin.set_fact:
+        next_free_ip: "{{ free_cells[0].ip }}"
+
+    - name: Show it
+      ansible.builtin.debug:
+        msg: "Next free IP in subnet {{ subnet_id }}: {{ next_free_ip }}"

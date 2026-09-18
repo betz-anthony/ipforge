@@ -1,0 +1,57 @@
+---
+# Allocate an IP for a test VM and register it in both DNS and DHCP in one
+# call. Idempotent by hostname — safe to re-run (status 200 = already
+# allocated, 201 = newly allocated); re-running does not create duplicates
+# or double-register.
+#
+# Usage:
+#   ansible-playbook create-test-vm.yml \
+#     -e ipam_url=https://ipforge.example.com \
+#     -e ipam_token=ipfg_... \
+#     -e subnet_id=3 \
+#     -e vm_hostname=demo-test01 \
+#     -e vm_mac=aa:bb:cc:dd:ee:ff \
+#     -e dns_zone=example.com
+#
+# The token needs write access to subnet_id (operator role, or a scoped
+# user/token with a write grant on it) — read-only tokens get a 403.
+
+- hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars:
+    # validate_certs: false   # uncomment for a self-signed / internal cert
+
+  tasks:
+    - name: Allocate an IP for {{ vm_hostname }}, registering DNS + DHCP
+      ansible.builtin.uri:
+        url: "{{ ipam_url }}/api/v1/subnets/{{ subnet_id }}/allocate"
+        method: POST
+        headers:
+          Authorization: "Bearer {{ ipam_token }}"
+        body_format: json
+        body:
+          hostname: "{{ vm_hostname }}"
+          mac_address: "{{ vm_mac }}"
+          register_dns: true
+          dns_zone: "{{ dns_zone }}"
+          register_dhcp: true
+        status_code: [200, 201]
+      register: vm_result
+
+    - name: Show the result
+      ansible.builtin.debug:
+        msg: >
+          {{ 'Allocated' if vm_result.json.is_new else 'Already allocated' }}
+          {{ vm_hostname }}: {{ vm_result.json.address }}
+          (DNS: {{ vm_result.json.dns_registered }},
+           DHCP: {{ vm_result.json.dhcp_registered }})
+
+    - name: Warn if DNS or DHCP registration didn't happen
+      ansible.builtin.debug:
+        msg: >
+          Heads up — one or both registrations came back false. Check that a
+          DNS/DHCP provider is configured for this subnet in Settings and
+          that dns_zone matches an actual zone.
+      when: not (vm_result.json.dns_registered and vm_result.json.dhcp_registered)
