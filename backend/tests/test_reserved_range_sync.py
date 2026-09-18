@@ -146,3 +146,109 @@ def test_sync_preserves_existing_auto_rows_on_fetch_failure():
         assert rows[0].start_ip == "10.10.0.1"
     finally:
         db.close()
+
+
+def test_sync_resolves_most_specific_subnet_not_first_match():
+    """A scope's start_range can fall inside both a supernet and a child
+    subnet (subnet hierarchy). The child (longest-prefix / most specific)
+    match must win, regardless of insertion order — a naive first-match scan
+    would typically pick whichever subnet was created first (often the
+    supernet)."""
+    db = TestingSessionLocal()
+    supernet = Subnet(name="supernet", cidr="10.0.0.0/16", ip_version=4)
+    child = Subnet(name="child", cidr="10.0.1.0/24", ip_version=4)
+    db.add(supernet)
+    db.add(child)
+    db.commit()
+    supernet_id, child_id = supernet.id, child.id  # capture while session is open
+    db.close()
+
+    class _Provider:
+        source = "msdhcp01"
+
+        def get_scopes(self):
+            return [DHCPScope(scope_id="10.0.1.0", name="lan", subnet_mask="/24",
+                               start_range="10.0.1.10", end_range="10.0.1.200",
+                               source=self.source)]
+
+        def get_leases(self, scope_id):
+            return []
+
+        def get_scope_gateway(self, scope_id):
+            return "10.0.1.1"
+
+        def get_scope_exclusions(self, scope_id):
+            return []
+
+    from app import sync as sync_module
+    with patch("app.providers.registry.get_dhcp_providers", return_value=[_Provider()]), \
+         patch("app.providers.registry.get_dns_providers", return_value=[]), \
+         patch("app.sync.SessionLocal", side_effect=_make_session):
+        sync_module.sync_dhcp()
+
+    db = TestingSessionLocal()
+    try:
+        child_rows = db.query(SubnetRange).filter_by(subnet_id=child_id, source="msdhcp01").all()
+        supernet_rows = db.query(SubnetRange).filter_by(subnet_id=supernet_id, source="msdhcp01").all()
+        assert len(child_rows) == 1
+        assert child_rows[0].start_ip == "10.0.1.1"
+        assert supernet_rows == []
+    finally:
+        db.close()
+
+
+class _ProviderTwoScopesSameSubnet:
+    """Two scopes from one provider, both resolving to the same subnet
+    (e.g. split pools represented as separate DHCP scopes). Only scope-a
+    reports a gateway, so the aggregation-order question (which scope's
+    gateway "wins") doesn't matter for this test — the point is that both
+    scopes' exclusions must survive, not that scope-b's write clobbers
+    scope-a's."""
+    source = "msdhcp01"
+
+    def get_scopes(self):
+        return [
+            DHCPScope(scope_id="scope-a", name="lan-a", subnet_mask="/24",
+                       start_range="10.10.0.10", end_range="10.10.0.100",
+                       source=self.source),
+            DHCPScope(scope_id="scope-b", name="lan-b", subnet_mask="/24",
+                       start_range="10.10.0.150", end_range="10.10.0.200",
+                       source=self.source),
+        ]
+
+    def get_leases(self, scope_id):
+        return []
+
+    def get_scope_gateway(self, scope_id):
+        return "10.10.0.1" if scope_id == "scope-a" else None
+
+    def get_scope_exclusions(self, scope_id):
+        if scope_id == "scope-a":
+            return [("10.10.0.2", "10.10.0.9")]
+        return [("10.10.0.240", "10.10.0.250")]
+
+
+def test_sync_aggregates_multiple_scopes_for_same_subnet_without_clobbering():
+    db = TestingSessionLocal()
+    subnet = _seed_subnet(db)
+    subnet_id = subnet.id  # capture while session is still open
+    db.close()
+
+    from app import sync as sync_module
+    with patch("app.providers.registry.get_dhcp_providers", return_value=[_ProviderTwoScopesSameSubnet()]), \
+         patch("app.providers.registry.get_dns_providers", return_value=[]), \
+         patch("app.sync.SessionLocal", side_effect=_make_session):
+        sync_module.sync_dhcp()
+
+    db = TestingSessionLocal()
+    try:
+        rows = db.query(SubnetRange).filter_by(subnet_id=subnet_id, source="msdhcp01").all()
+        by_kind = {(r.kind, r.start_ip, r.end_ip) for r in rows}
+        # Both scopes' exclusions present — the second scope's write did not
+        # wipe out the first's.
+        assert ("gateway", "10.10.0.1", "10.10.0.1") in by_kind
+        assert ("excluded", "10.10.0.2", "10.10.0.9") in by_kind
+        assert ("excluded", "10.10.0.240", "10.10.0.250") in by_kind
+        assert len(rows) == 3
+    finally:
+        db.close()

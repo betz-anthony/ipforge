@@ -1,3 +1,4 @@
+import ipaddress
 import logging
 import threading
 import time
@@ -40,12 +41,21 @@ def _pools_for_scope(p, scope) -> list[tuple[str, str]]:
 
 
 def _resolve_subnet_id(subnets, scope) -> int | None:
+    """Most-specific (longest-prefix) subnet whose CIDR contains the scope's
+    start_range. Subnet hierarchy means a scope can sit inside both a
+    supernet and a child subnet — the child is the correct match."""
     if not scope.start_range:
         return None
+    best_id: int | None = None
+    best_prefixlen = -1
     for s in subnets:
-        if _ip_in_cidr(scope.start_range, s.cidr):
-            return s.id
-    return None
+        if not _ip_in_cidr(scope.start_range, s.cidr):
+            continue
+        prefixlen = ipaddress.ip_network(s.cidr, strict=False).prefixlen
+        if prefixlen > best_prefixlen:
+            best_prefixlen = prefixlen
+            best_id = s.id
+    return best_id
 
 
 def _fetch_reserved_range_data(p, scope):
@@ -331,20 +341,38 @@ def sync_dhcp() -> None:
                 db.commit()
 
         subnets = db.query(Subnet).all()
+        # Resolve each scope's subnet once (not per as_completed callback) and carry it
+        # forward in fmap, so a scope's subnet_id is only ever computed one time.
+        scope_subnets = [(p, s, _resolve_subnet_id(subnets, s)) for p, s in scope_list]
+
+        # Multiple scopes (e.g. split pools, or two scopes from the same provider that
+        # both land in the same subnet) can resolve to the same (subnet_id, source).
+        # Aggregate every scope's contribution before writing anything, so the second
+        # scope's write can't clobber the first's — a delete-then-insert per scope
+        # would otherwise make the surviving rows depend on as_completed() ordering.
+        aggregated: dict[tuple[int, str], dict] = {}
         with ThreadPoolExecutor(max_workers=min(len(scope_list), 8) or 1) as ex:
             fmap = {
-                ex.submit(_fetch_reserved_range_data, p, s): (p, s)
-                for p, s in scope_list if _resolve_subnet_id(subnets, s) is not None
+                ex.submit(_fetch_reserved_range_data, p, s): (p, s, subnet_id)
+                for p, s, subnet_id in scope_subnets if subnet_id is not None
             }
             for f in as_completed(fmap):
-                p, s = fmap[f]
-                subnet_id = _resolve_subnet_id(subnets, s)
+                p, s, subnet_id = fmap[f]
                 try:
                     _, _, gateway, exclusions = f.result()
                 except Exception as e:
                     logger.error("DHCP %s get_scope_gateway/exclusions(%s): %s", p.source, s.scope_id, e)
                     continue
-                _write_reserved_ranges(db, subnet_id, p.source, gateway, exclusions)
+                agg = aggregated.setdefault((subnet_id, p.source), {"gateway": None, "exclusions": []})
+                if gateway:
+                    # If two scopes for the same subnet both report a gateway, last one
+                    # observed wins (as_completed order) — exclusions never lose data
+                    # this way since they're concatenated, not overwritten.
+                    agg["gateway"] = gateway
+                agg["exclusions"].extend(exclusions)
+
+        for (subnet_id, source), agg in aggregated.items():
+            _write_reserved_ranges(db, subnet_id, source, agg["gateway"], agg["exclusions"])
 
         with _ipam_write_lock:
             _auto_populate_from_cache(db)
