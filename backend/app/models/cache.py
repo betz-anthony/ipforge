@@ -37,6 +37,15 @@ class CachedDHCPScope(Base):
     synced_at   = Column(DateTime, nullable=False)
 
 
+class CachedDHCPScopePool(Base):
+    __tablename__ = "cache_dhcp_scope_pools"
+    id         = Column(Integer, primary_key=True, autoincrement=True)
+    scope_id   = Column(String, nullable=False, index=True)
+    source     = Column(String, nullable=False, index=True)
+    start_ip   = Column(String, nullable=False)
+    end_ip     = Column(String, nullable=False)
+
+
 class CachedDHCPLease(Base):
     __tablename__ = "cache_dhcp_leases"
     id          = Column(Integer, primary_key=True, autoincrement=True)

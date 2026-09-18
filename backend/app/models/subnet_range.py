@@ -15,4 +15,5 @@ class SubnetRange(Base):
     end_ip:     Mapped[str]        = mapped_column(String(50), nullable=False)
     kind:       Mapped[str]        = mapped_column(String(20), nullable=False)  # gateway/dhcp_pool/static/reserved
     label:      Mapped[str | None] = mapped_column(String(255), nullable=True)
+    source:     Mapped[str | None] = mapped_column(String(100), nullable=True, index=True)
     created_at: Mapped[datetime]   = mapped_column(DateTime, default=datetime.utcnow)
