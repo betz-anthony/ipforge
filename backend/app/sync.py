@@ -8,7 +8,7 @@ from app.alerting.emit import emit
 from app.database import SessionLocal
 from app.models.cache import (
     CachedDNSZone, CachedDNSRecord,
-    CachedDHCPScope, CachedDHCPLease,
+    CachedDHCPScope, CachedDHCPLease, CachedDHCPScopePool,
     SyncStatus,
 )
 from app.core.mac import normalize_mac
@@ -23,6 +23,18 @@ _dhcp_lock = threading.Lock()
 # both upsert IPAddress rows, so concurrent inserts of the same newly-seen IP
 # would collide on the unique address constraint.
 _ipam_write_lock = threading.Lock()
+
+
+def _pools_for_scope(p, scope) -> list[tuple[str, str]]:
+    """Every pool range for this scope. Providers that expose multiple
+    pools (Kea) implement get_scope_pools; everyone else's one range is
+    already on the DHCPScope object itself from get_scopes()."""
+    get_pools = getattr(p, "get_scope_pools", None)
+    if callable(get_pools):
+        return get_pools(scope.scope_id)
+    if scope.start_range and scope.end_range:
+        return [(scope.start_range, scope.end_range)]
+    return []
 
 
 def _auto_populate_from_cache(db) -> None:
@@ -248,6 +260,12 @@ def sync_dhcp() -> None:
                         ip_version=s.ip_version, source=p.source, synced_at=now,
                     ))
                     scope_list.append((p, s.scope_id))
+                    db.query(CachedDHCPScopePool).filter_by(scope_id=s.scope_id, source=p.source).delete()
+                    for pool_start, pool_end in _pools_for_scope(p, s):
+                        db.add(CachedDHCPScopePool(
+                            scope_id=s.scope_id, source=p.source,
+                            start_ip=pool_start, end_ip=pool_end,
+                        ))
                 db.commit()
 
         def _fetch_leases(p, scope_id):
