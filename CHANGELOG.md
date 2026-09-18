@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+**Reserved Ranges**
+- Each DHCP scope's gateway and exclusion ranges are now auto-synced into
+  Reserved Ranges (msdhcp: native exclusions + gateway; Kea: gateway +
+  pool-gap-derived exclusions; Pi-hole: gateway only), so the subnet map and
+  Allocation API stop treating them as free space. Auto-synced ranges are
+  read-only in the UI except for delete.
+
 ## [1.2.0] - 2026-09-05
 
 ### Added
