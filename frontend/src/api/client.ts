@@ -452,6 +452,7 @@ export interface DHCPScope {
   active: boolean
   ip_version: number
   source: string
+  sync_reserved_ranges: boolean
 }
 
 export interface DHCPReservation {
@@ -510,6 +511,9 @@ export const toolsApi = {
 
 export const dhcpApi = {
   listScopes: () => api.get<DHCPScope[]>('/dhcp/scopes').then(r => r.data),
+  setScopeReservedSync: (scope_id: string, source: string, enabled: boolean) =>
+    api.put(`/dhcp/scopes/${encodeURIComponent(scope_id)}/reserved-sync`, { enabled }, { params: { source } })
+      .then(r => r.data),
   listLeases: (scope_id: string, source: string, params?: {
     q?: string
     sort?: string

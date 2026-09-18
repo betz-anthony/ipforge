@@ -15,6 +15,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   pool-gap-derived exclusions; Pi-hole: gateway only), so the subnet map and
   Allocation API stop treating them as free space. Auto-synced ranges are
   read-only in the UI except for delete.
+- Per-scope opt-out for that auto-sync (DHCP page scope list, "Sync to
+  Reserved Ranges" toggle) — for a scope kept in DHCP for testing/
+  monitoring rather than real distribution, so its gateway/exclusions
+  don't get unioned into a subnet's Reserved Ranges as if authoritative.
+  Leases and pool data for the scope keep syncing either way.
 
 **Search**
 - Search results are now clickable, navigating to the matching record's

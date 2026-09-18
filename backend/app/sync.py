@@ -16,6 +16,7 @@ from app.core.mac import normalize_mac
 from app.core.time import utcnow
 from app.models.subnet import Subnet
 from app.models.subnet_range import SubnetRange
+from app.models.dhcp_scope_override import DHCPScopeReservedSyncExclusion
 from app.utils import ip_in_cidr as _ip_in_cidr
 
 logger = logging.getLogger(__name__)
@@ -384,16 +385,34 @@ def sync_dhcp() -> None:
         # forward in fmap, so a scope's subnet_id is only ever computed one time.
         scope_subnets = [(p, s, _resolve_subnet_id(subnets, s)) for p, s in scope_list]
 
+        excluded = {
+            (row.source, row.scope_id)
+            for row in db.query(DHCPScopeReservedSyncExclusion).all()
+        }
+
         # Multiple scopes (e.g. split pools, or two scopes from the same provider that
         # both land in the same subnet) can resolve to the same (subnet_id, source).
         # Aggregate every scope's contribution before writing anything, so the second
         # scope's write can't clobber the first's — a delete-then-insert per scope
         # would otherwise make the surviving rows depend on as_completed() ordering.
         aggregated: dict[tuple[int, str], dict] = {}
+
+        # An admin-excluded scope (kept in DHCP for testing/monitoring, not real
+        # distribution) never gets fetched — its gateway/exclusions must not count
+        # toward the aggregate. But its (subnet_id, source) still needs an entry so
+        # the write phase below clears any rows a prior sync wrote for it, instead
+        # of leaving them stranded once the scope is opted out. A genuine fetch
+        # failure (network hiccup, provider error) is different — that scope is
+        # simply skipped below, preserving whatever the last successful sync wrote.
+        for p, s, subnet_id in scope_subnets:
+            if subnet_id is not None and (p.source, s.scope_id) in excluded:
+                aggregated.setdefault((subnet_id, p.source), {"gateway": None, "exclusions": []})
+
         with ThreadPoolExecutor(max_workers=min(len(scope_list), 8) or 1) as ex:
             fmap = {
                 ex.submit(_fetch_reserved_range_data, p, s): (p, s, subnet_id)
-                for p, s, subnet_id in scope_subnets if subnet_id is not None
+                for p, s, subnet_id in scope_subnets
+                if subnet_id is not None and (p.source, s.scope_id) not in excluded
             }
             for f in as_completed(fmap):
                 p, s, subnet_id = fmap[f]

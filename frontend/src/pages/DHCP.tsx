@@ -85,6 +85,13 @@ export default function DHCP() {
     if (editingLease) editFormRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
   }, [editingLease])
 
+  const reservedSyncMutation = useMutation({
+    mutationFn: ({ scope, enabled }: { scope: DHCPScope; enabled: boolean }) =>
+      dhcpApi.setScopeReservedSync(scope.scope_id, scope.source, enabled),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['dhcp-scopes'] }),
+    onError: () => showToast('Could not change Reserved Ranges sync for this scope.', 'error'),
+  })
+
   const addMutation = useMutation({
     mutationFn: () => dhcpApi.addReservation(
       selectedScope!.scope_id, form, selectedScope!.source,
@@ -318,6 +325,19 @@ export default function DHCP() {
           </span>
         )}
       </div>
+      <label
+        className="panel-list-item-sub"
+        style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', marginTop: '2px', cursor: 'pointer' }}
+        onClick={e => e.stopPropagation()}
+        title="Whether this scope's gateway/exclusions feed the subnet's Reserved Ranges auto-sync"
+      >
+        <input
+          type="checkbox"
+          checked={s.sync_reserved_ranges}
+          onChange={e => reservedSyncMutation.mutate({ scope: s, enabled: e.target.checked })}
+        />
+        Sync to Reserved Ranges
+      </label>
     </div>
   )
 

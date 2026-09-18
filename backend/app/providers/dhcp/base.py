@@ -12,6 +12,10 @@ class DHCPScope(BaseModel):
     active: bool = True
     ip_version: int = 4
     source: str = ""
+    # Admin-set opt-out (never populated by a provider itself — set by the
+    # API layer from DHCPScopeReservedSyncExclusion). False means this
+    # scope's gateway/exclusions are withheld from Reserved Ranges sync.
+    sync_reserved_ranges: bool = True
 
 
 class DHCPReservation(BaseModel):

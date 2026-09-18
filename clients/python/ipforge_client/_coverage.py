@@ -74,4 +74,6 @@ DEFERRED = {
     ("PUT", "/discovery/devices/{}"),
     ("DELETE", "/discovery/devices/{}"),
     ("POST", "/discovery/devices/{}/poll"),
+    # dhcp — IPAM sync-behavior admin toggle, not a DHCP resource operation
+    ("PUT", "/dhcp/scopes/{}/reserved-sync"),
 }

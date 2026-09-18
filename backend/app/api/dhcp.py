@@ -10,6 +10,7 @@ from app.providers.registry import get_dhcp_providers, get_dns_providers
 from app.providers.dhcp.base import DHCPReservation, DHCPScope
 from app.providers.dns.base import DNSRecord
 from app.models.cache import CachedDHCPScope, CachedDHCPLease, CachedDNSRecord, CachedDNSZone
+from app.models.dhcp_scope_override import DHCPScopeReservedSyncExclusion
 from app.core.deps import require_operator
 from app.core.audit import write_audit
 from app.core.time import utcnow
@@ -29,15 +30,54 @@ DHCP_SORT_MAP = {
 @router.get("/scopes", response_model=list[DHCPScope])
 def list_scopes(db: Session = Depends(get_db)):
     rows = db.query(CachedDHCPScope).all()
+    excluded = {
+        (row.source, row.scope_id)
+        for row in db.query(DHCPScopeReservedSyncExclusion).all()
+    }
     return [
         DHCPScope(
             scope_id=r.scope_id, name=r.name, subnet_mask=r.subnet_mask,
             start_range=r.start_range, end_range=r.end_range,
             description=r.description, active=r.active,
             ip_version=r.ip_version, source=r.source,
+            sync_reserved_ranges=(r.source, r.scope_id) not in excluded,
         )
         for r in rows
     ]
+
+
+class ReservedSyncUpdate(BaseModel):
+    enabled: bool
+
+
+@router.put("/scopes/{scope_id:path}/reserved-sync")
+def set_scope_reserved_sync(
+    scope_id: str,
+    body: ReservedSyncUpdate,
+    source: str = Query(...),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_operator),
+):
+    """Toggle whether this scope's gateway/exclusions feed the Reserved
+    Ranges auto-sync (sync.py's sync_dhcp). Only affects the next sync
+    pass — leases/pools for the scope keep syncing either way."""
+    existing = db.query(DHCPScopeReservedSyncExclusion).filter_by(
+        source=source, scope_id=scope_id,
+    ).first()
+
+    if body.enabled:
+        if existing:
+            db.delete(existing)
+    else:
+        if not existing:
+            db.add(DHCPScopeReservedSyncExclusion(source=source, scope_id=scope_id))
+
+    write_audit(
+        db, current_user.username, "update", "dhcp_scope_reserved_sync", f"{source}/{scope_id}",
+        f"{'enabled' if body.enabled else 'disabled'} Reserved Ranges sync for scope {scope_id} ({source})",
+    )
+    db.commit()
+    return {"source": source, "scope_id": scope_id, "sync_reserved_ranges": body.enabled}
 
 
 @router.get("/scopes/{scope_id:path}/leases")

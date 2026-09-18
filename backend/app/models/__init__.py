@@ -23,6 +23,7 @@ from app.models.gitops import GitopsManaged  # noqa: F401
 from app.models.automation import AutomationRule  # noqa: F401
 from app.models.security import SecurityEvent, MacLastSeen  # noqa: F401
 from app.models.webhook import WebhookEndpoint, WebhookDelivery  # noqa: F401
+from app.models.dhcp_scope_override import DHCPScopeReservedSyncExclusion  # noqa: F401
 
 __all__ = [
     "Subnet", "IPAddress", "AppSetting",
@@ -43,4 +44,5 @@ __all__ = [
     "GitopsManaged",
     "AutomationRule",
     "SecurityEvent", "MacLastSeen",
+    "DHCPScopeReservedSyncExclusion",
 ]

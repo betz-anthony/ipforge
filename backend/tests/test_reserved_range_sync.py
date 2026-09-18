@@ -1,6 +1,7 @@
 from unittest.mock import patch
 from app.models.subnet import Subnet
 from app.models.subnet_range import SubnetRange
+from app.models.dhcp_scope_override import DHCPScopeReservedSyncExclusion
 from app.providers.dhcp.base import DHCPScope
 from app.core.time import utcnow
 from tests.conftest import TestingSessionLocal
@@ -318,5 +319,93 @@ def test_write_reserved_ranges_drops_version_mismatch():
         sync_module._write_reserved_ranges(db, subnet_id, "msdhcp01", "fe80::1", [])
         rows = db.query(SubnetRange).filter_by(subnet_id=subnet_id, source="msdhcp01").all()
         assert rows == []
+    finally:
+        db.close()
+
+
+def test_sync_excluded_scope_clears_previously_synced_rows():
+    """A scope opted out of Reserved Ranges sync (DHCPScopeReservedSyncExclusion)
+    must not just stop adding new rows — a prior sync's rows for it must be
+    cleared too, not left stranded once the operator opts it out."""
+    db = TestingSessionLocal()
+    subnet = _seed_subnet(db)
+    subnet_id = subnet.id
+    # Stale rows from before the exclusion was set — must be cleared by this sync.
+    db.add(SubnetRange(subnet_id=subnet_id, start_ip="10.10.0.1", end_ip="10.10.0.1",
+                        kind="gateway", source="msdhcp01"))
+    db.add(SubnetRange(subnet_id=subnet_id, start_ip="10.10.0.2", end_ip="10.10.0.9",
+                        kind="excluded", source="msdhcp01"))
+    db.add(DHCPScopeReservedSyncExclusion(source="msdhcp01", scope_id="10.10.0.0"))
+    db.commit()
+    db.close()
+
+    from app import sync as sync_module
+    with patch("app.providers.registry.get_dhcp_providers", return_value=[_ProviderWithGatewayAndExclusions()]), \
+         patch("app.providers.registry.get_dns_providers", return_value=[]), \
+         patch("app.sync.SessionLocal", side_effect=_make_session):
+        sync_module.sync_dhcp()
+
+    db = TestingSessionLocal()
+    try:
+        rows = db.query(SubnetRange).filter_by(subnet_id=subnet_id, source="msdhcp01").all()
+        assert rows == []
+    finally:
+        db.close()
+
+
+def test_sync_excluded_scope_does_not_block_other_scope_same_source():
+    """Two scopes from the same provider land in the same subnet; only one
+    is excluded. The excluded scope's pre-seeded empty aggregate must not
+    wipe out the other scope's real contribution."""
+    db = TestingSessionLocal()
+    subnet = _seed_subnet(db)
+    subnet_id = subnet.id
+    db.add(DHCPScopeReservedSyncExclusion(source="msdhcp01", scope_id="scope-a"))
+    db.commit()
+    db.close()
+
+    from app import sync as sync_module
+    with patch("app.providers.registry.get_dhcp_providers", return_value=[_ProviderTwoScopesSameSubnet()]), \
+         patch("app.providers.registry.get_dns_providers", return_value=[]), \
+         patch("app.sync.SessionLocal", side_effect=_make_session):
+        sync_module.sync_dhcp()
+
+    db = TestingSessionLocal()
+    try:
+        rows = db.query(SubnetRange).filter_by(subnet_id=subnet_id, source="msdhcp01").all()
+        by_kind = {(r.kind, r.start_ip, r.end_ip) for r in rows}
+        # scope-a (excluded) contributes nothing; scope-b's exclusion survives.
+        assert ("gateway", "10.10.0.1", "10.10.0.1") not in by_kind
+        assert ("excluded", "10.10.0.2", "10.10.0.9") not in by_kind
+        assert ("excluded", "10.10.0.240", "10.10.0.250") in by_kind
+        assert len(rows) == 1
+    finally:
+        db.close()
+
+
+def test_sync_fetch_failure_still_preserves_rows_when_exclusion_table_has_unrelated_rows():
+    """An exclusion row for a different scope must not change the existing
+    partial-failure-preserves-cache behavior for an unrelated, unexcluded
+    scope that simply fails to fetch."""
+    db = TestingSessionLocal()
+    subnet = _seed_subnet(db)
+    subnet_id = subnet.id
+    db.add(SubnetRange(subnet_id=subnet_id, start_ip="10.10.0.1", end_ip="10.10.0.1",
+                        kind="gateway", source="msdhcp01"))
+    db.add(DHCPScopeReservedSyncExclusion(source="msdhcp01", scope_id="some-other-scope"))
+    db.commit()
+    db.close()
+
+    from app import sync as sync_module
+    with patch("app.providers.registry.get_dhcp_providers", return_value=[_FailingProvider()]), \
+         patch("app.providers.registry.get_dns_providers", return_value=[]), \
+         patch("app.sync.SessionLocal", side_effect=_make_session):
+        sync_module.sync_dhcp()
+
+    db = TestingSessionLocal()
+    try:
+        rows = db.query(SubnetRange).filter_by(subnet_id=subnet_id, source="msdhcp01").all()
+        assert len(rows) == 1
+        assert rows[0].start_ip == "10.10.0.1"
     finally:
         db.close()
