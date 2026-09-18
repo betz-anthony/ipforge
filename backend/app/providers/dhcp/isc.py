@@ -21,6 +21,41 @@ def _ip_int(ip: str) -> int:
     return int(ipaddress.ip_address(ip))
 
 
+def _host_bounds(cidr: str) -> tuple[int, int]:
+    import ipaddress
+    net = ipaddress.ip_network(cidr, strict=False)
+    if net.version == 4 and net.prefixlen < 31:
+        return int(net.network_address) + 1, int(net.broadcast_address) - 1
+    return int(net.network_address), int(net.broadcast_address)
+
+
+def _addr(n: int, version: int) -> str:
+    import ipaddress
+    return str(ipaddress.IPv4Address(n) if version == 4 else ipaddress.IPv6Address(n))
+
+
+def _pool_gaps(cidr: str, pools: list[tuple[str, str]]) -> list[tuple[str, str]]:
+    """The gaps between a subnet's pool ranges within its host range —
+    integer-arithmetic on sorted boundaries, never host iteration (must not
+    scale with subnet size)."""
+    import ipaddress
+    net = ipaddress.ip_network(cidr, strict=False)
+    lo, hi = _host_bounds(cidr)
+    clamped = sorted(
+        (max(lo, _ip_int(s)), min(hi, _ip_int(e)))
+        for s, e in pools
+    )
+    gaps: list[tuple[str, str]] = []
+    cursor = lo
+    for start, end in clamped:
+        if start > cursor:
+            gaps.append((_addr(cursor, net.version), _addr(start - 1, net.version)))
+        cursor = max(cursor, end + 1)
+    if cursor <= hi:
+        gaps.append((_addr(cursor, net.version), _addr(hi, net.version)))
+    return gaps
+
+
 class KeaDHCPProvider(DHCPProvider):
     def __init__(self, cfg: dict, name: str):
         self.source = name
@@ -115,6 +150,27 @@ class KeaDHCPProvider(DHCPProvider):
             if s["subnet"] == scope_id:
                 return self._pool_ranges(s)
         return []
+
+    def get_scope_gateway(self, scope_id: str) -> str | None:
+        if _is_v6(scope_id):
+            return None  # v4 only for this pass — matches msdhcp
+        service = self._service_for(scope_id)
+        for s in self._get_subnets(service):
+            if s["subnet"] != scope_id:
+                continue
+            for opt in s.get("option-data", []):
+                if opt.get("name") == "routers" or opt.get("code") == 3:
+                    data = opt.get("data", "")
+                    return data.split(",")[0].strip() or None
+        return None
+
+    def get_scope_exclusions(self, scope_id: str) -> list[tuple[str, str]]:
+        if _is_v6(scope_id):
+            return []  # v4 only for this pass — matches msdhcp
+        pools = self.get_scope_pools(scope_id)
+        if not pools:
+            return []
+        return _pool_gaps(scope_id, pools)
 
     def get_scopes(self) -> list[DHCPScope]:
         # Query each service independently: many Kea deployments run only dhcp4
