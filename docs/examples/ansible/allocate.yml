@@ -4,7 +4,7 @@
 #
 # Required variables:
 #   ipam_url    - base URL, e.g. https://ipam.example.com
-#   ipam_token  - JWT token from POST /api/auth/login
+#   ipam_token  - JWT token from POST /api/v1/auth/login (or an ipfg_ API token)
 #   subnet_id   - integer ID of the target subnet
 #   hostname    - desired hostname (case-insensitive)
 #   mac_address - MAC address for DHCP reservation
@@ -12,7 +12,7 @@
 
 - name: Allocate IP for {{ hostname }}
   ansible.builtin.uri:
-    url: "{{ ipam_url }}/api/subnets/{{ subnet_id }}/allocate"
+    url: "{{ ipam_url }}/api/v1/subnets/{{ subnet_id }}/allocate"
     method: POST
     headers:
       Authorization: "Bearer {{ ipam_token }}"
