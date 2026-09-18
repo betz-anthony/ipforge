@@ -16,6 +16,11 @@ def _is_v6(scope_id: str) -> bool:
     return ":" in scope_id
 
 
+def _ip_int(ip: str) -> int:
+    import ipaddress
+    return int(ipaddress.ip_address(ip))
+
+
 class KeaDHCPProvider(DHCPProvider):
     def __init__(self, cfg: dict, name: str):
         self.source = name
@@ -62,19 +67,28 @@ class KeaDHCPProvider(DHCPProvider):
                 return int(s["id"])
         raise RuntimeError(f"Subnet {scope_id!r} not found in Kea")
 
+    def _pool_ranges(self, s: dict) -> list[tuple[str, str]]:
+        """Every (start, end) pool range for one Kea subnet dict, robust to
+        both 'a-b' (config-get) and 'a - b' (older/manual config) spacing."""
+        ranges: list[tuple[str, str]] = []
+        for pool in s.get("pools", []):
+            pool_str = pool.get("pool", "")
+            if "-" not in pool_str:
+                continue
+            start, end = [p.strip() for p in pool_str.split("-", 1)]
+            ranges.append((start, end))
+        return ranges
+
     def _scopes_for_service(self, service: str) -> list[DHCPScope]:
         v6 = service == "dhcp6"
         scopes: list[DHCPScope] = []
         for s in self._get_subnets(service):
-            pools = s.get("pools", [])
-            pool_str = pools[0].get("pool", "") if pools else ""
-            start = end = ""
-            # Kea's config-get returns pools as "a-b" (no spaces); older/manual
-            # configs may use "a - b". Split on the hyphen either way (IPs never
-            # contain one). Without this, start/end come back empty and DHCP
-            # scope matching fails for every Kea scope.
-            if "-" in pool_str:
-                start, end = [p.strip() for p in pool_str.split("-", 1)]
+            pool_ranges = self._pool_ranges(s)
+            if pool_ranges:
+                start = min(pool_ranges, key=lambda r: _ip_int(r[0]))[0]
+                end = max(pool_ranges, key=lambda r: _ip_int(r[1]))[1]
+            else:
+                start = end = ""
             cidr = s["subnet"]
             mask = ""
             if v6 and "/" in cidr:
@@ -90,6 +104,17 @@ class KeaDHCPProvider(DHCPProvider):
                 ip_version=6 if v6 else 4,
             ))
         return scopes
+
+    def get_scope_pools(self, scope_id: str) -> list[tuple[str, str]]:
+        """Every pool range configured on this scope — a Kea subnet can have
+        more than one (a common way to carve out an exclusion). Not part of
+        the DHCPProvider ABC: msdhcp/Pi-hole only ever have one pool, which
+        the sync layer already gets from DHCPScope.start_range/end_range."""
+        service = self._service_for(scope_id)
+        for s in self._get_subnets(service):
+            if s["subnet"] == scope_id:
+                return self._pool_ranges(s)
+        return []
 
     def get_scopes(self) -> list[DHCPScope]:
         # Query each service independently: many Kea deployments run only dhcp4
