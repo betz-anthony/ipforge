@@ -433,6 +433,10 @@ can see committed space:</p>
 <td><code>reserved</code></td>
 <td>anything else held out of allocation</td>
 </tr>
+<tr>
+<td><code>excluded</code></td>
+<td>an address excluded from DHCP assignment</td>
+</tr>
 </tbody>
 </table>
 <p>Add a range with a start IP, optional end IP (defaults to start = a single IP),
@@ -441,6 +445,14 @@ a reserved range. Reserved IPs are counted as a separate bucket in the subnet's
 utilization (shown as a hatched segment on the utilization bar), distinct from
 <em>used</em>. Writing ranges requires operator+. Validation rejects ranges outside the
 subnet CIDR, reversed start/end, or overlaps with an existing range.</p>
+<p>Gateway and exclusion ranges are also synced automatically from the DHCP
+provider where it supports the concept: <code>msdhcp</code> syncs its native exclusion
+ranges and gateway, Kea syncs its gateway and derives exclusion ranges from
+the gaps between configured pools, and Pi-hole syncs its gateway only. An
+auto-synced range shows a "synced · <code>&lt;provider name&gt;</code>" badge and can't be
+edited from the UI — it's a reflection of what the DHCP server has
+configured, not something IPForge owns. It can still be deleted; if it's
+still true at the provider, it reappears on the next sync.</p>
 <h3 id="address-map">Address map</h3>
 <p>A grid of every host IP in the subnet, colored by status (free / assigned /
 reserved / discovered / deprecated) with a red outline on any IP that has open
