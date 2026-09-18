@@ -38,7 +38,7 @@ def _v4_client_mac(client_id: str) -> str:
     try:
         normalize_mac(client_id)
     except ValueError:
-        logger.warning("msdhcp: ClientId %r is not a MAC (likely a DUID-based client-id) — leaving blank", client_id)
+        logger.debug("msdhcp: ClientId %r is not a MAC (likely a DUID-based client-id) — leaving blank", client_id)
         return ""
     return client_id
 
