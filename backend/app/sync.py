@@ -13,6 +13,8 @@ from app.models.cache import (
 )
 from app.core.mac import normalize_mac
 from app.core.time import utcnow
+from app.models.subnet import Subnet
+from app.models.subnet_range import SubnetRange
 from app.utils import ip_in_cidr as _ip_in_cidr
 
 logger = logging.getLogger(__name__)
@@ -35,6 +37,39 @@ def _pools_for_scope(p, scope) -> list[tuple[str, str]]:
     if scope.start_range and scope.end_range:
         return [(scope.start_range, scope.end_range)]
     return []
+
+
+def _resolve_subnet_id(subnets, scope) -> int | None:
+    if not scope.start_range:
+        return None
+    for s in subnets:
+        if _ip_in_cidr(scope.start_range, s.cidr):
+            return s.id
+    return None
+
+
+def _fetch_reserved_range_data(p, scope):
+    return p, scope, p.get_scope_gateway(scope.scope_id), p.get_scope_exclusions(scope.scope_id)
+
+
+def _write_reserved_ranges(db, subnet_id, source, gateway, exclusions) -> None:
+    new_rows: list[tuple[str, str, str]] = []  # (kind, start_ip, end_ip)
+    if gateway:
+        new_rows.append(("gateway", gateway, gateway))
+    for start, end in exclusions:
+        new_rows.append(("excluded", start, end))
+
+    manual_ranges = {
+        (r.start_ip, r.end_ip)
+        for r in db.query(SubnetRange).filter_by(subnet_id=subnet_id, source=None).all()
+    }
+
+    db.query(SubnetRange).filter_by(subnet_id=subnet_id, source=source).delete()
+    for kind, start_ip, end_ip in new_rows:
+        if (start_ip, end_ip) in manual_ranges:
+            continue  # operator already has an identical manual range — don't clutter
+        db.add(SubnetRange(subnet_id=subnet_id, start_ip=start_ip, end_ip=end_ip, kind=kind, source=source))
+    db.commit()
 
 
 def _auto_populate_from_cache(db) -> None:
@@ -238,7 +273,7 @@ def sync_dhcp() -> None:
         providers = get_dhcp_providers()
 
         now = utcnow()
-        scope_list: list[tuple] = []  # (provider, scope_id)
+        scope_list: list[tuple] = []  # (provider, DHCPScope)
 
         with ThreadPoolExecutor(max_workers=len(providers) or 1) as ex:
             fmap = {ex.submit(p.get_scopes): p for p in providers}
@@ -259,7 +294,7 @@ def sync_dhcp() -> None:
                         description=s.description, active=s.active,
                         ip_version=s.ip_version, source=p.source, synced_at=now,
                     ))
-                    scope_list.append((p, s.scope_id))
+                    scope_list.append((p, s))
                     try:
                         pools = _pools_for_scope(p, s)
                     except Exception as e:
@@ -277,13 +312,13 @@ def sync_dhcp() -> None:
             return p, scope_id, p.get_leases(scope_id)
 
         with ThreadPoolExecutor(max_workers=min(len(scope_list), 8) or 1) as ex:
-            fmap = {ex.submit(_fetch_leases, p, sid): (p, sid) for p, sid in scope_list}
+            fmap = {ex.submit(_fetch_leases, p, s.scope_id): (p, s) for p, s in scope_list}
             for f in as_completed(fmap):
                 try:
                     p, scope_id, leases = f.result()
                 except Exception as e:
-                    p, scope_id = fmap[f]
-                    logger.error("DHCP %s get_leases(%s): %s", p.source, scope_id, e)
+                    p, s = fmap[f]
+                    logger.error("DHCP %s get_leases(%s): %s", p.source, s.scope_id, e)
                     continue
                 db.query(CachedDHCPLease).filter_by(scope_id=scope_id, source=p.source).delete()
                 for l in leases:
@@ -294,6 +329,22 @@ def sync_dhcp() -> None:
                         source=p.source, synced_at=now,
                     ))
                 db.commit()
+
+        subnets = db.query(Subnet).all()
+        with ThreadPoolExecutor(max_workers=min(len(scope_list), 8) or 1) as ex:
+            fmap = {
+                ex.submit(_fetch_reserved_range_data, p, s): (p, s)
+                for p, s in scope_list if _resolve_subnet_id(subnets, s) is not None
+            }
+            for f in as_completed(fmap):
+                p, s = fmap[f]
+                subnet_id = _resolve_subnet_id(subnets, s)
+                try:
+                    _, _, gateway, exclusions = f.result()
+                except Exception as e:
+                    logger.error("DHCP %s get_scope_gateway/exclusions(%s): %s", p.source, s.scope_id, e)
+                    continue
+                _write_reserved_ranges(db, subnet_id, p.source, gateway, exclusions)
 
         with _ipam_write_lock:
             _auto_populate_from_cache(db)
