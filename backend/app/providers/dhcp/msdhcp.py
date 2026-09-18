@@ -250,3 +250,33 @@ class MSDHCPProvider(DHCPProvider):
                 f"-Description {ps_quote(new.description)} "
                 f"-ComputerName {ps_quote(self._dhcp_server)}"
             )
+
+    def get_scope_gateway(self, scope_id: str) -> str | None:
+        if _is_v6(scope_id):
+            return None  # v4 only for this pass
+        out = self._run(
+            f"Get-DhcpServerv4OptionValue -OptionId 3 -ScopeId {ps_quote(scope_id)} "
+            f"-ComputerName {ps_quote(self._dhcp_server)} | ConvertTo-Json"
+        )
+        results = self._parse_json(out)
+        for r in results if isinstance(results, list) else [results]:
+            values = r.get("Value") or []
+            if values:
+                return values[0]
+        return None
+
+    def get_scope_exclusions(self, scope_id: str) -> list[tuple[str, str]]:
+        if _is_v6(scope_id):
+            return []  # v4 only for this pass
+        out = self._run(
+            f"Get-DhcpServerv4ExclusionRange -ScopeId {ps_quote(scope_id)} "
+            f"-ComputerName {ps_quote(self._dhcp_server)} | ConvertTo-Json"
+        )
+        results = self._parse_json(out)
+        exclusions: list[tuple[str, str]] = []
+        for r in results if isinstance(results, list) else ([results] if results else []):
+            start = r.get("StartRange", {}).get("IPAddressToString")
+            end = r.get("EndRange", {}).get("IPAddressToString")
+            if start and end:
+                exclusions.append((start, end))
+        return exclusions
