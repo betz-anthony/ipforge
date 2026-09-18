@@ -98,3 +98,7 @@ class PiholeDHCPProvider(DHCPProvider):
         # No in-place update on the config-list API — delete and re-add.
         self.delete_reservation(old.scope_id, old.ip_address)
         self.add_reservation(new)
+
+    def get_scope_gateway(self, scope_id: str) -> str | None:
+        router = self._dhcp_cfg().get("router", "")
+        return router or None
