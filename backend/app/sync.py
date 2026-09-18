@@ -260,12 +260,17 @@ def sync_dhcp() -> None:
                         ip_version=s.ip_version, source=p.source, synced_at=now,
                     ))
                     scope_list.append((p, s.scope_id))
-                    db.query(CachedDHCPScopePool).filter_by(scope_id=s.scope_id, source=p.source).delete()
-                    for pool_start, pool_end in _pools_for_scope(p, s):
-                        db.add(CachedDHCPScopePool(
-                            scope_id=s.scope_id, source=p.source,
-                            start_ip=pool_start, end_ip=pool_end,
-                        ))
+                    try:
+                        pools = _pools_for_scope(p, s)
+                    except Exception as e:
+                        logger.error("DHCP %s get_scope_pools(%s): %s", p.source, s.scope_id, e)
+                    else:
+                        db.query(CachedDHCPScopePool).filter_by(scope_id=s.scope_id, source=p.source).delete()
+                        for pool_start, pool_end in pools:
+                            db.add(CachedDHCPScopePool(
+                                scope_id=s.scope_id, source=p.source,
+                                start_ip=pool_start, end_ip=pool_end,
+                            ))
                 db.commit()
 
         def _fetch_leases(p, scope_id):
