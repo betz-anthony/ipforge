@@ -1,7 +1,7 @@
 import { useMemo, useState, useEffect, useRef } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Plus, X, Pencil, Search, ArrowUp, ArrowDown, ArrowUpDown, Network } from 'lucide-react'
+import { Plus, X, Pencil, Search, ArrowUp, ArrowDown, ArrowUpDown, Network, ChevronDown, ChevronRight } from 'lucide-react'
 import { dhcpApi, providersApi, addressesApi, subnetsApi, type DHCPReservation, type DHCPScope } from '../api/client'
 import { rangeSize, ipInCidr, ipToNum, isValidIPv4, isValidIPv6, isValidEUI48, isValidEUI64 } from '../utils/ip'
 import { usePagedQuery } from '../hooks/usePagedQuery'
@@ -20,6 +20,8 @@ const SOURCE_LABEL: Record<string, string> = {
 
 type ViewMode = 'combined' | 'by-server'
 
+const COLLAPSE_KEY = 'dhcp:collapsed-servers'
+
 const emptyForm = {
   ip_address: '', mac_address: '', client_duid: '', iaid: 0,
   name: '', description: '',
@@ -32,6 +34,14 @@ export default function DHCP() {
   const [form, setForm]                   = useState(emptyForm)
   const [dnsLink, setDnsLink]             = useState({ register_dns: false, dns_zone: '' })
   const [viewMode, setViewMode]           = useState<ViewMode>('combined')
+  const [collapsedServers, setCollapsedServers] = useState<Set<string>>(() => {
+    try {
+      const v = localStorage.getItem(COLLAPSE_KEY)
+      return v ? new Set<string>(JSON.parse(v) as string[]) : new Set<string>()
+    } catch {
+      return new Set<string>()
+    }
+  })
   const [selectedLease, setSelectedLease] = useState<DHCPReservation | null>(null)
   const [confirmIp, setConfirmIp] = useState<string | null>(null)
   const [editingLease, setEditingLease] = useState<DHCPReservation | null>(null)
@@ -202,6 +212,16 @@ export default function DHCP() {
     [filteredScopes]
   )
   const multiProvider = uniqueSources.length > 1 || dhcpProviders.length > 1
+
+  const toggleServer = (src: string) => {
+    setCollapsedServers(prev => {
+      const next = new Set(prev)
+      if (next.has(src)) next.delete(src)
+      else next.add(src)
+      try { localStorage.setItem(COLLAPSE_KEY, JSON.stringify([...next])) } catch { /* ignore */ }
+      return next
+    })
+  }
 
   const groupedScopes = useMemo(() => {
     const groups = new Map<string, DHCPScope[]>()
@@ -375,15 +395,26 @@ export default function DHCP() {
           {viewMode === 'combined' ? (
             filteredScopes.map(s => renderScopeItem(s))
           ) : (
-            [...groupedScopes.entries()].map(([src, scopeList]) => (
-              <div key={src}>
-                <div className="panel-server-header">
-                  <span>{SOURCE_LABEL[src] ?? src}</span>
-                  <span className="panel-server-count">{scopeList.length}</span>
+            [...groupedScopes.entries()].map(([src, scopeList]) => {
+              const collapsed = collapsedServers.has(src)
+              return (
+                <div key={src}>
+                  <button
+                    type="button"
+                    className="panel-server-header"
+                    aria-expanded={!collapsed}
+                    onClick={() => toggleServer(src)}
+                  >
+                    <span style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+                      {collapsed ? <ChevronRight size={13} /> : <ChevronDown size={13} />}
+                      {SOURCE_LABEL[src] ?? src}
+                    </span>
+                    <span className="panel-server-count">{scopeList.length}</span>
+                  </button>
+                  {!collapsed && scopeList.map(s => renderScopeItem(s))}
                 </div>
-                {scopeList.map(s => renderScopeItem(s))}
-              </div>
-            ))
+              )
+            })
           )}
           {filteredScopes.length === 0 && !loadingScopes && <p className="loading" style={{ padding: '0.75rem' }}>No scopes found.</p>}
         </div>
