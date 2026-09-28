@@ -46,6 +46,8 @@ export default function DHCP() {
   const [confirmIp, setConfirmIp] = useState<string | null>(null)
   const [editingLease, setEditingLease] = useState<DHCPReservation | null>(null)
   const editFormRef = useRef<HTMLDivElement>(null)
+  const panelMainRef = useRef<HTMLDivElement>(null)
+  const firstScopeSelect = useRef(true)
   const [editForm, setEditForm]         = useState(emptyForm)
   const { showToast } = useToast()
   const [editingNotes, setEditingNotes]       = useState(false)
@@ -90,6 +92,12 @@ export default function DHCP() {
   })
 
   useEffect(() => { setLeasesPage(1) }, [selectedScope?.scope_id])
+
+  // Bring the lease table into view when a scope is picked from a long list.
+  useEffect(() => {
+    if (firstScopeSelect.current) { firstScopeSelect.current = false; return }
+    if (selectedScope) panelMainRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }, [selectedScope?.scope_id])
 
   useEffect(() => {
     if (editingLease) editFormRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
@@ -419,7 +427,7 @@ export default function DHCP() {
           {filteredScopes.length === 0 && !loadingScopes && <p className="loading" style={{ padding: '0.75rem' }}>No scopes found.</p>}
         </div>
 
-        <div className="panel-main">
+        <div className="panel-main" ref={panelMainRef}>
           {selectedScope ? (
             <>
               <div className="page-header">

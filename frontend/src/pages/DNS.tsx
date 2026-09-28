@@ -148,6 +148,8 @@ export default function DNS() {
   const [confirmRecord, setConfirmRecord] = useState<DNSRecord | null>(null)
   const [editingRecord, setEditingRecord] = useState<DNSRecord | null>(null)
   const editFormRef = useRef<HTMLDivElement>(null)
+  const panelMainRef = useRef<HTMLDivElement>(null)
+  const firstZoneSelect = useRef(true)
   const [editForm, setEditForm]           = useState(emptyForm)
   const [editNameError, setEditNameError] = useState('')
   const [editValueError, setEditValueError] = useState('')
@@ -204,6 +206,12 @@ export default function DNS() {
   })
 
   useEffect(() => { setRecordsPage(1) }, [selectedZone])
+
+  // Bring the record table into view when a zone is picked from a long list.
+  useEffect(() => {
+    if (firstZoneSelect.current) { firstZoneSelect.current = false; return }
+    if (selectedZone) panelMainRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }, [selectedZone])
   useEffect(() => { setRecordsPage(1) }, [typeFilter])
 
   useEffect(() => {
@@ -608,7 +616,7 @@ export default function DNS() {
           )}
         </div>
 
-        <div className="panel-main">
+        <div className="panel-main" ref={panelMainRef}>
           {selectedZone ? (
             <>
               <div className="page-header">

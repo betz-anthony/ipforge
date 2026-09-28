@@ -373,7 +373,17 @@ input[type="checkbox"] { margin: 0; padding: 0; width: auto; flex-shrink: 0; cur
   font-size: 0.7rem; color: var(--text-muted); margin-top: 1px;
 }
 
-.panel-main { flex: 1; min-width: 0; }
+.panel-main { flex: 1; min-width: 0; scroll-margin-top: 1rem; }
+
+/* Scope/zone list scrolls on its own and follows the page, so a long list
+   never pushes the selected item's detail below the fold. */
+@media (min-width: 769px) {
+  .panel-list {
+    position: sticky; top: 1rem;
+    max-height: calc(100vh - 2rem);
+    overflow-y: auto;
+  }
+}
 
 /* ── Search ──────────────────────────────────────────── */
 .search-wrap { position: relative; margin-bottom: 1.75rem; }
