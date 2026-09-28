@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect, useRef } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { SlidersHorizontal, Plus, X, Trash2, Pencil, Globe } from 'lucide-react'
+import { SlidersHorizontal, Plus, X, Trash2, Pencil, Globe, ChevronDown, ChevronRight } from 'lucide-react'
 import { dnsApi, providersApi, addressesApi, subnetsApi, type DNSRecord, type DNSZone } from '../api/client'
 import { usePagedQuery } from '../hooks/usePagedQuery'
 import { Pager } from '../components/Pager'
@@ -13,6 +13,8 @@ import ConfirmModal from '../components/ConfirmModal'
 import { useToast } from '../contexts/ToastContext'
 import { rowActivation } from '../utils/a11y'
 import { apiError } from '../utils/apiError'
+
+const COLLAPSE_KEY = 'dns:collapsed-servers'
 
 const RECORD_TYPES = ['A', 'AAAA', 'CNAME', 'PTR', 'MX', 'TXT', 'NS']
 
@@ -143,6 +145,14 @@ export default function DNS() {
   const [viewMode, setViewMode]             = useState<ViewMode>('combined')
   const [selectedRecord, setSelectedRecord] = useState<DNSRecord | null>(null)
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set())
+  const [collapsedServers, setCollapsedServers] = useState<Set<string>>(() => {
+    try {
+      const v = localStorage.getItem(COLLAPSE_KEY)
+      return v ? new Set<string>(JSON.parse(v) as string[]) : new Set<string>()
+    } catch {
+      return new Set<string>()
+    }
+  })
   const [zoneSearch, setZoneSearch]       = useState('')
   const [showSystemZones, setShowSystemZones] = useState(false)
   const [confirmRecord, setConfirmRecord] = useState<DNSRecord | null>(null)
@@ -523,6 +533,16 @@ export default function DNS() {
     )
   }
 
+  const toggleServer = (src: string) => {
+    setCollapsedServers(prev => {
+      const next = new Set(prev)
+      if (next.has(src)) next.delete(src)
+      else next.add(src)
+      try { localStorage.setItem(COLLAPSE_KEY, JSON.stringify([...next])) } catch { /* ignore */ }
+      return next
+    })
+  }
+
   const toggleGroup = (key: string) =>
     setExpandedGroups(prev => {
       const next = new Set(prev)
@@ -599,15 +619,26 @@ export default function DNS() {
           {viewMode === 'combined' ? (
             renderZoneTypeGroups(combinedZones, 'combined')
           ) : (
-            [...groupedZones.entries()].map(([src, zoneList]) => (
-              <div key={src}>
-                <div className="panel-server-header">
-                  <span>{SOURCE_LABEL[src] ?? src}</span>
-                  <span className="panel-server-count">{zoneList.length}</span>
+            [...groupedZones.entries()].map(([src, zoneList]) => {
+              const collapsed = collapsedServers.has(src)
+              return (
+                <div key={src}>
+                  <button
+                    type="button"
+                    className="panel-server-header"
+                    aria-expanded={!collapsed}
+                    onClick={() => toggleServer(src)}
+                  >
+                    <span style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+                      {collapsed ? <ChevronRight size={13} /> : <ChevronDown size={13} />}
+                      {SOURCE_LABEL[src] ?? src}
+                    </span>
+                    <span className="panel-server-count">{zoneList.length}</span>
+                  </button>
+                  {!collapsed && renderZoneTypeGroups(zoneList, src)}
                 </div>
-                {renderZoneTypeGroups(zoneList, src)}
-              </div>
-            ))
+              )
+            })
           )}
           {searchedZones.length === 0 && !loadingZones && (
             <p className="loading" style={{ padding: '0.75rem' }}>
