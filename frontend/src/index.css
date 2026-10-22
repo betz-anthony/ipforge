@@ -685,6 +685,17 @@ tbody tr.clickable { cursor: pointer; }
   line-height: 1.5;
 }
 .modal-extra { margin-bottom: 1.25rem; }
+.pending-backdrop { z-index: 310; }
+.pending-dialog { text-align: center; }
+.pending-spinner {
+  width: 28px; height: 28px; margin: 0 auto 0.875rem;
+  border: 3px solid var(--border-2); border-top-color: var(--accent);
+  border-radius: 50%; animation: spin 0.8s linear infinite;
+}
+.pending-message { margin-bottom: 0; }
+.pending-slow { font-size: 0.75rem; color: var(--text-subtle); margin: 0.75rem 0; }
+.pending-slow-hint { font-size: 0.6875rem; color: var(--text-subtle); margin-top: 0.5rem; }
+
 .modal-actions {
   display: flex; gap: 0.5rem; justify-content: flex-end;
 }

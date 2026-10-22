@@ -10,6 +10,7 @@ import SyncBar from '../components/SyncBar'
 import EmptyState from '../components/EmptyState'
 import DetailPanel from '../components/DetailPanel'
 import ConfirmModal from '../components/ConfirmModal'
+import PendingDialog from '../components/PendingDialog'
 import { useToast } from '../contexts/ToastContext'
 import { rowActivation } from '../utils/a11y'
 import { apiError } from '../utils/apiError'
@@ -118,9 +119,14 @@ export default function DHCP() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['dhcp-leases', selectedScope?.scope_id, selectedScope?.source] })
       if (dnsLink.register_dns) qc.invalidateQueries({ queryKey: ['dns-records'] })
+      showToast(`Added reservation for ${form.ip_address}`, 'success')
       setForm(emptyForm)
       setDnsLink({ register_dns: false, dns_zone: '' })
       setShowForm(false)
+    },
+    onError: (err: any) => {
+      const e = apiError(err, 'Add failed')
+      showToast(e.message, 'error', { hint: e.hint, detail: e.detail })
     },
   })
 
@@ -139,7 +145,7 @@ export default function DHCP() {
       if (result.dns_stale) {
         showToast('Reservation updated — the matching DNS record was not updated. Check Drift.', 'success')
       } else {
-        showToast('Reservation updated', 'success')
+        showToast(`Updated reservation for ${editingLease?.ip_address}`, 'success')
       }
     },
     onError: (err: any) => {
@@ -150,9 +156,9 @@ export default function DHCP() {
 
   const deleteMutation = useMutation({
     mutationFn: (ip: string) => dhcpApi.deleteReservation(selectedScope!.scope_id, ip, selectedScope!.source),
-    onSuccess: () => {
+    onSuccess: (_data, ip) => {
       qc.invalidateQueries({ queryKey: ['dhcp-leases', selectedScope?.scope_id] })
-      showToast('Reservation deleted', 'success')
+      showToast(`Deleted reservation for ${ip}`, 'success')
       setConfirmIp(null)
     },
     onError: (err: any) => {
@@ -369,8 +375,18 @@ export default function DHCP() {
     </div>
   )
 
+  const scopeLabel = selectedScope
+    ? `${selectedScope.name} (${SOURCE_LABEL[selectedScope.source] ?? selectedScope.source})`
+    : ''
+  const pendingMessage =
+    addMutation.isPending ? `Adding reservation for ${form.ip_address} in ${scopeLabel}… waiting for provider`
+    : updateMutation.isPending ? `Updating reservation for ${editingLease?.ip_address} in ${scopeLabel}… waiting for provider`
+    : deleteMutation.isPending ? `Deleting reservation for ${deleteMutation.variables} from ${scopeLabel}… waiting for provider`
+    : ''
+
   return (
     <div>
+      <PendingDialog pending={!!pendingMessage} message={pendingMessage} />
       <div className="page-header">
         <h1>DHCP</h1>
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.625rem' }}>
@@ -780,7 +796,7 @@ export default function DHCP() {
         <ConfirmModal
           title="Delete DHCP Reservation"
           message={`Delete reservation for ${confirmIp}?`}
-          onConfirm={() => deleteMutation.mutate(confirmIp)}
+          onConfirm={() => { deleteMutation.mutate(confirmIp); setConfirmIp(null) }}
           onCancel={() => setConfirmIp(null)}
         />
       )}

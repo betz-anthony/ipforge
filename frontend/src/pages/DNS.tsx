@@ -10,6 +10,7 @@ import SyncBar from '../components/SyncBar'
 import EmptyState from '../components/EmptyState'
 import DetailPanel from '../components/DetailPanel'
 import ConfirmModal from '../components/ConfirmModal'
+import PendingDialog from '../components/PendingDialog'
 import { useToast } from '../contexts/ToastContext'
 import { rowActivation } from '../utils/a11y'
 import { apiError } from '../utils/apiError'
@@ -236,9 +237,14 @@ export default function DNS() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['dns-records', selectedZone] })
       qc.invalidateQueries({ queryKey: ['dns-record-type-counts', selectedZone] })
+      showToast(`Added ${form.record_type} record "${form.name}" to ${selectedZone}`, 'success')
       setForm(f => ({ ...emptyForm, source: f.source }))
       setRegisterPtr(false)
       setShowForm(false)
+    },
+    onError: (err: any) => {
+      const e = apiError(err, 'Add failed')
+      showToast(e.message, 'error', { hint: e.hint, detail: e.detail })
     },
   })
 
@@ -255,7 +261,7 @@ export default function DNS() {
       if (result.ptr_stale) {
         showToast('Record updated — the matching PTR record was not updated. Check Drift.', 'success')
       } else {
-        showToast('Record updated', 'success')
+        showToast(`Updated ${editForm.record_type} record "${editForm.name}"`, 'success')
       }
     },
     onError: (err: any) => {
@@ -271,12 +277,12 @@ export default function DNS() {
         record,
         record.record_type === 'A' ? { delete_ptr: deletePtr } : undefined,
       ),
-    onSuccess: () => {
+    onSuccess: (_data, record) => {
       qc.invalidateQueries({ queryKey: ['dns-records', selectedZone] })
       qc.invalidateQueries({ queryKey: ['dns-record-type-counts', selectedZone] })
       setConfirmRecord(null)
       setDeletePtr(true)
-      showToast('Record deleted', 'success')
+      showToast(`Deleted ${record.record_type} record "${record.name}"`, 'success')
     },
     onError: (err: any) => {
       const e = apiError(err, 'Delete failed')
@@ -568,8 +574,19 @@ export default function DNS() {
       )
     })
 
+  const zoneLabel = selectedZoneSource
+    ? `${selectedZone} (${SOURCE_LABEL[selectedZoneSource] ?? selectedZoneSource})`
+    : selectedZone
+  const dv = deleteMutation.variables
+  const pendingMessage =
+    createMutation.isPending ? `Adding ${form.record_type} record "${form.name}" to ${zoneLabel}… waiting for provider`
+    : updateMutation.isPending ? `Updating ${editForm.record_type} record "${editForm.name}" in ${zoneLabel}… waiting for provider`
+    : deleteMutation.isPending && dv ? `Deleting ${dv.record_type} record "${dv.name}" from ${zoneLabel}… waiting for provider`
+    : ''
+
   return (
     <div>
+      <PendingDialog pending={!!pendingMessage} message={pendingMessage} />
       <div className="page-header">
         <h1>DNS</h1>
         <SyncBar type="dns" />
