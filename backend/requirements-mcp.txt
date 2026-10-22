@@ -3,4 +3,4 @@
 # FastAPI web app uses; install this only in the environment that runs
 # `python -m app.mcp_server`.
 mcp==1.2.0
-requests==2.32.3
+requests==2.33.0
