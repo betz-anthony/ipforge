@@ -399,6 +399,25 @@ def test_dns_delete_record_delete_ptr_deletes_both(client, db):
     assert ptr_call.zone == "1.0.10.in-addr.arpa"
 
 
+def test_dns_delete_aaaa_record_delete_ptr_deletes_both(client, db):
+    _add_zone(db, "0.0.0.0.8.b.d.0.1.0.0.2.ip6.arpa")
+    mock_prov = MagicMock()
+    mock_prov.source = "bind01"
+    mock_prov.delete_record = MagicMock()
+
+    with patch("app.api.dns.get_dns_providers", return_value=[mock_prov]):
+        r = client.request("DELETE", "/api/v1/dns/zones/example.com/records", json={
+            "name": "web6", "record_type": "AAAA", "value": "2001:db8::5",
+            "zone": "example.com", "ttl": 3600, "source": "bind01",
+            "delete_ptr": True,
+        })
+    assert r.status_code == 204, r.text
+    assert mock_prov.delete_record.call_count == 2
+    ptr_call = mock_prov.delete_record.call_args_list[1][0][0]
+    assert ptr_call.record_type == "PTR"
+    assert ptr_call.zone == "0.0.0.0.8.b.d.0.1.0.0.2.ip6.arpa"
+
+
 def test_dns_delete_record_delete_ptr_no_reverse_zone_skips_ptr(client, db):
     _add_zone(db, "example.com")  # forward zone present, no reverse zone
     mock_prov = MagicMock()

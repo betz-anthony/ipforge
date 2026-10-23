@@ -35,6 +35,9 @@ const SOURCE_LABEL: Record<string, string> = {
 
 const PINGABLE = new Set(['A', 'AAAA', 'CNAME', 'PTR'])
 
+// Record types that can carry a matching PTR record.
+const PTR_TYPES = ['A', 'AAAA']
+
 type ZoneType = 'forward' | 'reverse' | 'trust'
 
 const ZONE_GROUPS: { key: ZoneType; label: string }[] = [
@@ -232,7 +235,7 @@ export default function DNS() {
   const createMutation = useMutation({
     mutationFn: () => dnsApi.createRecord(selectedZone!, {
       ...form,
-      ...(form.record_type === 'A' && registerPtr ? { register_ptr: true } : {}),
+      ...(PTR_TYPES.includes(form.record_type) && registerPtr ? { register_ptr: true } : {}),
     }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['dns-records', selectedZone] })
@@ -275,7 +278,7 @@ export default function DNS() {
       dnsApi.deleteRecord(
         selectedZone!,
         record,
-        record.record_type === 'A' ? { delete_ptr: deletePtr } : undefined,
+        PTR_TYPES.includes(record.record_type) ? { delete_ptr: deletePtr } : undefined,
       ),
     onSuccess: (_data, record) => {
       qc.invalidateQueries({ queryKey: ['dns-records', selectedZone] })
@@ -763,7 +766,7 @@ export default function DNS() {
                       </div>
                     )}
                   </div>
-                  {form.record_type === 'A' && (
+                  {PTR_TYPES.includes(form.record_type) && (
                     <div className="form-field form-field-wide">
                       <PtrCheckbox
                         label="Also create PTR record"
@@ -914,7 +917,7 @@ export default function DNS() {
           message={`Delete ${confirmRecord.record_type} record "${confirmRecord.name}"?`}
           onConfirm={() => { deleteMutation.mutate(confirmRecord); setConfirmRecord(null) }}
           onCancel={() => { setConfirmRecord(null); setDeletePtr(true) }}
-          extra={confirmRecord.record_type === 'A' ? (
+          extra={PTR_TYPES.includes(confirmRecord.record_type) ? (
             <PtrCheckbox
               label="Also delete matching PTR record"
               checked={deletePtr}
