@@ -11,6 +11,8 @@ import EmptyState from '../components/EmptyState'
 import DetailPanel from '../components/DetailPanel'
 import ConfirmModal from '../components/ConfirmModal'
 import PendingDialog from '../components/PendingDialog'
+import ZoneSuffixWarning from '../components/ZoneSuffixWarning'
+import { shortNameForZone } from '../utils/dnsNames'
 import { useToast } from '../contexts/ToastContext'
 import { rowActivation } from '../utils/a11y'
 import { apiError } from '../utils/apiError'
@@ -169,6 +171,8 @@ export default function DNS() {
   const [editValueError, setEditValueError] = useState('')
   const [editUpdatePtr, setEditUpdatePtr] = useState(false)
   const [registerPtr, setRegisterPtr]   = useState(false)
+  const [allowZoneSuffix, setAllowZoneSuffix] = useState(false)
+  const [editAllowZoneSuffix, setEditAllowZoneSuffix] = useState(false)
   const [deletePtr, setDeletePtr]       = useState(true)
   const { showToast } = useToast()
   const [editingNotes, setEditingNotes]           = useState(false)
@@ -236,6 +240,7 @@ export default function DNS() {
     mutationFn: () => dnsApi.createRecord(selectedZone!, {
       ...form,
       ...(PTR_TYPES.includes(form.record_type) && registerPtr ? { register_ptr: true } : {}),
+      ...(allowZoneSuffix ? { allow_zone_suffix: true } : {}),
     }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['dns-records', selectedZone] })
@@ -243,6 +248,7 @@ export default function DNS() {
       showToast(`Added ${form.record_type} record "${form.name}" to ${selectedZone}`, 'success')
       setForm(f => ({ ...emptyForm, source: f.source }))
       setRegisterPtr(false)
+      setAllowZoneSuffix(false)
       setShowForm(false)
     },
     onError: (err: any) => {
@@ -255,12 +261,13 @@ export default function DNS() {
     mutationFn: () => dnsApi.updateRecord(selectedZone!, editingRecord!, {
       name: editForm.name, record_type: editForm.record_type,
       value: editForm.value, ttl: editForm.ttl,
-    }, { update_ptr: editUpdatePtr }),
+    }, { update_ptr: editUpdatePtr, allow_zone_suffix: editAllowZoneSuffix }),
     onSuccess: (result) => {
       qc.invalidateQueries({ queryKey: ['dns-records', selectedZone] })
       qc.invalidateQueries({ queryKey: ['dns-record-type-counts', selectedZone] })
       setEditingRecord(null)
       setEditUpdatePtr(false)
+      setEditAllowZoneSuffix(false)
       if (result.ptr_stale) {
         showToast('Record updated — the matching PTR record was not updated. Check Drift.', 'success')
       } else {
@@ -425,7 +432,7 @@ export default function DNS() {
     setShowForm(false)
     setEditingRecord(r)
     setEditForm({ name: r.name, record_type: r.record_type, value: r.value, ttl: r.ttl, source: r.source })
-    setEditNameError(''); setEditValueError(''); setEditUpdatePtr(false)
+    setEditNameError(''); setEditValueError(''); setEditUpdatePtr(false); setEditAllowZoneSuffix(false)
   }
 
   useEffect(() => {
@@ -766,6 +773,13 @@ export default function DNS() {
                       </div>
                     )}
                   </div>
+                  {selectedZone && (
+                    <ZoneSuffixWarning
+                      name={form.name} zone={selectedZone}
+                      allow={allowZoneSuffix} onAllow={setAllowZoneSuffix}
+                      onUseShort={short => setForm(f => ({ ...f, name: short }))}
+                    />
+                  )}
                   {PTR_TYPES.includes(form.record_type) && (
                     <div className="form-field form-field-wide">
                       <PtrCheckbox
@@ -783,13 +797,14 @@ export default function DNS() {
                       onClick={() => createMutation.mutate()}
                       disabled={
                         createMutation.isPending || !form.name || !form.value ||
+                        (!!selectedZone && !!shortNameForZone(form.name, selectedZone) && !allowZoneSuffix) ||
                         !!dnsValueError(form.record_type, form.value) ||
                         (!!form.name && !isValidHostname(form.name))
                       }
                     >
                       {createMutation.isPending ? 'Adding…' : 'Add'}
                     </button>
-                    <button className="btn-ghost btn-sm" onClick={() => { setShowForm(false); setForm(emptyForm); setRegisterPtr(false) }}>
+                    <button className="btn-ghost btn-sm" onClick={() => { setShowForm(false); setForm(emptyForm); setRegisterPtr(false); setAllowZoneSuffix(false) }}>
                       <X size={13} /> Cancel
                     </button>
                     {createMutation.isError && (
@@ -839,6 +854,13 @@ export default function DNS() {
                       <input value={`${editingRecord.zone} / ${SOURCE_LABEL[editForm.source] ?? editForm.source}`} disabled />
                     </div>
                   </div>
+                  {editForm.name !== editingRecord.name && (
+                    <ZoneSuffixWarning
+                      name={editForm.name} zone={editingRecord.zone}
+                      allow={editAllowZoneSuffix} onAllow={setEditAllowZoneSuffix}
+                      onUseShort={short => setEditForm(f => ({ ...f, name: short }))}
+                    />
+                  )}
                   {['A', 'AAAA'].includes(editForm.record_type) && editForm.value !== editingRecord.value && (
                     <div className="form-field form-field-wide">
                       <PtrCheckbox
@@ -856,13 +878,14 @@ export default function DNS() {
                       onClick={() => updateMutation.mutate()}
                       disabled={
                         updateMutation.isPending || !editForm.name || !editForm.value ||
+                        (editForm.name !== editingRecord.name && !!shortNameForZone(editForm.name, editingRecord.zone) && !editAllowZoneSuffix) ||
                         !!dnsValueError(editForm.record_type, editForm.value) ||
                         (!!editForm.name && !isValidHostname(editForm.name))
                       }
                     >
                       {updateMutation.isPending ? 'Saving…' : 'Save'}
                     </button>
-                    <button className="btn-ghost btn-sm" onClick={() => { setEditingRecord(null); setEditUpdatePtr(false) }}>
+                    <button className="btn-ghost btn-sm" onClick={() => { setEditingRecord(null); setEditUpdatePtr(false); setEditAllowZoneSuffix(false) }}>
                       <X size={13} /> Cancel
                     </button>
                     {updateMutation.isError && (

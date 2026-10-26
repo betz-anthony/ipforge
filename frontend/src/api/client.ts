@@ -570,13 +570,14 @@ export const dnsApi = {
     api.get<Paged<DNSRecord>>(`/dns/zones/${zone}/records`, { params }).then(r => r.data),
   recordTypeCounts: (zone: string) =>
     api.get<{ record_type: string; count: number }[]>(`/dns/zones/${zone}/record-type-counts`).then(r => r.data),
-  createRecord: (zone: string, data: Omit<DNSRecord, 'zone'> & { register_ptr?: boolean }) =>
+  createRecord: (zone: string, data: Omit<DNSRecord, 'zone'> & { register_ptr?: boolean; allow_zone_suffix?: boolean }) =>
     api.post<DNSRecord>(`/dns/zones/${zone}/records`, data).then(r => r.data),
-  updateRecord: (zone: string, oldRecord: DNSRecord, changes: Partial<Pick<DNSRecord, 'name' | 'record_type' | 'value' | 'ttl'>>, opts?: { update_ptr?: boolean }) =>
+  updateRecord: (zone: string, oldRecord: DNSRecord, changes: Partial<Pick<DNSRecord, 'name' | 'record_type' | 'value' | 'ttl'>>, opts?: { update_ptr?: boolean; allow_zone_suffix?: boolean }) =>
     api.put<DNSRecord & { ptr_stale?: boolean }>(`/dns/zones/${zone}/records`, {
       old: oldRecord,
       new: { ...oldRecord, ...changes },
       update_ptr: opts?.update_ptr ?? false,
+      allow_zone_suffix: opts?.allow_zone_suffix ?? false,
     }).then(r => r.data),
   deleteRecord: (zone: string, record: DNSRecord, opts?: { delete_ptr?: boolean }) =>
     api.delete(`/dns/zones/${zone}/records`, { data: { ...record, ...opts } }),

@@ -21,6 +21,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   don't get unioned into a subnet's Reserved Ranges as if authoritative.
   Leases and pool data for the scope keep syncing either way.
 
+**DNS**
+- Record names that already end in their zone (e.g. `host.example.com` in
+  zone `example.com`, which the DNS server would suffix again) are now
+  rejected on create and rename unless `allow_zone_suffix` is set, and the
+  DNS form warns inline with a one-click short name. A name with a trailing
+  dot is treated as absolute and is not affected.
+
 **Search**
 - Search results are now clickable, navigating to the matching record's
   edit view via an explicit Edit button (DNS records, DHCP reservations,

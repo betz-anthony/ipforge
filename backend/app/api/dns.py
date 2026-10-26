@@ -13,6 +13,7 @@ from app.core.deps import require_operator
 from app.core.audit import write_audit
 from app.core.time import utcnow
 from app.core.ptr import find_reverse_zone, build_ptr_record
+from app.core.dns_names import short_name_for_zone
 from app.core.errors import raise_provider_error, provider_unconfigured
 from app.core.pagination import paginate
 
@@ -54,6 +55,7 @@ def _validate_value(v: str) -> str:
 
 class CreateRecordRequest(DNSRecord):
     register_ptr: bool = False
+    allow_zone_suffix: bool = False
 
     @field_validator("name")
     @classmethod
@@ -79,6 +81,7 @@ class UpdateRecordRequest(BaseModel):
     old: DNSRecord
     new: DNSRecord
     update_ptr: bool = False
+    allow_zone_suffix: bool = False
 
     @field_validator("new")
     @classmethod
@@ -92,6 +95,18 @@ class UpdateRecordRequest(BaseModel):
 
 class UpdateRecordResponse(DNSRecord):
     ptr_stale: bool = False
+
+
+def _reject_zone_suffix(name: str, zone: str) -> None:
+    """DNSNAME-001 — a name ending in its own zone gets the zone appended again."""
+    short = short_name_for_zone(name, zone)
+    if short is not None:
+        raise HTTPException(
+            422,
+            f'Name "{name}" already ends in the zone "{zone}", so the server would '
+            f'create "{name}.{zone}". Use "{short}" instead, or set '
+            f'allow_zone_suffix to create it anyway.',
+        )
 
 
 def _cached_zone_names(db: Session, source: str) -> list[str]:
@@ -198,6 +213,8 @@ def create_record(
     current_user: User = Depends(require_operator),
 ):
     record.zone = zone
+    if not record.allow_zone_suffix:
+        _reject_zone_suffix(record.name, zone)
     providers = get_dns_providers()
     target = next((p for p in providers if p.source == record.source), None) or (providers[0] if providers else None)
     if not target:
@@ -239,7 +256,7 @@ def create_record(
         write_audit(db, current_user.username, "create", "dns_record",
                     f"{record.name}/{record.record_type}",
                     f"{record.name} {record.record_type} {record.value}",
-                    after=record.model_dump(exclude={"register_ptr"}))
+                    after=record.model_dump(exclude={"register_ptr", "allow_zone_suffix"}))
         db.commit()
     except Exception as e:
         db.rollback()
@@ -266,6 +283,8 @@ def update_record(
 
     old.zone = zone
     new.zone = zone
+    if not body.allow_zone_suffix and new.name != old.name:
+        _reject_zone_suffix(new.name, zone)
 
     providers = get_dns_providers()
     target = next((p for p in providers if p.source == old.source), None) or (providers[0] if providers else None)
