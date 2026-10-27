@@ -29,6 +29,10 @@ print(page.total, [a.address for a in page])
 result = client.subnets.allocate(3, hostname="web-01", register_dns=True, dns_zone="example.com")
 print(result["address"])
 
+# Allocate from a named allocation pool inside the subnet
+# (needs a server release with allocation pools)
+result = client.subnets.allocate(3, hostname="lx-01", pool="linux")
+
 # Create a DNS record
 client.dns.create_record("example.com", name="web-01", record_type="A", value=result["address"])
 

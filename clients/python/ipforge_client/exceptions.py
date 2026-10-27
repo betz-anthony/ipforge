@@ -39,5 +39,20 @@ class ValidationError(APIError):
     """422 — request failed server validation; see .detail."""
 
 
+class PoolNotSupportedError(IPForgeError):
+    """An allocation was requested from a pool but the server did not honour it
+    (typically a server release without allocation pools). The server has
+    already allocated `result["address"]` from the whole subnet; release it if
+    it is not wanted."""
+
+    def __init__(self, pool: str, result: dict):
+        self.pool = pool
+        self.result = result
+        super().__init__(
+            f'server did not allocate from pool "{pool}" (it may not support allocation pools); '
+            f'it allocated {result.get("address")} instead'
+        )
+
+
 class ServerError(APIError):
     """5xx."""
