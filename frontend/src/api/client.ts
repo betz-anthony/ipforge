@@ -278,6 +278,37 @@ export const subnetRangesApi = {
     api.get<SubnetMap>(`/subnets/${subnetId}/map`).then(r => r.data),
 }
 
+export interface SubnetPool {
+  id: number
+  subnet_id: number
+  name: string
+  start_ip: string
+  end_ip: string
+  description: string | null
+  total: number
+  used: number
+  reserved: number
+  free: number
+}
+
+export interface SubnetPoolInput {
+  name: string
+  start_ip: string
+  end_ip: string
+  description?: string | null
+}
+
+export const subnetPoolsApi = {
+  list: (subnetId: number) =>
+    api.get<SubnetPool[]>(`/subnets/${subnetId}/pools`).then(r => r.data),
+  create: (subnetId: number, body: SubnetPoolInput) =>
+    api.post<SubnetPool>(`/subnets/${subnetId}/pools`, body).then(r => r.data),
+  update: (subnetId: number, poolId: number, body: SubnetPoolInput) =>
+    api.put<SubnetPool>(`/subnets/${subnetId}/pools/${poolId}`, body).then(r => r.data),
+  remove: (subnetId: number, poolId: number) =>
+    api.delete(`/subnets/${subnetId}/pools/${poolId}`),
+}
+
 export interface NetworkDevice {
   id: number
   name: string

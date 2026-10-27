@@ -5,6 +5,7 @@ import { subnetRangesApi, addressesApi, type Subnet, type RangeKind, type MapCel
 import { isValidIPv4, isValidIPv6, isValidEUI48 } from '../utils/ip'
 import { useToast } from '../contexts/ToastContext'
 import { apiError } from '../utils/apiError'
+import SubnetPools from './SubnetPools'
 
 const KINDS: RangeKind[] = ['gateway', 'dhcp_pool', 'static', 'reserved']
 const STATUSES = ['reserved', 'assigned', 'available'] as const
@@ -156,6 +157,8 @@ export default function SubnetSpace({ subnet }: { subnet: Subnet }) {
           <Plus size={12} /> Add Range
         </button>
       )}
+
+      <SubnetPools subnet={subnet} />
 
       <div className="detail-section-title" style={{ marginTop: '1rem' }}>Address Map</div>
       {!map ? (
