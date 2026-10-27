@@ -11,6 +11,7 @@ logger = logging.getLogger(__name__)
 from app.core.deps import get_current_user
 from app.core.access import AccessContext, get_access_context
 from app.core.audit import write_audit
+from app.core.ip_sort import ip_sort_key
 from app.core.mac import normalize_mac_optional
 from app.core.validators import validate_hostname
 from app.core.ptr import find_reverse_zone, build_ptr_record
@@ -64,15 +65,22 @@ class AllocateRequest(BaseModel):
 
 def _find_candidate(db: Session, subnet_id: int, cidr: str) -> str | None:
     from app.api.subnets import reserved_ip_set
+    net = ipaddress.ip_network(cidr, strict=False)
+    # Match on the address range, not subnet_id: with nested subnets an IP inside
+    # this CIDR may be recorded under a parent (or sibling) subnet, and handing
+    # it out again would overwrite that row.
+    lo = ip_sort_key(str(net.network_address))
+    hi = ip_sort_key(str(net.broadcast_address))
     taken = {
         row.address
         for row in db.query(IPAddress.address).filter(
-            IPAddress.subnet_id == subnet_id,
+            IPAddress.ip_sort_key >= lo,
+            IPAddress.ip_sort_key <= hi,
             IPAddress.status.in_(_INELIGIBLE),
         )
     }
     reserved = reserved_ip_set(db, subnet_id)
-    for ip in ipaddress.ip_network(cidr, strict=False).hosts():
+    for ip in net.hosts():
         s = str(ip)
         if s.endswith(".1") or s.endswith(".255"):  # skip gateway and broadcast-like addresses
             continue

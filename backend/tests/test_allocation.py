@@ -436,3 +436,48 @@ def test_scope_contains_range_fallback_for_non_network_scope():
                   start_range="10.5.0.10", end_range="10.5.0.20")
     assert _scope_contains(s, ipaddress.ip_address("10.5.0.15"))
     assert not _scope_contains(s, ipaddress.ip_address("10.5.0.99"))
+
+
+# ── addresses recorded under another (parent) subnet ─────────────────────────
+
+def test_allocate_skips_ip_in_use_under_parent_subnet(client, db):
+    # A nested /24 inside a /22: an IP already assigned under the parent must not
+    # be handed out again (and its row must not be overwritten).
+    parent = _subnet(db, cidr="10.10.0.0/22", name="parent")
+    child = _subnet(db, cidr="10.10.3.0/24", name="child", parent_id=parent.id)
+    db.add(IPAddress(address="10.10.3.2", subnet_id=parent.id,
+                     status=AddressStatus.assigned, hostname="existing"))
+    db.commit()
+
+    r = client.post(f"/api/v1/subnets/{child.id}/allocate", json={"hostname": "new-host"})
+
+    assert r.status_code == 201, r.text
+    assert r.json()["address"] == "10.10.3.3"
+    kept = db.query(IPAddress).filter_by(address="10.10.3.2").one()
+    assert kept.hostname == "existing"
+    assert kept.status == AddressStatus.assigned
+
+
+def test_allocate_reuses_available_row_under_parent_subnet(client, db):
+    # An 'available' placeholder is not in use, so it can still be claimed.
+    parent = _subnet(db, cidr="10.10.0.0/22", name="parent")
+    child = _subnet(db, cidr="10.10.3.0/24", name="child", parent_id=parent.id)
+    db.add(IPAddress(address="10.10.3.2", subnet_id=parent.id, status=AddressStatus.available))
+    db.commit()
+
+    r = client.post(f"/api/v1/subnets/{child.id}/allocate", json={"hostname": "new-host"})
+
+    assert r.status_code == 201, r.text
+    assert r.json()["address"] == "10.10.3.2"
+
+
+def test_allocate_ignores_in_use_ip_outside_the_subnet(client, db):
+    parent = _subnet(db, cidr="10.10.0.0/22", name="parent")
+    child = _subnet(db, cidr="10.10.3.0/24", name="child", parent_id=parent.id)
+    db.add(IPAddress(address="10.10.1.2", subnet_id=parent.id,
+                     status=AddressStatus.assigned, hostname="elsewhere"))
+    db.commit()
+
+    r = client.post(f"/api/v1/subnets/{child.id}/allocate", json={"hostname": "new-host"})
+
+    assert r.json()["address"] == "10.10.3.2"
