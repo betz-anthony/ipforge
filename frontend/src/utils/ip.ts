@@ -60,6 +60,19 @@ export function rangeSize(start: string, end: string): number {
   return n > 0 ? n : 0
 }
 
+// True when an IPv4 range spans every host address of the CIDR. IPv6 subnets
+// are too large for this to be a meaningful check, so they never match.
+export function rangeCoversSubnet(start: string, end: string, cidr: string): boolean {
+  const [net, bits] = cidr.split('/')
+  if (!net || net.includes(':') || !isValidIPv4(start) || !isValidIPv4(end)) return false
+  const prefix = Number(bits)
+  const size = 2 ** (32 - prefix)
+  const base = ipToNum(net)
+  const first = prefix < 31 ? base + 1 : base
+  const last = prefix < 31 ? base + size - 2 : base + size - 1
+  return ipToNum(start) <= first && ipToNum(end) >= last
+}
+
 // Expand IPv6 to 8 groups of 4 hex digits, returning BigInt
 function ipv6ToBigInt(ip: string): bigint {
   const [head, tail] = ip.includes('::') ? ip.split('::') : [ip, '']

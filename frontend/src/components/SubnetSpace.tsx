@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Plus, Trash2 } from 'lucide-react'
 import { subnetRangesApi, addressesApi, type Subnet, type RangeKind, type MapCell } from '../api/client'
-import { isValidIPv4, isValidIPv6, isValidEUI48 } from '../utils/ip'
+import { isValidIPv4, isValidIPv6, isValidEUI48, rangeCoversSubnet } from '../utils/ip'
 import { useToast } from '../contexts/ToastContext'
 import { apiError } from '../utils/apiError'
 import SubnetPools from './SubnetPools'
@@ -115,6 +115,12 @@ export default function SubnetSpace({ subnet }: { subnet: Subnet }) {
           <span className="badge badge-gray">{r.kind}</span>
           {r.source && <span className="badge badge-blue" style={{ fontSize: '0.65rem' }}>synced · {r.source}</span>}
           {r.label && <span style={{ color: 'var(--text-muted)' }}>{r.label}</span>}
+          {rangeCoversSubnet(r.start_ip, r.end_ip, subnet.cidr) && (
+            <span className="badge badge-yellow" style={{ fontSize: '0.65rem' }}
+              title="This range covers every host address, so the whole subnet shows as reserved.">
+              covers entire subnet
+            </span>
+          )}
           <button className="btn-ghost btn-sm" style={{ marginLeft: 'auto' }} onClick={() => deleteRange.mutate(r.id)}>
             <Trash2 size={12} />
           </button>
