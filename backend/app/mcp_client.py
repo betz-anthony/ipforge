@@ -7,6 +7,20 @@ authorization boundary (the API enforces read-only / operator / admin).
 import requests
 
 
+class PoolNotSupportedError(Exception):
+    """The server did not allocate from the requested pool (likely a server
+    release without allocation pools). The address in `result` was already
+    allocated from the whole subnet."""
+
+    def __init__(self, pool: str, result: dict):
+        self.pool = pool
+        self.result = result
+        super().__init__(
+            f'server did not allocate from pool "{pool}" (it may not support allocation pools); '
+            f'it allocated {result.get("address")} instead'
+        )
+
+
 class IPForgeClient:
     def __init__(self, base_url: str, token: str):
         self._base = base_url.rstrip("/")
@@ -35,6 +49,9 @@ class IPForgeClient:
         if tag is not None:
             params["tag"] = tag
         return self._req("GET", "/addresses", params=params)["items"]
+
+    def list_pools(self, subnet_id: int) -> list:
+        return self._req("GET", f"/subnets/{subnet_id}/pools")
 
     def find_free_ip(self, subnet_id: int) -> str | None:
         m = self._req("GET", f"/subnets/{subnet_id}/map")
@@ -73,13 +90,20 @@ class IPForgeClient:
     # ── safe writes ────────────────────────────────────────────────────────────
     def allocate_ip(self, subnet_id: int, hostname: str, mac: str | None = None,
                     register_dns: bool = False, register_dhcp: bool = False,
-                    dns_zone: str | None = None) -> dict:
+                    dns_zone: str | None = None, pool: str | None = None) -> dict:
         body = {"hostname": hostname, "register_dns": register_dns, "register_dhcp": register_dhcp}
         if mac:
             body["mac_address"] = mac
         if dns_zone:
             body["dns_zone"] = dns_zone
-        return self._req("POST", f"/subnets/{subnet_id}/allocate", json=body)
+        if pool:
+            body["pool"] = pool
+        result = self._req("POST", f"/subnets/{subnet_id}/allocate", json=body)
+        # A server without allocation pools drops the unknown field and allocates
+        # from the whole subnet, so confirm the pool was actually honoured.
+        if pool and str(result.get("pool") or "").lower() != pool.lower():
+            raise PoolNotSupportedError(pool, result)
+        return result
 
     def tag_address(self, ip: str, tags: list[str]) -> dict:
         addr = self._req("GET", f"/addresses/by-ip/{ip}")

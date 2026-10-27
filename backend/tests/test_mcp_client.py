@@ -81,3 +81,35 @@ def test_ip_history():
     calls = []
     c = _client({("GET", "/addresses/by-ip/10.0.0.5/history"): {"ip": "10.0.0.5", "timeline": []}}, calls)
     assert c.ip_history("10.0.0.5")["ip"] == "10.0.0.5"
+
+
+def test_allocate_ip_without_pool_omits_field():
+    calls = []
+    c = _client({("POST", "/subnets/1/allocate"): {"address": "10.0.0.2", "pool": None}}, calls)
+    c.allocate_ip(1, "web-01")
+    assert "pool" not in calls[0][3]
+
+
+def test_allocate_ip_with_pool_sends_field():
+    calls = []
+    c = _client({("POST", "/subnets/1/allocate"): {"address": "10.10.3.2", "pool": "linux"}}, calls)
+    out = c.allocate_ip(1, "lx-01", pool="linux")
+    assert calls[0][3]["pool"] == "linux"
+    assert out["address"] == "10.10.3.2"
+
+
+def test_allocate_ip_pool_ignored_by_old_server_raises():
+    import pytest
+    from app.mcp_client import PoolNotSupportedError
+    calls = []
+    c = _client({("POST", "/subnets/1/allocate"): {"address": "10.10.0.2"}}, calls)
+    with pytest.raises(PoolNotSupportedError) as exc:
+        c.allocate_ip(1, "lx-01", pool="linux")
+    assert "10.10.0.2" in str(exc.value)
+
+
+def test_list_pools():
+    calls = []
+    c = _client({("GET", "/subnets/2/pools"): [{"name": "linux"}]}, calls)
+    assert c.list_pools(2)[0]["name"] == "linux"
+    assert calls[0][:2] == ("GET", "/subnets/2/pools")

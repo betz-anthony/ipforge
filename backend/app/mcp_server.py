@@ -44,6 +44,12 @@ def list_addresses(subnet_id: int | None = None, tag: str | None = None) -> list
 
 
 @mcp.tool()
+def list_pools(subnet_id: int) -> list:
+    """List a subnet's allocation pools (named IP windows) with utilization."""
+    return _client().list_pools(subnet_id)
+
+
+@mcp.tool()
 def find_free_ip(subnet_id: int) -> str | None:
     """Return the lowest free IP in a subnet (or null if the subnet is full or too large to map)."""
     return _client().find_free_ip(subnet_id)
@@ -79,11 +85,13 @@ def ip_history(ip: str) -> dict:
 @mcp.tool()
 def allocate_ip(subnet_id: int, hostname: str, mac: str | None = None,
                 register_dns: bool = False, register_dhcp: bool = False,
-                dns_zone: str | None = None) -> dict:
+                dns_zone: str | None = None, pool: str | None = None) -> dict:
     """Allocate the next free IP in a subnet for a hostname (idempotent by hostname).
-    Optionally register DNS/DHCP. Requires an operator+ token."""
+    Optionally register DNS/DHCP. `pool` is the name of an allocation pool in the
+    subnet (see list_pools); omit it to allocate from the whole subnet.
+    Requires an operator+ token."""
     return _client().allocate_ip(subnet_id, hostname, mac=mac, register_dns=register_dns,
-                                 register_dhcp=register_dhcp, dns_zone=dns_zone)
+                                 register_dhcp=register_dhcp, dns_zone=dns_zone, pool=pool)
 
 
 @mcp.tool()
