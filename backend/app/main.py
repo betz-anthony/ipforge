@@ -23,6 +23,7 @@ from app.api import audit as audit_router
 from app.api import cache as cache_router
 from app.api import importexport as importexport_router
 from app.api import allocation as allocation_router
+from app.api import pools as pools_router
 from app.api import reclaim as reclaim_router
 from app.api import groups as groups_router
 from app.api import subnet_grants as subnet_grants_router
@@ -190,6 +191,7 @@ app.include_router(reclaim_router.router, prefix="/api/v1/addresses", tags=["rec
 
 # Allocation: scoped users can reach it (later task adds per-subnet check)
 app.include_router(allocation_router.router, prefix="/api/v1/subnets", tags=["allocation"], dependencies=_ro)
+app.include_router(pools_router.router, prefix="/api/v1/subnets", tags=["pools"], dependencies=_ro)
 
 # Admin only
 _adm = [Depends(require_admin)]

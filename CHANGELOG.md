@@ -28,6 +28,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   DNS form warns inline with a one-click short name. A name with a trailing
   dot is treated as absolute and is not affected.
 
+**Allocation**
+- Allocation pools: named IP windows inside a subnet (for example one range
+  per workload type within a large subnet). `POST /subnets/{id}/allocate`
+  accepts an optional `pool` and returns the next free IP from that window;
+  the response includes the `pool` it was allocated from. Pools are managed
+  under `/subnets/{id}/pools` with per-pool utilization. Without `pool`,
+  allocation behaves as before.
+
 **Search**
 - Search results are now clickable, navigating to the matching record's
   edit view via an explicit Edit button (DNS records, DHCP reservations,

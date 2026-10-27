@@ -15,6 +15,7 @@ from app.core.ip_sort import ip_sort_key
 from app.core.mac import normalize_mac_optional
 from app.core.validators import validate_hostname
 from app.core.ptr import find_reverse_zone, build_ptr_record
+from app.core.pools import find_pool, ip_in_pool, pool_bounds
 from app.core.errors import raise_provider_error
 from app.database import get_db
 from app.models.address import IPAddress, AddressStatus
@@ -49,6 +50,7 @@ class AllocateRequest(BaseModel):
     dns_provider: str | None = None
     dhcp_provider: str | None = None
     register_ptr: bool = False
+    pool: str | None = None  # ALLOC-POOLS-001 — name of an allocation pool in this subnet
 
     @field_validator("hostname")
     @classmethod
@@ -63,7 +65,16 @@ class AllocateRequest(BaseModel):
         return normalize_mac_optional(v)
 
 
-def _find_candidate(db: Session, subnet_id: int, cidr: str) -> str | None:
+def _host_bounds(net) -> tuple[int, int]:
+    """Inclusive integer bounds of net.hosts() (v4 drops network/broadcast, v6 the anycast address)."""
+    first, last = int(net.network_address), int(net.broadcast_address)
+    if net.version == 4:
+        return (first, last) if net.prefixlen >= 31 else (first + 1, last - 1)
+    return (first, last) if net.prefixlen >= 127 else (first + 1, last)
+
+
+def _find_candidate(db: Session, subnet_id: int, cidr: str,
+                    window: tuple[int, int] | None = None) -> str | None:
     from app.api.subnets import reserved_ip_set
     net = ipaddress.ip_network(cidr, strict=False)
     # Match on the address range, not subnet_id: with nested subnets an IP inside
@@ -80,7 +91,14 @@ def _find_candidate(db: Session, subnet_id: int, cidr: str) -> str | None:
         )
     }
     reserved = reserved_ip_set(db, subnet_id)
-    for ip in net.hosts():
+    if window is None:
+        candidates = net.hosts()
+    else:
+        # Iterate integers inside the pool window; net.hosts() on a wide v6 subnet never finishes.
+        host_lo, host_hi = _host_bounds(net)
+        to_ip = ipaddress.IPv4Address if net.version == 4 else ipaddress.IPv6Address
+        candidates = (to_ip(n) for n in range(max(window[0], host_lo), min(window[1], host_hi) + 1))
+    for ip in candidates:
         s = str(ip)
         if s.endswith(".1") or s.endswith(".255"):  # skip gateway and broadcast-like addresses
             continue
@@ -164,6 +182,12 @@ def _do_allocate(
     if not subnet:
         raise HTTPException(404, "Subnet not found")
 
+    pool = None
+    if body.pool:
+        pool = find_pool(db, subnet_id, body.pool)
+        if pool is None:
+            raise HTTPException(422, f'unknown pool "{body.pool}" for this subnet')
+
     dns_prov = dhcp_prov = None
 
     if body.register_dns:
@@ -195,6 +219,12 @@ def _do_allocate(
     )
     is_new = existing is None
 
+    if existing and pool is not None and not ip_in_pool(existing.address, pool):
+        raise HTTPException(
+            409,
+            f'hostname "{hostname}" is already allocated {existing.address}, outside pool "{pool.name}"',
+        )
+
     if existing:
         if body.mac_address and not existing.mac_address:
             existing.mac_address = body.mac_address
@@ -203,9 +233,10 @@ def _do_allocate(
     else:
         if body.register_dhcp and not body.mac_address:
             raise HTTPException(422, "mac_address is required when register_dhcp is true")
-        candidate = _find_candidate(db, subnet_id, subnet.cidr)
+        candidate = _find_candidate(db, subnet_id, subnet.cidr,
+                                    window=pool_bounds(pool) if pool is not None else None)
         if candidate is None:
-            raise HTTPException(409, "subnet exhausted")
+            raise HTTPException(409, f'pool "{pool.name}" exhausted' if pool is not None else "subnet exhausted")
         addr = db.query(IPAddress).filter_by(address=candidate).first()
         if addr:
             addr.hostname    = hostname
@@ -342,6 +373,7 @@ def _do_allocate(
         "dhcp_registered": dhcp_registered,
         "ptr_registered":  ptr_registered,
         "is_new":          is_new,
+        "pool":            pool.name if pool is not None else None,
     }
 
 

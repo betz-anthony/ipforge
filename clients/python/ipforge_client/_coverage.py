@@ -51,6 +51,9 @@ DEFERRED = {
     ("GET", "/subnets/suggest-parent"),
     ("GET", "/subnets/forecasts"),
     ("GET", "/subnets/{}/forecast"),
+    # subnets — allocation pools (client support to follow)
+    ("GET", "/subnets/{}/pools"), ("POST", "/subnets/{}/pools"),
+    ("PUT", "/subnets/{}/pools/{}"), ("DELETE", "/subnets/{}/pools/{}"),
     # addresses — enrichment / preview
     ("GET", "/addresses/{}/scan-history"),
     ("GET", "/addresses/{}/discovery"),

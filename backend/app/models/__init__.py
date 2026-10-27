@@ -18,6 +18,7 @@ from app.models.ip_request import IPRequest  # noqa: F401
 from app.models.vlan import Vlan  # noqa: F401
 from app.models.custom_field import CustomFieldDef, CustomFieldValue, Tag, TagAssignment  # noqa: F401
 from app.models.subnet_range import SubnetRange  # noqa: F401
+from app.models.subnet_pool import SubnetPool  # noqa: F401
 from app.models.network_device import NetworkDevice, DiscoveredEndpoint  # noqa: F401
 from app.models.gitops import GitopsManaged  # noqa: F401
 from app.models.automation import AutomationRule  # noqa: F401
