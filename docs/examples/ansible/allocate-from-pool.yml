@@ -1,0 +1,105 @@
+---
+# Allocate the next free IP from a named allocation pool (a range inside a
+# subnet) instead of from the whole subnet. Useful when one subnet is split
+# by workload, e.g. a "linux" window, a "windows" window and a "network"
+# window inside one /22.
+#
+# Idempotent by hostname — safe to re-run (status 200 = already allocated,
+# 201 = newly allocated). Re-running does not take a second address.
+#
+# Usage:
+#   ansible-playbook allocate-from-pool.yml \
+#     -e ipam_url=https://ipforge.example.com \
+#     -e ipam_token=ipfg_... \
+#     -e subnet_id=3 \
+#     -e pool_name=linux \
+#     -e vm_hostname=web-01
+#
+# Optional: -e vm_mac=aa:bb:cc:dd:ee:ff  (recorded on the address)
+#
+# Pools are created under the subnet's detail panel in the UI (or with
+# POST /api/v1/subnets/{id}/pools). Allocating from a pool needs a server
+# release that supports pools; the playbook checks the response and fails
+# rather than silently taking an address from outside the pool.
+#
+# The token needs write access to subnet_id (operator role, or a scoped
+# user/token with a write grant on it) — read-only tokens get a 403.
+
+- hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars:
+    # validate_certs: false   # uncomment for a self-signed / internal cert
+
+  tasks:
+    - name: List the subnet's allocation pools
+      ansible.builtin.uri:
+        url: "{{ ipam_url }}/api/v1/subnets/{{ subnet_id }}/pools"
+        method: GET
+        headers:
+          Authorization: "Bearer {{ ipam_token }}"
+        status_code: [200, 404]
+      register: pools_result
+
+    - name: Fail clearly if pools cannot be listed
+      ansible.builtin.fail:
+        msg: >
+          Could not list pools for subnet {{ subnet_id }}
+          ({{ pools_result.json.detail | default('HTTP ' ~ pools_result.status) }}).
+          Check subnet_id, and that the server release supports allocation pools.
+      when: pools_result.status == 404
+
+    - name: Pick out the requested pool
+      ansible.builtin.set_fact:
+        pool: "{{ pools_result.json | selectattr('name', 'equalto', pool_name) | list | first | default({}) }}"
+
+    - name: Fail clearly if the pool does not exist
+      ansible.builtin.fail:
+        msg: >
+          Subnet {{ subnet_id }} has no pool named "{{ pool_name }}".
+          Available: {{ pools_result.json | map(attribute='name') | list }}
+      when: pool | length == 0
+
+    - name: Show the pool before allocating
+      ansible.builtin.debug:
+        msg: >
+          Pool {{ pool.name }}: {{ pool.start_ip }} - {{ pool.end_ip }},
+          {{ pool.free }} free of {{ pool.total }}
+
+    - name: Allocate an IP from the pool for {{ vm_hostname }}
+      ansible.builtin.uri:
+        url: "{{ ipam_url }}/api/v1/subnets/{{ subnet_id }}/allocate"
+        method: POST
+        headers:
+          Authorization: "Bearer {{ ipam_token }}"
+        body_format: json
+        body: >-
+          {{ {'hostname': vm_hostname, 'pool': pool_name}
+             | combine({'mac_address': vm_mac} if vm_mac is defined else {}) }}
+        # 409 = pool exhausted (or the hostname already holds an address
+        # outside the pool); 422 = unknown pool. Handled below with a
+        # readable message instead of a bare HTTP error.
+        status_code: [200, 201, 409, 422]
+      register: alloc
+
+    - name: Fail with the server's reason if the pool could not serve the request
+      ansible.builtin.fail:
+        msg: "Allocation from pool {{ pool_name }} failed: {{ alloc.json.detail }}"
+      when: alloc.status in [409, 422]
+
+    - name: Fail if the server ignored the pool
+      ansible.builtin.fail:
+        msg: >
+          The server allocated {{ alloc.json.address }} but did not report
+          pool "{{ pool_name }}", so it probably predates allocation pools and
+          took the address from the whole subnet. Release it and upgrade the
+          server before retrying.
+      when: alloc.json.pool | default(none) != pool_name
+
+    - name: Show the result
+      ansible.builtin.debug:
+        msg: >
+          {{ 'Allocated' if alloc.json.is_new else 'Already allocated' }}
+          {{ vm_hostname }}: {{ alloc.json.address }}
+          (pool: {{ alloc.json.pool }})
