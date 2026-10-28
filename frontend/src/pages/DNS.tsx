@@ -861,7 +861,8 @@ export default function DNS() {
                       onUseShort={short => setEditForm(f => ({ ...f, name: short }))}
                     />
                   )}
-                  {['A', 'AAAA'].includes(editForm.record_type) && editForm.value !== editingRecord.value && (
+                  {['A', 'AAAA'].includes(editForm.record_type) &&
+                    (editForm.value !== editingRecord.value || editForm.name !== editingRecord.name) && (
                     <div className="form-field form-field-wide">
                       <PtrCheckbox
                         label="Also update matching PTR record"
