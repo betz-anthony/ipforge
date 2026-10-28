@@ -54,3 +54,37 @@ def test_update_record_type_change_falls_back_to_delete_add():
     assert "Remove-DnsServerResourceRecord" in p.calls[0]
     assert "Add-DnsServerResourceRecordCName" in p.calls[1]
     assert "Set-DnsServerResourceRecord" not in "".join(p.calls)
+
+
+def test_update_record_rename_adds_new_then_removes_only_the_old_value():
+    # Set-DnsServerResourceRecord cannot change a record's owner name, so a
+    # rename must be add-new + remove-old, never a clone/set.
+    p = _provider()
+    old = DNSRecord(name="web01", record_type="A", value="10.0.1.5", zone="example.com", ttl=3600)
+    new = DNSRecord(name="web02", record_type="A", value="10.0.1.5", zone="example.com", ttl=3600)
+    p.update_record(old, new)
+
+    assert len(p.calls) == 2
+    assert "Add-DnsServerResourceRecordA" in p.calls[0] and "'web02'" in p.calls[0]
+    assert "Remove-DnsServerResourceRecord" in p.calls[1] and "'web01'" in p.calls[1]
+    assert "'10.0.1.5'" in p.calls[1], "must not remove sibling records of the old name"
+    assert "Set-DnsServerResourceRecord" not in "".join(p.calls)
+
+
+def test_update_record_rename_removes_new_record_if_old_removal_fails():
+    p = _provider()
+    def run(ps):
+        p.calls.append(ps)
+        if "Remove-DnsServerResourceRecord" in ps and "'web01'" in ps:
+            raise RuntimeError("access denied")
+        return ""
+    p._run = run
+    old = DNSRecord(name="web01", record_type="A", value="10.0.1.5", zone="example.com", ttl=3600)
+    new = DNSRecord(name="web02", record_type="A", value="10.0.1.5", zone="example.com", ttl=3600)
+    try:
+        p.update_record(old, new)
+        raised = False
+    except RuntimeError:
+        raised = True
+    assert raised
+    assert "Remove-DnsServerResourceRecord" in p.calls[-1] and "'web02'" in p.calls[-1]

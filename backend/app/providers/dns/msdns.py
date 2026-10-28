@@ -126,6 +126,25 @@ Get-DnsServerResourceRecord -ZoneName {ps_quote(zone)} -ComputerName {ps_quote(s
             f"-ComputerName {ps_quote(self._dns_server)}"
         )
 
+    def _remove_exact(self, record: DNSRecord) -> None:
+        """Remove the one record matching name, type and value."""
+        field = self._RECORD_DATA_FIELD.get(record.record_type)
+        if field is None:
+            self.delete_record(record)
+            return
+        field_name, is_ip = field
+        compare_suffix = ".IPAddressToString" if is_ip else ""
+        self._run(
+            f"$rec = Get-DnsServerResourceRecord -ZoneName {ps_quote(record.zone)} "
+            f"-Name {ps_quote(record.name)} -RRType {ps_quote(record.record_type)} "
+            f"-ComputerName {ps_quote(self._dns_server)} | "
+            f"Where-Object {{ $_.RecordData.{field_name}{compare_suffix} -eq {ps_quote(record.value)} }} | "
+            "Select-Object -First 1\n"
+            "if (-not $rec) { throw 'record not found' }\n"
+            f"Remove-DnsServerResourceRecord -ZoneName {ps_quote(record.zone)} "
+            f"-InputObject $rec -ComputerName {ps_quote(self._dns_server)} -Force"
+        )
+
     # RecordData field name + whether it's an IPAddress object (needs ::Parse
     # and .IPAddressToString to compare/assign) vs a plain string field.
     _RECORD_DATA_FIELD = {
@@ -142,6 +161,22 @@ Get-DnsServerResourceRecord -ZoneName {ps_quote(zone)} -ComputerName {ps_quote(s
             # shape) — fall back to the two-step delete+add.
             self.delete_record(old)
             self.add_record(new)
+            return
+
+        if old.name.lower() != new.name.lower():
+            # Set-DnsServerResourceRecord cannot change a record's owner name:
+            # it reports success and leaves the old name in place, which the
+            # next sync then restores. Add the new name, then drop only the
+            # old record (not its siblings).
+            self.add_record(new)
+            try:
+                self._remove_exact(old)
+            except Exception:
+                try:
+                    self._remove_exact(new)
+                except Exception:
+                    pass
+                raise
             return
 
         field_name, is_ip = field
