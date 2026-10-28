@@ -42,6 +42,8 @@ class Subnets:
         return self._t.request("POST", f"/subnets/{subnet_id}/pools", json=fields)
 
     def update_pool(self, subnet_id: int, pool_id: int, **fields) -> dict:
+        """Replace a pool. The server expects the full definition (name,
+        start_ip, end_ip, optional description), not a partial update."""
         return self._t.request("PUT", f"/subnets/{subnet_id}/pools/{pool_id}", json=fields)
 
     def delete_pool(self, subnet_id: int, pool_id: int) -> None:
