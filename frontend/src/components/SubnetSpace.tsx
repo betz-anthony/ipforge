@@ -110,13 +110,13 @@ export default function SubnetSpace({ subnet }: { subnet: Subnet }) {
         <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', margin: '0.4rem 0' }}>No reserved ranges.</p>
       )}
       {(ranges ?? []).map(r => (
-        <div key={r.id} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.8rem', padding: '0.2rem 0' }}>
+        <div key={r.id} style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem', fontSize: '0.8rem', padding: '0.2rem 0' }}>
           <span className="font-mono">{r.start_ip}{r.end_ip !== r.start_ip ? `–${r.end_ip}` : ''}</span>
           <span className="badge badge-gray">{r.kind}</span>
           {r.source && <span className="badge badge-blue" style={{ fontSize: '0.65rem' }}>synced · {r.source}</span>}
           {r.label && <span style={{ color: 'var(--text-muted)' }}>{r.label}</span>}
           {rangeCoversSubnet(r.start_ip, r.end_ip, subnet.cidr) && (
-            <span className="badge badge-yellow" style={{ fontSize: '0.65rem' }}
+            <span className="badge badge-yellow" style={{ fontSize: '0.65rem', whiteSpace: 'nowrap' }}
               title="This range covers every host address, so the whole subnet shows as reserved.">
               covers entire subnet
             </span>
