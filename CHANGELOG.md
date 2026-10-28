@@ -20,6 +20,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   monitoring rather than real distribution, so its gateway/exclusions
   don't get unioned into a subnet's Reserved Ranges as if authoritative.
   Leases and pool data for the scope keep syncing either way.
+- A range that covers every host address of its subnet now shows a
+  "covers entire subnet" badge in the Reserved Ranges list.
 
 **DNS**
 - Record names that already end in their zone (e.g. `host.example.com` in
@@ -35,6 +37,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the response includes the `pool` it was allocated from. Pools are managed
   under `/subnets/{id}/pools` with per-pool utilization. Without `pool`,
   allocation behaves as before.
+- Pools are editable from the subnet detail panel (with utilization bars),
+  the MCP server gains a `pool` option on `allocate_ip` plus a `list_pools`
+  tool, and the Python client (0.2.0) adds `allocate(..., pool=)` and pool
+  management. Both clients raise `PoolNotSupportedError` if the server
+  ignores the pool, so an older server is never silently used.
 
 **Search**
 - Search results are now clickable, navigating to the matching record's
