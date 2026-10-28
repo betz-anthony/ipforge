@@ -21,14 +21,32 @@ def find_reverse_zone(ip: str, zones: list[str]) -> str | None:
     return None
 
 
+def _ptr_target(hostname: str, forward_zone: str | None) -> str:
+    name = hostname.strip()
+    zone = (forward_zone or "").strip().rstrip(".")
+    if zone and not name.endswith("."):
+        if name == "@":
+            name = zone
+        elif name.lower() != zone.lower() and not name.lower().endswith("." + zone.lower()):
+            name = f"{name}.{zone}"
+    return f"{name.rstrip('.')}."
+
+
 def build_ptr_record(
     ip: str,
     hostname: str,
     reverse_zone: str,
     provider: str,
     ttl: int = 3600,
+    forward_zone: str | None = None,
 ) -> DNSRecord:
-    """Construct a PTR DNSRecord for ip within reverse_zone."""
+    """Construct a PTR DNSRecord for ip within reverse_zone.
+
+    Forward records are often zone-relative (``web01`` in ``example.com``),
+    but a PTR target must be the full name. When ``forward_zone`` is given, a
+    relative hostname is qualified with it; a name already inside the zone, or
+    absolute (trailing dot), is left as is.
+    """
     if not reverse_zone:
         raise ValueError("reverse_zone must not be empty or None")
 
@@ -41,7 +59,7 @@ def build_ptr_record(
     return DNSRecord(
         name=name,
         record_type="PTR",
-        value=f"{hostname.rstrip('.')}.",
+        value=_ptr_target(hostname, forward_zone),
         zone=reverse_zone,
         ttl=ttl,
         source=provider,

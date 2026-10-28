@@ -234,7 +234,7 @@ def create_record(
     if record.register_ptr and record.record_type in ("A", "AAAA") and target.supports_ptr:
         reverse_zone = find_reverse_zone(record.value, _zone_names(db, target))
         if reverse_zone is not None:
-            candidate = build_ptr_record(record.value, record.name, reverse_zone, provider=record.source)
+            candidate = build_ptr_record(record.value, record.name, reverse_zone, provider=record.source, forward_zone=record.zone)
             try:
                 target.add_record(candidate)
                 ptr_record = candidate
@@ -320,8 +320,8 @@ def update_record(
     if follow_ptr:
         old_rz = find_reverse_zone(old.value, zones_avail)
         new_rz = find_reverse_zone(new.value, zones_avail)
-        old_ptr = build_ptr_record(old.value, old.name, old_rz, target.source) if old_rz else None
-        new_ptr = build_ptr_record(new.value, new.name, new_rz, target.source) if new_rz else None
+        old_ptr = build_ptr_record(old.value, old.name, old_rz, target.source, forward_zone=zone) if old_rz else None
+        new_ptr = build_ptr_record(new.value, new.name, new_rz, target.source, forward_zone=zone) if new_rz else None
 
         try:
             if old_ptr is not None and new_ptr is not None and old_ptr.zone == new_ptr.zone:
@@ -423,7 +423,7 @@ def delete_record(
     if record.delete_ptr and record.record_type in ("A", "AAAA") and target.supports_ptr:
         reverse_zone = find_reverse_zone(record.value, _zone_names(db, target))
         if reverse_zone is not None:
-            ptr_record = build_ptr_record(record.value, record.name, reverse_zone, provider=record.source)
+            ptr_record = build_ptr_record(record.value, record.name, reverse_zone, provider=record.source, forward_zone=record.zone)
 
     try:
         target.delete_record(record)

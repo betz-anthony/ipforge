@@ -295,7 +295,8 @@ def _do_allocate(
             _rollback()
             raise HTTPException(422, "No reverse zone found for this IP address")
 
-        ptr_record = build_ptr_record(addr.address, hostname, reverse_zone, provider=dns_prov.source)
+        ptr_record = build_ptr_record(addr.address, hostname, reverse_zone, provider=dns_prov.source,
+                                      forward_zone=body.dns_zone or None)
         try:
             dns_prov.add_record(ptr_record)
             ptr_registered = True

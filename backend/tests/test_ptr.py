@@ -304,7 +304,7 @@ def test_dns_create_record_register_ptr_creates_both(client, db):
     ptr_call = mock_prov.add_record.call_args_list[1][0][0]
     assert ptr_call.record_type == "PTR"
     assert ptr_call.zone == "1.0.10.in-addr.arpa"
-    assert ptr_call.value == "web01."
+    assert ptr_call.value == "web01.example.com."
 
 
 def test_dns_create_record_register_ptr_pihole_skips_ptr(client, db):
@@ -511,7 +511,7 @@ def test_delete_preview_includes_ptr_when_ptr_zone_set(client, db):
     assert pi["zone"] == "1.0.10.in-addr.arpa"
     assert pi["provider"] == "bind01"
     assert pi["name"] == "2"   # host portion of 10.0.1.2 in 1.0.10.in-addr.arpa
-    assert pi["value"] == "web01."
+    assert pi["value"] == "web01.example.com."
 
 
 def test_delete_preview_no_ptr_item_when_ptr_zone_null(client, db):
@@ -587,3 +587,28 @@ def test_create_aaaa_record_registers_ptr(client, db):
     assert r.status_code == 201, r.text
     types = [c[0][0].record_type for c in mock_prov.add_record.call_args_list]
     assert types == ["AAAA", "PTR"], types  # was ["AAAA"] only before the fix
+
+
+def test_build_ptr_relative_name_is_qualified_with_forward_zone():
+    r = build_ptr_record("10.1.2.5", "web01", "2.1.10.in-addr.arpa", provider="msdns01", forward_zone="example.com")
+    assert r.value == "web01.example.com."
+
+
+def test_build_ptr_multilabel_relative_name_is_qualified():
+    r = build_ptr_record("10.1.2.5", "a.b", "2.1.10.in-addr.arpa", provider="msdns01", forward_zone="example.com")
+    assert r.value == "a.b.example.com."
+
+
+def test_build_ptr_apex_name_becomes_the_zone():
+    r = build_ptr_record("10.1.2.5", "@", "2.1.10.in-addr.arpa", provider="msdns01", forward_zone="example.com")
+    assert r.value == "example.com."
+
+
+def test_build_ptr_name_already_in_zone_is_not_requalified():
+    r = build_ptr_record("10.1.2.5", "web01.example.com", "2.1.10.in-addr.arpa", provider="bind01", forward_zone="example.com.")
+    assert r.value == "web01.example.com."
+
+
+def test_build_ptr_absolute_name_is_left_alone():
+    r = build_ptr_record("10.1.2.5", "web01.other.net.", "2.1.10.in-addr.arpa", provider="bind01", forward_zone="example.com")
+    assert r.value == "web01.other.net."
