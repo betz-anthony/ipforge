@@ -120,6 +120,10 @@ Get-DnsServerResourceRecord -ZoneName {ps_quote(zone)} -ComputerName {ps_quote(s
             raise NotImplementedError(f"Record type {record.record_type} not supported")
 
     def delete_record(self, record: DNSRecord) -> None:
+        if record.record_type in self._DELETE_MATCH_FIELD:
+            self._remove_exact(record)
+            return
+        # No value field to match on (e.g. SRV): remove by name and type.
         self._run(
             f"Remove-DnsServerResourceRecord -ZoneName {ps_quote(record.zone)} "
             f"-Name {ps_quote(record.name)} -RRType {ps_quote(record.record_type)} -Force "
@@ -127,12 +131,13 @@ Get-DnsServerResourceRecord -ZoneName {ps_quote(zone)} -ComputerName {ps_quote(s
         )
 
     def _remove_exact(self, record: DNSRecord) -> None:
-        """Remove the one record matching name, type and value."""
-        field = self._RECORD_DATA_FIELD.get(record.record_type)
-        if field is None:
-            self.delete_record(record)
-            return
-        field_name, is_ip = field
+        """Remove the one record matching name, type and value.
+
+        Removing by name and type alone also deletes every sibling (a
+        round-robin A set, several TXT records), which IPForge's cache and
+        audit entry would not reflect.
+        """
+        field_name, is_ip = self._DELETE_MATCH_FIELD[record.record_type]
         compare_suffix = ".IPAddressToString" if is_ip else ""
         self._run(
             f"$rec = Get-DnsServerResourceRecord -ZoneName {ps_quote(record.zone)} "
@@ -144,6 +149,18 @@ Get-DnsServerResourceRecord -ZoneName {ps_quote(zone)} -ComputerName {ps_quote(s
             f"Remove-DnsServerResourceRecord -ZoneName {ps_quote(record.zone)} "
             f"-InputObject $rec -ComputerName {ps_quote(self._dns_server)} -Force"
         )
+
+    # Same shape as _RECORD_DATA_FIELD, for the types whose cached value is a
+    # single RecordData field, so a delete can match on it.
+    _DELETE_MATCH_FIELD = {
+        "A": ("IPv4Address", True),
+        "AAAA": ("IPv6Address", True),
+        "PTR": ("PtrDomainName", False),
+        "CNAME": ("HostNameAlias", False),
+        "NS": ("NameServer", False),
+        "MX": ("MailExchange", False),
+        "TXT": ("DescriptiveText", False),
+    }
 
     # RecordData field name + whether it's an IPAddress object (needs ::Parse
     # and .IPAddressToString to compare/assign) vs a plain string field.

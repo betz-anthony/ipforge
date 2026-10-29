@@ -88,3 +88,25 @@ def test_update_record_rename_removes_new_record_if_old_removal_fails():
         raised = True
     assert raised
     assert "Remove-DnsServerResourceRecord" in p.calls[-1] and "'web02'" in p.calls[-1]
+
+
+def test_delete_a_record_matches_on_value_not_just_name_and_type():
+    p = _provider()
+    p.delete_record(DNSRecord(name="web", record_type="A", value="10.0.1.5", zone="example.com", ttl=3600))
+    assert len(p.calls) == 1
+    ps = p.calls[0]
+    assert "'10.0.1.5'" in ps and "IPv4Address" in ps
+    assert "throw 'record not found'" in ps
+    assert "-InputObject $rec" in ps
+
+
+def test_delete_txt_record_matches_on_text():
+    p = _provider()
+    p.delete_record(DNSRecord(name="@", record_type="TXT", value="v=spf1 -all", zone="example.com", ttl=3600))
+    assert "DescriptiveText" in p.calls[0] and "'v=spf1 -all'" in p.calls[0]
+
+
+def test_delete_srv_record_falls_back_to_name_and_type():
+    p = _provider()
+    p.delete_record(DNSRecord(name="_sip._tcp", record_type="SRV", value="sip.example.com", zone="example.com", ttl=3600))
+    assert "-RRType 'SRV'" in p.calls[0] and "Where-Object" not in p.calls[0]
