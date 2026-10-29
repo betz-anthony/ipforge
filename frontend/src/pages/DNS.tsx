@@ -441,14 +441,15 @@ export default function DNS() {
     const name   = searchParams.get('name')
     const type   = searchParams.get('type')
     const value  = searchParams.get('value')
+    const wantDelete = searchParams.get('action') === 'delete'
     if (!zone || !source || !name || !type || !value) return
     resetZone(zone, source)
     dnsApi.listRecords(zone, { q: name, limit: 100 }).then(page => {
       const match = page.items.find(r => r.name === name && r.record_type === type && r.value === value)
-      if (match) startEdit(match)
+      if (match) { if (wantDelete) setConfirmRecord(match); else startEdit(match) }
     }).catch(() => {})
     setSearchParams(prev => {
-      prev.delete('zone'); prev.delete('source'); prev.delete('name'); prev.delete('type'); prev.delete('value')
+      prev.delete('action'); prev.delete('zone'); prev.delete('source'); prev.delete('name'); prev.delete('type'); prev.delete('value')
       return prev
     }, { replace: true })
   }, [searchParams])

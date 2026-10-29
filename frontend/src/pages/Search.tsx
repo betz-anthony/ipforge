@@ -1,11 +1,14 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
-import { Search, Pencil } from 'lucide-react'
+import { Search, Pencil, Trash2 } from 'lucide-react'
 import { searchApi } from '../api/client'
+import { useAuth } from '../contexts/AuthContext'
 
 export default function SearchPage() {
   const navigate = useNavigate()
+  const { user } = useAuth()
+  const canWrite = user?.role === 'admin' || user?.role === 'operator'
   const [input, setInput]           = useState('')
   const [debouncedQ, setDebouncedQ] = useState('')
 
@@ -72,13 +75,15 @@ export default function SearchPage() {
                         <td><span className="badge badge-blue">IPv{s.ip_version}</span></td>
                         <td>{s.description ?? <span className="text-muted">—</span>}</td>
                         <td>
-                          <button
-                            className="btn-ghost btn-sm"
-                            aria-label={`Edit subnet ${s.cidr}`}
-                            onClick={() => navigate(`/subnets?edit=${s.id}`)}
-                          >
-                            <Pencil size={12} />
-                          </button>
+                          {canWrite && (
+                            <button
+                              className="btn-ghost btn-sm"
+                              aria-label={`Edit subnet ${s.cidr}`}
+                              onClick={() => navigate(`/subnets?edit=${s.id}`)}
+                            >
+                              <Pencil size={12} />
+                            </button>
+                          )}
                         </td>
                       </tr>
                     ))}
@@ -105,13 +110,15 @@ export default function SearchPage() {
                         <td><span className="badge badge-blue">{a.status}</span></td>
                         <td><span className="font-mono">{a.mac_address ?? <span className="text-muted">—</span>}</span></td>
                         <td>
-                          <button
-                            className="btn-ghost btn-sm"
-                            aria-label={`Edit address ${a.address}`}
-                            onClick={() => navigate(`/addresses?edit=${a.id}`)}
-                          >
-                            <Pencil size={12} />
-                          </button>
+                          {canWrite && (
+                            <button
+                              className="btn-ghost btn-sm"
+                              aria-label={`Edit address ${a.address}`}
+                              onClick={() => navigate(`/addresses?edit=${a.id}`)}
+                            >
+                              <Pencil size={12} />
+                            </button>
+                          )}
                         </td>
                       </tr>
                     ))}
@@ -128,7 +135,7 @@ export default function SearchPage() {
               <div className="table-wrap">
                 <table>
                   <thead>
-                    <tr><th scope="col">IP</th><th scope="col">Hostname</th><th scope="col">MAC</th><th scope="col">Scope</th><th scope="col" style={{ width: '2.5rem' }}></th></tr>
+                    <tr><th scope="col">IP</th><th scope="col">Hostname</th><th scope="col">MAC</th><th scope="col">Scope</th><th scope="col" style={{ width: '5rem' }}></th></tr>
                   </thead>
                   <tbody>
                     {data.leases.map(l => (
@@ -137,16 +144,29 @@ export default function SearchPage() {
                         <td>{l.name ?? <span className="text-muted">—</span>}</td>
                         <td><span className="font-mono">{l.mac_address ?? <span className="text-muted">—</span>}</span></td>
                         <td><span className="font-mono">{l.scope_id}</span></td>
-                        <td>
-                          <button
-                            className="btn-ghost btn-sm"
-                            aria-label={`Edit DHCP lease ${l.ip_address}`}
-                            onClick={() => navigate(
-                              `/dhcp?scope=${encodeURIComponent(l.scope_id)}&source=${encodeURIComponent(l.source)}&ip=${encodeURIComponent(l.ip_address)}`
-                            )}
-                          >
-                            <Pencil size={12} />
-                          </button>
+                        <td style={{ display: 'flex', gap: '0.3rem' }}>
+                          {canWrite && (
+                            <button
+                              className="btn-ghost btn-sm"
+                              aria-label={`Edit DHCP lease ${l.ip_address}`}
+                              onClick={() => navigate(
+                                `/dhcp?scope=${encodeURIComponent(l.scope_id)}&source=${encodeURIComponent(l.source)}&ip=${encodeURIComponent(l.ip_address)}`
+                              )}
+                            >
+                              <Pencil size={12} />
+                            </button>
+                          )}
+                          {canWrite && (
+                            <button
+                              className="btn-danger btn-sm"
+                              aria-label={`Delete DHCP reservation ${l.ip_address}`}
+                              onClick={() => navigate(
+                                `/dhcp?scope=${encodeURIComponent(l.scope_id)}&source=${encodeURIComponent(l.source)}&ip=${encodeURIComponent(l.ip_address)}&action=delete`
+                              )}
+                            >
+                              <Trash2 size={12} />
+                            </button>
+                          )}
                         </td>
                       </tr>
                     ))}
@@ -163,7 +183,7 @@ export default function SearchPage() {
               <div className="table-wrap">
                 <table>
                   <thead>
-                    <tr><th scope="col">Name</th><th scope="col">Type</th><th scope="col">Value</th><th scope="col">Zone</th><th scope="col" style={{ width: '2.5rem' }}></th></tr>
+                    <tr><th scope="col">Name</th><th scope="col">Type</th><th scope="col">Value</th><th scope="col">Zone</th><th scope="col" style={{ width: '5rem' }}></th></tr>
                   </thead>
                   <tbody>
                     {data.records.map(r => (
@@ -172,16 +192,29 @@ export default function SearchPage() {
                         <td><span className="badge badge-gray">{r.record_type}</span></td>
                         <td className="col-value"><span className="font-mono">{r.value}</span></td>
                         <td>{r.zone}</td>
-                        <td>
-                          <button
-                            className="btn-ghost btn-sm"
-                            aria-label={`Edit ${r.record_type} record ${r.name}`}
-                            onClick={() => navigate(
-                              `/dns?zone=${encodeURIComponent(r.zone)}&source=${encodeURIComponent(r.source)}&name=${encodeURIComponent(r.name)}&type=${encodeURIComponent(r.record_type)}&value=${encodeURIComponent(r.value)}`
-                            )}
-                          >
-                            <Pencil size={12} />
-                          </button>
+                        <td style={{ display: 'flex', gap: '0.3rem' }}>
+                          {canWrite && (
+                            <button
+                              className="btn-ghost btn-sm"
+                              aria-label={`Edit ${r.record_type} record ${r.name}`}
+                              onClick={() => navigate(
+                                `/dns?zone=${encodeURIComponent(r.zone)}&source=${encodeURIComponent(r.source)}&name=${encodeURIComponent(r.name)}&type=${encodeURIComponent(r.record_type)}&value=${encodeURIComponent(r.value)}`
+                              )}
+                            >
+                              <Pencil size={12} />
+                            </button>
+                          )}
+                          {canWrite && (
+                            <button
+                              className="btn-danger btn-sm"
+                              aria-label={`Delete ${r.record_type} record ${r.name}`}
+                              onClick={() => navigate(
+                                `/dns?zone=${encodeURIComponent(r.zone)}&source=${encodeURIComponent(r.source)}&name=${encodeURIComponent(r.name)}&type=${encodeURIComponent(r.record_type)}&value=${encodeURIComponent(r.value)}&action=delete`
+                              )}
+                            >
+                              <Trash2 size={12} />
+                            </button>
+                          )}
                         </td>
                       </tr>
                     ))}

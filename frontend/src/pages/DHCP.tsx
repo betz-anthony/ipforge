@@ -268,6 +268,7 @@ export default function DHCP() {
     const scopeId = searchParams.get('scope')
     const source  = searchParams.get('source')
     const ip      = searchParams.get('ip')
+    const wantDelete = searchParams.get('action') === 'delete'
     if (!scopeId || !source || !ip || !scopes) return
     const scope = scopes.find(s => s.scope_id === scopeId && s.source === source)
     if (!scope) return
@@ -275,9 +276,9 @@ export default function DHCP() {
     setDnsLink({ register_dns: false, dns_zone: '' }); setSelectedLease(null); setEditingLease(null)
     dhcpApi.byIp(ip).then(matches => {
       const match = matches.find(l => l.source === source)
-      if (match) startEdit(match)
+      if (match) { if (wantDelete) setConfirmIp(match.ip_address); else startEdit(match) }
     }).catch(() => {})
-    setSearchParams(prev => { prev.delete('scope'); prev.delete('source'); prev.delete('ip'); return prev }, { replace: true })
+    setSearchParams(prev => { prev.delete('action'); prev.delete('scope'); prev.delete('source'); prev.delete('ip'); return prev }, { replace: true })
   }, [searchParams, scopes])
 
   const editMacError = useMemo(() => {
