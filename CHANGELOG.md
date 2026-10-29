@@ -47,6 +47,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Search results are now clickable, navigating to the matching record's
   edit view via an explicit Edit button (DNS records, DHCP reservations,
   addresses, subnets) instead of dead-ending on a read-only row.
+- DNS records and DHCP reservations can be deleted from the search results.
+  Delete opens the owning page's confirmation dialog (including the optional
+  PTR cleanup), so audit logging is unchanged. Edit and Delete buttons on the
+  search page are hidden for read-only users.
 
 **Subnet map**
 - The heatmap's "Create address here" popup on a free cell is now a real
@@ -64,6 +68,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - IP address columns (Addresses list, DHCP lease list, a subnet's Reserved
   Ranges) sorted lexicographically as text (`10.10.1.1, 10.10.1.100,
   10.10.1.103, 10.10.1.11`) instead of in real numeric order.
+
+**DNS editing**
+- MS DNS: renaming a record reported success but left the old name on the
+  server, which the next sync restored. A rename now adds the new name and
+  removes only the old record.
+- MS DNS: deleting a record removed every record with the same name and
+  type (for example the whole round-robin set) while IPForge recorded one.
+  Delete now matches on the record's value as well.
+- PTR records created or followed through for a zone-relative hostname
+  pointed at the bare label (`web01.`) instead of the full name
+  (`web01.example.com.`). Existing PTR records created this way are not
+  changed and will show as PTR mismatches in Drift.
+- The "also update matching PTR record" option is now offered when a
+  record is renamed, not only when its IP changes.
 
 **DNS sync**
 - MS DNS: CNAME and NS records were silently dropped from `get_records()`
