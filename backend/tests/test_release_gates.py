@@ -110,6 +110,16 @@ def test_check_changelog_sync_accepts_a_prepared_untagged_release(tmp_path):
     assert "prepared" in result.stdout
 
 
+def test_check_changelog_sync_survives_a_long_release_history(tmp_path):
+    # The script runs under pipefail; reading the first release heading must
+    # not leave an upstream writer to die of SIGPIPE (exit 141) when many
+    # older headings follow it.
+    history = "".join(f"## [0.{i}.0] - 2024-01-01\n\n- old\n\n" for i in range(3000, 0, -1))
+    result = _sync_repo(tmp_path, _HEAD + "## [1.1.0] - 2026-01-01\n\n- the new thing\n\n" + history)
+    assert result.returncode == 0, (result.returncode, result.stdout)
+    assert "prepared" in result.stdout
+
+
 def test_check_changelog_sync_flags_empty_unreleased_with_no_prepared_release(tmp_path):
     result = _sync_repo(tmp_path, _HEAD + "## [1.0.0] - 2025-01-01\n\n- first\n")
     assert result.returncode == 1
