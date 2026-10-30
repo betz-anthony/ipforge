@@ -453,6 +453,17 @@ auto-synced range shows a "synced · <code>&lt;provider name&gt;</code>" badge a
 edited from the UI — it's a reflection of what the DHCP server has
 configured, not something IPForge owns. It can still be deleted; if it's
 still true at the provider, it reappears on the next sync.</p>
+<p>A scope that resolves to more than one subnet (a supernet and a child
+containing the same range) syncs to the most specific subnet — the child.
+Malformed gateway or exclusion values from a provider are skipped with a
+warning instead of being written. To keep a scope in DHCP for testing or
+monitoring without its gateway and exclusions being treated as authoritative,
+turn off <strong>Sync to Reserved Ranges</strong> for that scope in the DHCP page's scope
+list; its leases and pool data keep syncing either way.</p>
+<p>A range that covers every host address of its subnet shows a <strong>covers entire
+subnet</strong> badge in the list. That is almost always a mistake on the DHCP server
+(for example a whole-subnet exclusion), because the subnet then has no
+allocatable space.</p>
 <h3 id="address-map">Address map</h3>
 <p>A grid of every host IP in the subnet, colored by status (free / assigned /
 reserved / discovered / deprecated) with a red outline on any IP that has open
@@ -624,10 +635,53 @@ in the drawer; new tags are created automatically. Creating tags requires operat
   &quot;register_dhcp&quot;: false,
   &quot;dns_zone&quot;:      &quot;example.com&quot;,
   &quot;dns_provider&quot;:  &quot;&quot;,
-  &quot;dhcp_provider&quot;: &quot;&quot;
+  &quot;dhcp_provider&quot;: &quot;&quot;,
+  &quot;pool&quot;:          &quot;&quot;
 }
 </code></pre>
-<p><code>hostname</code> is required. All other fields are optional.</p>
+<p><code>hostname</code> is required. All other fields are optional. <code>pool</code> is the name of an <a href="#allocation-pools">allocation pool</a> to allocate from.</p>
+<h3 id="allocation-pools">Allocation pools</h3>
+<p>A <strong>pool</strong> is a named IP window inside a subnet — for example a <code>linux</code>, a
+<code>windows</code> and a <code>network</code> range inside one large subnet. Allocating with a
+<code>pool</code> returns the next free IP from that window only; without <code>pool</code>,
+allocation uses the whole subnet exactly as before.</p>
+<p>Manage pools in the subnet detail drawer under <strong>Allocation Pools</strong> (add, edit,
+delete; each pool shows a utilization bar), or over the API:</p>
+<pre><code>GET    /api/v1/subnets/{subnet_id}/pools
+POST   /api/v1/subnets/{subnet_id}/pools        {&quot;name&quot;:&quot;linux&quot;,&quot;start_ip&quot;:&quot;10.0.1.10&quot;,&quot;end_ip&quot;:&quot;10.0.1.99&quot;,&quot;description&quot;:&quot;optional&quot;}
+PUT    /api/v1/subnets/{subnet_id}/pools/{pool_id}   (replaces the whole pool)
+DELETE /api/v1/subnets/{subnet_id}/pools/{pool_id}
+</code></pre>
+<p>Pool names are lowercase letters, digits, <code>-</code> and <code>_</code> (1–64 characters; input
+is lowercased). A pool must sit inside the subnet's CIDR, must not overlap
+another pool in the same subnet, and may not reuse a name. Each pool reports
+<code>total</code>, <code>used</code>, <code>reserved</code> and <code>free</code>; reserved ranges inside the window are
+excluded from <code>free</code>. Pool changes are audited. Writing requires operator+ (or a
+scoped grant on the subnet).</p>
+<p>Allocate from a pool with <code>"pool": "linux"</code> in the request body. The response
+echoes <code>pool</code>. Errors:</p>
+<table>
+<thead>
+<tr>
+<th>Status</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>422</code></td>
+<td>the subnet has no pool with that name</td>
+</tr>
+<tr>
+<td><code>409</code></td>
+<td>the pool is exhausted, or the hostname already holds an address outside the pool</td>
+</tr>
+</tbody>
+</table>
+<p>Clients should check that the response's <code>pool</code> matches the one requested: a
+server that predates pools ignores the field and allocates from the whole
+subnet. The Python client and the Terraform provider do this and fail with a
+clear error instead of using the wrong address.</p>
 <h3 id="how-ip-selection-works">How IP selection works</h3>
 <ol>
 <li>Loads all ineligible IPs in the subnet (<code>reserved</code>, <code>assigned</code>, <code>deprecated</code>, <code>discovered</code>).</li>
@@ -635,6 +689,7 @@ in the drawer; new tags are created automatically. Creating tags requires operat
 <li>Skips <code>.1</code> (router convention) and <code>.255</code> (broadcast-like convention).</li>
 <li>Returns the first IP not in the ineligible set.</li>
 </ol>
+<p>Candidate selection checks the whole address range, not only this subnet's rows, so an address already recorded under a parent subnet is never handed out. With a <code>pool</code>, only the pool's window is searched.</p>
 <h3 id="idempotency">Idempotency</h3>
 <p>Hostname is the idempotency key (case-insensitive). If <code>web-01</code> is already allocated in this subnet with a non-deprecated status, the existing record is returned — no second IP is created. This makes the endpoint safe to re-run from Terraform or Ansible.</p>
 <ul>
@@ -685,6 +740,7 @@ in the drawer; new tags are created automatically. Creating tags requires operat
   &quot;mac_address&quot;:     &quot;aa:bb:cc:dd:ee:ff&quot;,
   &quot;dns_registered&quot;:  true,
   &quot;dhcp_registered&quot;: false,
+  &quot;pool&quot;:            null,
   &quot;is_new&quot;:          true
 }
 </code></pre>
@@ -701,39 +757,46 @@ in the drawer; new tags are created automatically. Creating tags requires operat
 <h3 id="ansible-example">Ansible example</h3>
 <p>See <code>docs/examples/ansible/allocate.yml</code>. Key point:
 - <code>status_code: [200, 201]</code> — the task succeeds on both new allocation and idempotent hit. Playbooks are safe to re-run.</p>
+<p>To allocate from a named pool, see <code>docs/examples/ansible/allocate-from-pool.yml</code>: it lists the subnet's pools, checks the pool exists and has free space, allocates with <code>pool</code>, and fails with the server's reason on exhaustion or an unknown pool.</p>
 <h3 id="python-client">Python client</h3>
 <p><code>ipforge-client</code> on PyPI (<code>pip install ipforge-client</code>, source in <code>clients/python/</code>) — a typed, sync wrapper over the full <code>/api/v1</code> surface (subnets, addresses, VLANs, DNS, DHCP, drift, discovery, audit), with auto-paginating list iterators and a typed exception hierarchy. Only dependency is <code>requests</code>.</p>
 <pre><code class="language-python">from ipforge_client import IPForge
 
 client = IPForge(&quot;https://ipforge.example.com&quot;, token=&quot;ipfg_...&quot;)
 result = client.subnets.allocate(3, hostname=&quot;web-01&quot;, register_dns=True, dns_zone=&quot;example.com&quot;)
+
+# from a named pool; raises PoolNotSupportedError if the server ignores `pool`
+result = client.subnets.allocate(3, hostname=&quot;web-02&quot;, pool=&quot;linux&quot;)
 </code></pre>
+<p>The client also manages pools (<code>pools</code>, <code>add_pool</code>, <code>update_pool</code>, <code>delete_pool</code>). <code>update_pool</code> takes the full pool definition.</p>
 <hr>
 <h2 id="dns">DNS</h2>
 <p>The DNS page shows zones and records synced from your configured DNS providers.</p>
 <h3 id="zones">Zones</h3>
 <p>Zones are listed on the left. Each zone is tagged with its source provider. Click a zone to load its records.</p>
-<p>Zones are grouped into three tabs: <strong>Forward</strong>, <strong>Reverse</strong>, and <strong>Trust</strong> (PTR/stub zones).</p>
+<p>Zones are grouped into three tabs: <strong>Forward</strong>, <strong>Reverse</strong>, and <strong>Trust</strong> (PTR/stub zones). In the <strong>By Server</strong> view each server's group can be collapsed; the collapsed state is remembered between visits.</p>
 <h3 id="records">Records</h3>
 <p>Records are displayed with name, type, value, TTL, and source. Use the search box to filter within a zone.</p>
 <h3 id="adding-a-record">Adding a record</h3>
 <p>Click <strong>Add Record</strong>. Specify name, type (A, AAAA, CNAME, MX, etc.), value, and TTL. The record is written to the provider immediately.</p>
 <h3 id="editing-a-record">Editing a record</h3>
-<p>Click the pencil icon on a record row to edit it in place — no more delete-and-recreate. Name, value, and TTL are editable; type and zone/source are fixed. Updates are atomic where the provider API supports it (MS DNS, BIND, GCP DNS). If you change the value of an A/AAAA record, an <strong>Also update matching PTR record</strong> checkbox appears to keep the reverse-zone record in sync (disabled on providers without PTR support, e.g. Pi-hole).</p>
+<p>Click the pencil icon on a record row to edit it in place — no more delete-and-recreate. Name, value, and TTL are editable; type and zone/source are fixed. Updates are atomic where the provider API supports it (MS DNS, BIND, GCP DNS). If you change the name or the value of an A/AAAA record, an <strong>Also update matching PTR record</strong> checkbox appears to keep the reverse-zone record in sync (disabled on providers without PTR support, e.g. Pi-hole). Leaving it unticked saves the record and shows a notice that the PTR was not updated; Drift will flag the mismatch.</p>
+<p>On MS DNS a rename is carried out as add-new-name then remove-old-record, because the server cannot rename a record in place; if removing the old record fails, the new one is removed again so no duplicate is left behind.</p>
+<p>While a write is waiting on the provider, a progress dialog is shown; if it takes longer than a few seconds you can dismiss it and the result still arrives as a notification.</p>
 <h3 id="deleting-a-record">Deleting a record</h3>
-<p>Click the delete icon on any record row. Confirmation required.</p>
+<p>Click the delete icon on any record row. Confirmation required; the dialog names the record and its value. Only the record with that exact name, type and value is removed — other records of the same name (such as the rest of a round-robin set) are left in place. You can also start a delete from the <a href="#search">Search</a> page.</p>
 <blockquote>
 <p>Note: DNS data shown is from the local cache. After adding or deleting records, the cache updates on the next sync cycle. Use <strong>Sync Now</strong> to force an immediate refresh.</p>
 </blockquote>
 <h3 id="ptr-records">PTR records</h3>
-<p>When you add an <code>A</code> or <code>AAAA</code> record, the <strong>Also create PTR</strong> checkbox writes the matching reverse-zone record in one step. Deleting an A/AAAA prompts you to delete its PTR via the delete preview dialog (preview lists every provider record that will be removed; uncheck any you want to keep).</p>
+<p>When you add an <code>A</code> or <code>AAAA</code> record, the <strong>Also create PTR</strong> checkbox writes the matching reverse-zone record in one step. The PTR points at the host's full name (<code>web01.example.com.</code>), not the bare label. Deleting an A/AAAA prompts you to delete its PTR via the delete preview dialog (preview lists every provider record that will be removed; uncheck any you want to keep).</p>
 <p>PTR is also auto-created when the <a href="#allocation-api">Allocation API</a> is called with <code>register_ptr: true</code>, or when an operator approves an IP request with the PTR checkbox ticked.</p>
 <p>The reverse zone must already exist on the DNS provider. PTR creation is silently skipped if no reverse zone covers the IP.</p>
 <hr>
 <h2 id="dhcp">DHCP</h2>
 <p>The DHCP page shows scopes and leases/reservations synced from your DHCP providers.</p>
 <h3 id="scopes">Scopes</h3>
-<p>Scopes are listed with subnet mask, range, active status, and source provider.</p>
+<p>Scopes are listed with subnet mask, range, active status, and source provider. In the <strong>By Server</strong> view each server's group can be collapsed (scope counts stay visible) and the state is remembered between visits.</p>
 <h3 id="leases-reservations">Leases / Reservations</h3>
 <p>Click a scope to see its leases and reservations. Shows IP, MAC, name, and description.</p>
 <h3 id="adding-a-reservation">Adding a reservation</h3>
@@ -741,7 +804,7 @@ result = client.subnets.allocate(3, hostname=&quot;web-01&quot;, register_dns=Tr
 <h3 id="editing-a-reservation">Editing a reservation</h3>
 <p>Click the pencil icon on a lease/reservation row to edit it in place. IP address is fixed (it's the reservation's key). MAC address (IPv4 scopes) or Client DUID + IAID (IPv6 scopes), name, and description are editable.</p>
 <h3 id="deleting-a-reservation">Deleting a reservation</h3>
-<p>Click the delete icon on any reservation row. Confirmation required.</p>
+<p>Click the delete icon on any reservation row. Confirmation required. You can also start a delete from the <a href="#search">Search</a> page.</p>
 <hr>
 <h2 id="subnet-scanning">Subnet Scanning</h2>
 <p>IPForge can ping-sweep subnets to discover active hosts.</p>
@@ -1158,7 +1221,7 @@ with error <code>endpoint deleted</code> rather than left stuck.</p>
 <hr>
 <h2 id="search">Search</h2>
 <p>Open <strong>Search</strong> from the sidebar. Type at least 2 characters to search across subnets, addresses, DNS records, and DHCP leases/reservations simultaneously — server-side, debounced 250ms, capped at 50 results per type.</p>
-<p>Results are grouped by type in a table per category. Click the pencil (Edit) icon on a result row to jump to that record on its owning page with its edit form already open; Search itself is read-only.</p>
+<p>Results are grouped by type in a table per category. Click the pencil (Edit) icon on a result row to jump to that record on its owning page with its edit form already open. DNS records and DHCP reservations also have a Delete icon: it opens the owning page with that record's normal confirmation dialog (including the optional PTR cleanup), so deletes are confirmed and audited exactly as they are from the DNS and DHCP pages. Search itself changes nothing. Edit and Delete icons are hidden for read-only users.</p>
 <hr>
 <h2 id="import-export">Import / Export</h2>
 <p>Bulk-load subnets or addresses from CSV, or export them. This is a data migration/seeding tool, not a database backup — for that, see <a href="#backup--restore">Backup &amp; Restore</a> below.</p>
