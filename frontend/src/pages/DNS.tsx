@@ -939,7 +939,7 @@ export default function DNS() {
       {confirmRecord && (
         <ConfirmModal
           title="Delete DNS Record"
-          message={`Delete ${confirmRecord.record_type} record "${confirmRecord.name}"?`}
+          message={`Delete ${confirmRecord.record_type} record "${confirmRecord.name}" (${confirmRecord.value})?`}
           onConfirm={() => { deleteMutation.mutate(confirmRecord); setConfirmRecord(null) }}
           onCancel={() => { setConfirmRecord(null); setDeletePtr(true) }}
           extra={PTR_TYPES.includes(confirmRecord.record_type) ? (
