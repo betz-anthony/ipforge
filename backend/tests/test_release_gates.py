@@ -39,16 +39,35 @@ def test_verify_release_tag_accepts_known_good_release():
     assert "has a real entry" in result.stdout
 
 
-def test_verify_release_tag_rejects_wrong_bump_level():
-    # v1.2.0..HEAD contains feat: commits -> minor -> v1.3.0 is the correct
-    # next tag. v1.9.0 is deliberately wrong.
-    subprocess.run(["git", "tag", "v1.9.0"], cwd=ROOT, check=True, capture_output=True)
-    try:
-        result = _run(VERIFY_TAG, "v1.9.0")
-        assert result.returncode == 1
-        assert "does not match the recommended bump (v1.3.0)" in result.stdout
-    finally:
-        subprocess.run(["git", "tag", "-d", "v1.9.0"], cwd=ROOT, check=True, capture_output=True)
+def test_verify_release_tag_rejects_wrong_bump_level(tmp_path):
+    # Built in a throwaway repo so the answer never depends on which release
+    # tags the real repository happens to have: one feat: commit after v1.0.0
+    # is a minor bump -> v1.1.0 is correct, v1.9.0 is deliberately wrong.
+    scripts = tmp_path / "scripts"
+    scripts.mkdir()
+    for src in (BUMP, VERIFY_TAG, ROOT / "scripts" / "extract-changelog.sh"):
+        (scripts / src.name).write_text(src.read_text())
+        (scripts / src.name).chmod(0o755)
+    (tmp_path / "CHANGELOG.md").write_text("# Changelog\n\n## [Unreleased]\n\n## [1.0.0] - 2025-01-01\n\n- first\n")
+
+    def git(*args):
+        subprocess.run(
+            ["git", "-c", "user.name=t", "-c", "user.email=t@example.com", *args],
+            cwd=tmp_path, check=True, capture_output=True,
+        )
+
+    git("init", "-q")
+    git("add", "-A")
+    git("commit", "-q", "-m", "chore: start")
+    git("tag", "v1.0.0")
+    git("commit", "-q", "--allow-empty", "-m", "feat(x): something new")
+    git("tag", "v1.9.0")
+    result = subprocess.run(
+        ["bash", str(scripts / "verify-release-tag.sh"), "v1.9.0"],
+        capture_output=True, text=True, cwd=tmp_path,
+    )
+    assert result.returncode == 1
+    assert "does not match the recommended bump (v1.1.0)" in result.stdout
 
 
 def test_verify_release_tag_rejects_placeholder_changelog():
