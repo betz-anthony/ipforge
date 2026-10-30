@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.3.0] - 2026-10-30
+
 ### Added
 
 **Reserved Ranges**
@@ -58,11 +60,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   address with no fields.
 - The subnet detail drawer now shows the subnet's numeric ID.
 
+**DNS and DHCP**
+- Zone groups in the DNS list and scope groups in the DHCP list can be
+  collapsed per server in the "By Server" view. The state is remembered
+  between visits.
+- Adding, editing or deleting a DNS record or DHCP entry shows a progress
+  dialog while the provider responds; the result still arrives as a toast.
+  Add now reports its result by toast, like edit and delete.
+
 **Ops**
 - `docs/examples/ansible/get-next-free-ip.yml` and `create-test-vm.yml` —
   two new standalone Ansible playbook examples for the Allocation API.
 
 ### Fixed
+
+**Allocation**
+- The next-free-IP search could hand out an address already recorded under
+  a parent subnet; it now checks the whole address range.
 
 **Sorting**
 - IP address columns (Addresses list, DHCP lease list, a subnet's Reserved
@@ -82,6 +96,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   changed and will show as PTR mismatches in Drift.
 - The "also update matching PTR record" option is now offered when a
   record is renamed, not only when its IP changes.
+- The PTR option was only offered for A records, so deleting an AAAA record
+  never removed its PTR. It now covers AAAA records too.
+
+**Reserved Ranges sync**
+- A DHCP scope inside both a supernet and a child subnet now lands on the
+  child (the most specific match), and several scopes mapping to one subnet
+  no longer overwrite each other's ranges.
+- A malformed gateway or exclusion value from a provider is skipped with a
+  warning instead of breaking the subnet list. Kea exclusion derivation is
+  skipped for a scope whose subnet exceeds 1024 hosts.
+
+**Layout**
+- Long DHCP scope and DNS zone lists pushed the detail table off-screen; the
+  list now scrolls within itself and selecting an entry scrolls its detail
+  into view.
 
 **DNS sync**
 - MS DNS: CNAME and NS records were silently dropped from `get_records()`
@@ -233,7 +262,8 @@ Fernet-encrypted at rest)
 - Docker Compose (prod images from `backend/Dockerfile.prod` +
   `frontend/Dockerfile`), Kubernetes/Kustomize manifests, public images on GHCR.
 
-[Unreleased]: https://github.com/betz-anthony/ipforge/compare/v1.2.0...HEAD
+[Unreleased]: https://github.com/betz-anthony/ipforge/compare/v1.3.0...HEAD
+[1.3.0]: https://github.com/betz-anthony/ipforge/compare/v1.2.0...v1.3.0
 [1.2.0]: https://github.com/betz-anthony/ipforge/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/betz-anthony/ipforge/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/betz-anthony/ipforge/releases/tag/v1.0.0
