@@ -35,6 +35,17 @@ unreleased="$(awk '
 ' CHANGELOG.md | tr -d '[:space:]')"
 
 if [ -z "$unreleased" ]; then
+  # A release section that has been cut but not yet tagged already documents
+  # these commits — that is the normal state between preparing a release and
+  # pushing its tag, not a missing summary.
+  latest="$(sed -n 's/^## \[\([0-9][0-9.]*\)\].*/\1/p' CHANGELOG.md | head -1)"
+  if [ -n "$latest" ] && ! git rev-parse -q --verify "refs/tags/v${latest}" >/dev/null; then
+    notes="$(scripts/extract-changelog.sh "$latest")"
+    if [ "$notes" != "Release v${latest}." ]; then
+      echo "OK: v${latest} is prepared in CHANGELOG.md and not tagged yet."
+      exit 0
+    fi
+  fi
   echo "WARNING: feat: commit(s) landed since ${last:-the beginning} but"
   echo "CHANGELOG.md's [Unreleased] section is empty:"
   printf '%s\n' "$feats" | sed 's/^/  /'
