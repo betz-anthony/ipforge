@@ -35,6 +35,7 @@ export default function DHCP() {
   const [form, setForm]                   = useState(emptyForm)
   const [dnsLink, setDnsLink]             = useState({ register_dns: false, dns_zone: '' })
   const [viewMode, setViewMode]           = useState<ViewMode>('combined')
+  const [scopeQ, setScopeQ]               = useState('')
   const [collapsedServers, setCollapsedServers] = useState<Set<string>>(() => {
     try {
       const v = localStorage.getItem(COLLAPSE_KEY)
@@ -214,16 +215,26 @@ export default function DHCP() {
     setSelectedAddSubnetId(null)
   }, [ipamQuery.data])
 
-  const filteredScopes = useMemo(
+  const providerScopes = useMemo(
     () => dhcpProviders.length
       ? (scopes ?? []).filter(s => dhcpProviders.includes(s.source))
       : (scopes ?? []),
     [scopes, dhcpProviders]
   )
 
+  // Scope-list search: name, scope id, description, pool range, server.
+  const filteredScopes = useMemo(() => {
+    const q = scopeQ.trim().toLowerCase()
+    if (!q) return providerScopes
+    return providerScopes.filter(s =>
+      [s.name, s.scope_id, s.description, s.start_range, s.end_range, s.source]
+        .some(v => (v ?? '').toLowerCase().includes(q))
+    )
+  }, [providerScopes, scopeQ])
+
   const uniqueSources = useMemo(
-    () => [...new Set(filteredScopes.map(s => s.source).filter(Boolean))],
-    [filteredScopes]
+    () => [...new Set(providerScopes.map(s => s.source).filter(Boolean))],
+    [providerScopes]
   )
   const multiProvider = uniqueSources.length > 1 || dhcpProviders.length > 1
 
@@ -416,6 +427,26 @@ export default function DHCP() {
               </div>
             )}
           </div>
+          <div style={{ position: 'relative', display: 'flex', alignItems: 'center', padding: '0.5rem 0.75rem' }}>
+            <Search size={13} style={{ position: 'absolute', left: '1.25rem', color: 'var(--text-muted)', pointerEvents: 'none' }} />
+            <input
+              type="text"
+              placeholder="Search scopes…"
+              aria-label="Search scopes"
+              value={scopeQ}
+              onChange={e => setScopeQ(e.target.value)}
+              style={{ fontSize: '0.75rem', padding: '0.3rem 1.8rem 0.3rem 1.7rem', width: '100%' }}
+            />
+            {scopeQ && (
+              <button
+                onClick={() => setScopeQ('')}
+                aria-label="Clear scope search"
+                style={{ position: 'absolute', right: '1.1rem', background: 'transparent', border: 'none', cursor: 'pointer', padding: '2px', display: 'flex', color: 'var(--text-muted)' }}
+              >
+                <X size={12} />
+              </button>
+            )}
+          </div>
           {loadingScopes && <p className="loading" style={{ padding: '0.75rem' }}>Loading…</p>}
           {viewMode === 'combined' ? (
             filteredScopes.map(s => renderScopeItem(s))
@@ -441,7 +472,7 @@ export default function DHCP() {
               )
             })
           )}
-          {filteredScopes.length === 0 && !loadingScopes && <p className="loading" style={{ padding: '0.75rem' }}>No scopes found.</p>}
+          {filteredScopes.length === 0 && !loadingScopes && <p className="loading" style={{ padding: '0.75rem' }}>{scopeQ ? 'No scopes match your search.' : 'No scopes found.'}</p>}
         </div>
 
         <div className="panel-main" ref={panelMainRef}>
