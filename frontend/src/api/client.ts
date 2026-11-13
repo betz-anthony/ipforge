@@ -484,6 +484,9 @@ export interface DHCPScope {
   ip_version: number
   source: string
   sync_reserved_ranges: boolean
+  pool_size: number | null
+  pool_used: number | null
+  lease_count: number
 }
 
 export interface DHCPReservation {

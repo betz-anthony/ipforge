@@ -1,7 +1,7 @@
 import logging
 from fastapi import APIRouter, HTTPException, Depends, Query
 from pydantic import BaseModel
-from sqlalchemy import or_
+from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 from app.database import get_db
 from app.models.user import User
@@ -9,13 +9,14 @@ from app.models.subnet import Subnet
 from app.providers.registry import get_dhcp_providers, get_dns_providers
 from app.providers.dhcp.base import DHCPReservation, DHCPScope
 from app.providers.dns.base import DNSRecord
-from app.models.cache import CachedDHCPScope, CachedDHCPLease, CachedDNSRecord, CachedDNSZone
+from app.models.cache import CachedDHCPScope, CachedDHCPScopePool, CachedDHCPLease, CachedDNSRecord, CachedDNSZone
 from app.models.dhcp_scope_override import DHCPScopeReservedSyncExclusion
 from app.core.deps import require_operator
 from app.core.audit import write_audit
 from app.core.time import utcnow
 from app.core.errors import raise_provider_error, provider_unconfigured
 from app.core.pagination import paginate
+from app.core.ip_sort import ip_sort_key
 from app.utils import ip_in_cidr
 
 logger = logging.getLogger(__name__)
@@ -29,6 +30,40 @@ DHCP_SORT_MAP = {
 }
 
 
+def _pool_ranges(scope: CachedDHCPScope,
+                 pools: dict[tuple[str, str], list[tuple[str, str]]]) -> list[tuple[str, str]]:
+    """Every pool range of an IPv4 scope: the per-pool rows when synced (a Kea
+    subnet can have several), else the scope's collapsed start/end range."""
+    ranges = pools.get((scope.source, scope.scope_id))
+    if ranges:
+        return ranges
+    if scope.start_range and scope.end_range:
+        return [(scope.start_range, scope.end_range)]
+    return []
+
+
+def _pool_utilization(db: Session, scope: CachedDHCPScope,
+                      ranges: list[tuple[str, str]]) -> tuple[int | None, int | None]:
+    """(size, used) across the scope's pool ranges. Used counts every cached
+    lease/reservation whose IP falls inside a pool — scope-wide, independent of
+    any list search or paging."""
+    size = used = 0
+    for start, end in ranges:
+        lo, hi = ip_sort_key(start), ip_sort_key(end)
+        if lo is None or hi is None or hi < lo:
+            continue
+        size += int.from_bytes(hi, "big") - int.from_bytes(lo, "big") + 1
+        used += (
+            db.query(func.count(CachedDHCPLease.id))
+            .filter(CachedDHCPLease.scope_id == scope.scope_id,
+                    CachedDHCPLease.source == scope.source,
+                    CachedDHCPLease.ip_sort_key >= lo,
+                    CachedDHCPLease.ip_sort_key <= hi)
+            .scalar() or 0
+        )
+    return (size, used) if size > 0 else (None, None)
+
+
 @router.get("/scopes", response_model=list[DHCPScope])
 def list_scopes(db: Session = Depends(get_db)):
     rows = db.query(CachedDHCPScope).all()
@@ -36,16 +71,29 @@ def list_scopes(db: Session = Depends(get_db)):
         (row.source, row.scope_id)
         for row in db.query(DHCPScopeReservedSyncExclusion).all()
     }
-    return [
-        DHCPScope(
+    pools: dict[tuple[str, str], list[tuple[str, str]]] = {}
+    for p in db.query(CachedDHCPScopePool).all():
+        pools.setdefault((p.source, p.scope_id), []).append((p.start_ip, p.end_ip))
+    lease_counts = {
+        (src, sid): n for src, sid, n in
+        db.query(CachedDHCPLease.source, CachedDHCPLease.scope_id, func.count(CachedDHCPLease.id))
+        .group_by(CachedDHCPLease.source, CachedDHCPLease.scope_id).all()
+    }
+    out = []
+    for r in rows:
+        size = used = None
+        if r.ip_version == 4:
+            size, used = _pool_utilization(db, r, _pool_ranges(r, pools))
+        out.append(DHCPScope(
             scope_id=r.scope_id, name=r.name, subnet_mask=r.subnet_mask,
             start_range=r.start_range, end_range=r.end_range,
             description=r.description, active=r.active,
             ip_version=r.ip_version, source=r.source,
             sync_reserved_ranges=(r.source, r.scope_id) not in excluded,
-        )
-        for r in rows
-    ]
+            pool_size=size, pool_used=used,
+            lease_count=lease_counts.get((r.source, r.scope_id), 0),
+        ))
+    return out
 
 
 class ReservedSyncUpdate(BaseModel):

@@ -54,3 +54,48 @@ def test_list_leases_unknown_sort_ignored(client, db):
     r = client.get("/api/v1/dhcp/scopes/scope1/leases?sort=drop_table")
     assert r.status_code == 200
     assert "items" in r.json()
+
+
+def _scope(db, scope_id="scope1", start="10.0.0.10", end="10.0.0.19", source="keadhcp"):
+    from app.models.cache import CachedDHCPScope
+    db.add(CachedDHCPScope(scope_id=scope_id, name="s", subnet_mask="/24",
+                           start_range=start, end_range=end, source=source,
+                           synced_at=utcnow()))
+    db.commit()
+
+
+def test_scope_pool_utilization_is_scope_wide_and_in_pool_only(client, db):
+    _scope(db)
+    for i in range(10, 15):
+        _lease(db, ip=f"10.0.0.{i}", mac=f"aa:bb:cc:dd:ee:{i:02x}", name=f"h{i}")
+    _lease(db, ip="10.0.0.200", mac="aa:bb:cc:dd:ee:c8", name="outside")
+    scope = client.get("/api/v1/dhcp/scopes").json()[0]
+    assert scope["pool_size"] == 10
+    assert scope["pool_used"] == 5
+
+
+def test_scope_pool_utilization_sums_multiple_pools(client, db):
+    from app.models.cache import CachedDHCPScopePool
+    _scope(db, start="10.0.0.10", end="10.0.0.200")
+    db.add_all([
+        CachedDHCPScopePool(scope_id="scope1", source="keadhcp",
+                            start_ip="10.0.0.10", end_ip="10.0.0.19"),
+        CachedDHCPScopePool(scope_id="scope1", source="keadhcp",
+                            start_ip="10.0.0.100", end_ip="10.0.0.109"),
+    ])
+    db.commit()
+    _lease(db, ip="10.0.0.12")
+    _lease(db, ip="10.0.0.50", mac="aa:bb:cc:dd:ee:02")  # gap between pools
+    _lease(db, ip="10.0.0.101", mac="aa:bb:cc:dd:ee:03")
+    scope = client.get("/api/v1/dhcp/scopes").json()[0]
+    assert (scope["pool_size"], scope["pool_used"]) == (20, 2)
+
+
+def test_scope_lease_count_is_unfiltered_and_counts_static_in_pool(client, db):
+    _scope(db)
+    _lease(db, ip="10.0.0.10", mac="aa:bb:cc:dd:ee:01", name="static-a")
+    _lease(db, ip="10.0.0.11", mac="aa:bb:cc:dd:ee:02", name="static-b")
+    _lease(db, ip="10.0.0.200", mac="aa:bb:cc:dd:ee:03", name="outside")
+    scope = client.get("/api/v1/dhcp/scopes").json()[0]
+    assert scope["lease_count"] == 3
+    assert scope["pool_used"] == 2

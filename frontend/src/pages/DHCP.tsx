@@ -656,11 +656,13 @@ export default function DHCP() {
                   fontSize: '0.8rem', borderBottom: '1px solid var(--border)',
                 }}>
                   <span>
-                    <strong>{leasesTotal}</strong> reservation{leasesTotal !== 1 ? 's' : ''}
+                    <strong>{selectedScope.lease_count}</strong> reservation{selectedScope.lease_count !== 1 ? 's' : ''}
                   </span>
                   {selectedScope.ip_version === 4 && selectedScope.start_range && selectedScope.end_range && (() => {
-                    const size = rangeSize(selectedScope.start_range, selectedScope.end_range)
-                    const pct  = size > 0 ? Math.round(leases.length / size * 100) : 0
+                    // Scope-wide figures from the API — not the searched/paged list.
+                    const size = selectedScope.pool_size ?? rangeSize(selectedScope.start_range, selectedScope.end_range)
+                    const used = selectedScope.pool_used ?? 0
+                    const pct  = size > 0 ? Math.round(used / size * 100) : 0
                     return (
                       <>
                         <span>
