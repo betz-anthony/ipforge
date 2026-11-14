@@ -484,6 +484,7 @@ export interface DHCPScope {
   ip_version: number
   source: string
   sync_reserved_ranges: boolean
+  auto_create_subnet: boolean
   pool_size: number | null
   pool_used: number | null
   lease_count: number
@@ -547,6 +548,9 @@ export const dhcpApi = {
   listScopes: () => api.get<DHCPScope[]>('/dhcp/scopes').then(r => r.data),
   setScopeReservedSync: (scope_id: string, source: string, enabled: boolean) =>
     api.put(`/dhcp/scopes/${encodeURIComponent(scope_id)}/reserved-sync`, { enabled }, { params: { source } })
+      .then(r => r.data),
+  setScopeAutoCreateSubnet: (scope_id: string, source: string, enabled: boolean) =>
+    api.put(`/dhcp/scopes/${encodeURIComponent(scope_id)}/auto-create-subnet`, { enabled }, { params: { source } })
       .then(r => r.data),
   listLeases: (scope_id: string, source: string, params?: {
     q?: string

@@ -16,7 +16,7 @@ from app.core.mac import normalize_mac
 from app.core.time import utcnow
 from app.models.subnet import Subnet
 from app.models.subnet_range import SubnetRange
-from app.models.dhcp_scope_override import DHCPScopeReservedSyncExclusion
+from app.models.dhcp_scope_override import DHCPScopeReservedSyncExclusion, DHCPScopeSubnetAutoCreateExclusion
 from app.utils import ip_in_cidr as _ip_in_cidr
 
 logger = logging.getLogger(__name__)
@@ -57,6 +57,105 @@ def _resolve_subnet_id(subnets, scope) -> int | None:
             best_prefixlen = prefixlen
             best_id = s.id
     return best_id
+
+
+def _scope_network(scope) -> ipaddress.IPv4Network | ipaddress.IPv6Network | None:
+    """CIDR a DHCP scope covers, or None when the provider's scope id isn't a
+    network (e.g. Pi-hole's single synthetic scope). msdhcp reports a network
+    address plus a dotted mask (v4) or "/len" (v6); Kea reports the CIDR."""
+    sid, mask = scope.scope_id.strip(), (scope.subnet_mask or "").strip()
+    if "/" in sid:
+        text = sid
+    elif mask.startswith("/"):
+        text = f"{sid}{mask}"
+    elif mask:
+        text = f"{sid}/{mask}"
+    else:
+        return None
+    try:
+        return ipaddress.ip_network(text, strict=False)
+    except ValueError:
+        return None
+
+
+def _auto_create_subnets(db, scope_list) -> int:
+    """Create an IPAM subnet for each DHCP scope that has none, nested under
+    its most specific containing subnet. Driven by the live scope list of
+    *enabled* providers (never the scope cache, which keeps a disabled
+    provider's stale rows), and only for providers whose config sets
+    auto_create_subnets and scopes not opted out. Never deletes or edits an
+    existing subnet other than re-parenting direct children under a new
+    supernet. Returns the number created."""
+    import json
+    from app.core.audit import write_audit
+    from app.models.provider_config import ProviderConfig
+
+    opted_in: set[str] = set()
+    for row in db.query(ProviderConfig).filter(
+        ProviderConfig.category == "dhcp", ProviderConfig.enabled == True,  # noqa: E712
+    ).all():
+        try:
+            if json.loads(row.config or "{}").get("auto_create_subnets"):
+                opted_in.add(row.name)
+        except ValueError:
+            continue
+    if not opted_in:
+        return 0
+
+    skipped = {
+        (r.source, r.scope_id)
+        for r in db.query(DHCPScopeSubnetAutoCreateExclusion).all()
+    }
+    candidates = []
+    for p, s in scope_list:
+        if p.source not in opted_in or (p.source, s.scope_id) in skipped:
+            continue
+        net = _scope_network(s)
+        if net is not None:
+            candidates.append((net, p.source, s))
+    # Supernets first, so a nested scope in the same pass finds its parent.
+    candidates.sort(key=lambda c: (c[0].version, c[0].prefixlen))
+
+    subnets = db.query(Subnet).all()
+    created = 0
+    for net, source, scope in candidates:
+        cidr = str(net)
+        if any(ipaddress.ip_network(x.cidr, strict=False) == net for x in subnets):
+            continue
+        parent = None
+        for x in subnets:
+            xn = ipaddress.ip_network(x.cidr, strict=False)
+            if xn.version == net.version and xn.supernet_of(net) and (
+                parent is None
+                or xn.prefixlen > ipaddress.ip_network(parent.cidr, strict=False).prefixlen
+            ):
+                parent = x
+        new = Subnet(
+            name=scope.name or cidr, cidr=cidr, ip_version=net.version,
+            description=scope.description or None,
+            parent_id=parent.id if parent else None,
+            dhcp_provider_name=source,
+        )
+        db.add(new)
+        db.flush()
+        # Existing subnets that now sit under the new one move beneath it.
+        for x in subnets:
+            xn = ipaddress.ip_network(x.cidr, strict=False)
+            if (x.parent_id == new.parent_id and xn.version == net.version
+                    and xn != net and net.supernet_of(xn)):
+                x.parent_id = new.id
+        write_audit(
+            db, "sync", "create", "subnet", str(new.id),
+            f"{cidr} ({new.name}) from DHCP scope {scope.scope_id} on {source}",
+            after={"id": new.id, "name": new.name, "cidr": cidr,
+                   "parent_id": new.parent_id, "dhcp_provider_name": source},
+        )
+        subnets.append(new)
+        created += 1
+    db.commit()
+    if created:
+        logger.info("Auto-created %d IPAM subnets from DHCP scopes", created)
+    return created
 
 
 def _fetch_reserved_range_data(p, scope):
@@ -379,6 +478,13 @@ def sync_dhcp() -> None:
                         source=p.source, synced_at=now,
                     ))
                 db.commit()
+
+        try:
+            with _ipam_write_lock:
+                _auto_create_subnets(db, scope_list)
+        except Exception as e:
+            db.rollback()
+            logger.error("DHCP subnet auto-create failed: %s", e, exc_info=True)
 
         subnets = db.query(Subnet).all()
         # Resolve each scope's subnet once (not per as_completed callback) and carry it

@@ -24,7 +24,7 @@ from app.models.gitops import GitopsManaged  # noqa: F401
 from app.models.automation import AutomationRule  # noqa: F401
 from app.models.security import SecurityEvent, MacLastSeen  # noqa: F401
 from app.models.webhook import WebhookEndpoint, WebhookDelivery  # noqa: F401
-from app.models.dhcp_scope_override import DHCPScopeReservedSyncExclusion  # noqa: F401
+from app.models.dhcp_scope_override import DHCPScopeReservedSyncExclusion, DHCPScopeSubnetAutoCreateExclusion  # noqa: F401
 import app.core.ip_sort_events  # noqa: F401  registers ip_sort_key event listeners
 
 __all__ = [

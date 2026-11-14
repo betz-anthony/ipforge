@@ -112,6 +112,13 @@ export default function DHCP() {
     onError: () => showToast('Could not change Reserved Ranges sync for this scope.', 'error'),
   })
 
+  const autoCreateMutation = useMutation({
+    mutationFn: ({ scope, enabled }: { scope: DHCPScope; enabled: boolean }) =>
+      dhcpApi.setScopeAutoCreateSubnet(scope.scope_id, scope.source, enabled),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['dhcp-scopes'] }),
+    onError: () => showToast('Could not change subnet auto-creation for this scope.', 'error'),
+  })
+
   const addMutation = useMutation({
     mutationFn: () => dhcpApi.addReservation(
       selectedScope!.scope_id, form, selectedScope!.source,
@@ -383,6 +390,19 @@ export default function DHCP() {
           onChange={e => reservedSyncMutation.mutate({ scope: s, enabled: e.target.checked })}
         />
         Sync to Reserved Ranges
+      </label>
+      <label
+        className="panel-list-item-sub"
+        style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', marginTop: '2px', cursor: 'pointer' }}
+        onClick={e => e.stopPropagation()}
+        title="Whether sync may create an IPAM subnet for this scope (also requires Auto-create subnets on the provider)"
+      >
+        <input
+          type="checkbox"
+          checked={s.auto_create_subnet}
+          onChange={e => autoCreateMutation.mutate({ scope: s, enabled: e.target.checked })}
+        />
+        Auto-create subnet
       </label>
     </div>
   )

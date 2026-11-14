@@ -10,7 +10,7 @@ from app.providers.registry import get_dhcp_providers, get_dns_providers
 from app.providers.dhcp.base import DHCPReservation, DHCPScope
 from app.providers.dns.base import DNSRecord
 from app.models.cache import CachedDHCPScope, CachedDHCPScopePool, CachedDHCPLease, CachedDNSRecord, CachedDNSZone
-from app.models.dhcp_scope_override import DHCPScopeReservedSyncExclusion
+from app.models.dhcp_scope_override import DHCPScopeReservedSyncExclusion, DHCPScopeSubnetAutoCreateExclusion
 from app.core.deps import require_operator
 from app.core.audit import write_audit
 from app.core.time import utcnow
@@ -71,6 +71,10 @@ def list_scopes(db: Session = Depends(get_db)):
         (row.source, row.scope_id)
         for row in db.query(DHCPScopeReservedSyncExclusion).all()
     }
+    no_autocreate = {
+        (row.source, row.scope_id)
+        for row in db.query(DHCPScopeSubnetAutoCreateExclusion).all()
+    }
     pools: dict[tuple[str, str], list[tuple[str, str]]] = {}
     for p in db.query(CachedDHCPScopePool).all():
         pools.setdefault((p.source, p.scope_id), []).append((p.start_ip, p.end_ip))
@@ -90,6 +94,7 @@ def list_scopes(db: Session = Depends(get_db)):
             description=r.description, active=r.active,
             ip_version=r.ip_version, source=r.source,
             sync_reserved_ranges=(r.source, r.scope_id) not in excluded,
+            auto_create_subnet=(r.source, r.scope_id) not in no_autocreate,
             pool_size=size, pool_used=used,
             lease_count=lease_counts.get((r.source, r.scope_id), 0),
         ))
@@ -128,6 +133,37 @@ def set_scope_reserved_sync(
     )
     db.commit()
     return {"source": source, "scope_id": scope_id, "sync_reserved_ranges": body.enabled}
+
+
+class AutoCreateSubnetUpdate(BaseModel):
+    enabled: bool
+
+
+@router.put("/scopes/{scope_id:path}/auto-create-subnet")
+def set_scope_auto_create_subnet(
+    scope_id: str,
+    body: AutoCreateSubnetUpdate,
+    source: str = Query(""),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_operator),
+):
+    """Per-scope switch for subnet auto-creation. Only matters when the
+    scope's provider has auto_create_subnets on; affects the next sync."""
+    existing = db.query(DHCPScopeSubnetAutoCreateExclusion).filter_by(
+        source=source, scope_id=scope_id,
+    ).first()
+    if body.enabled:
+        if existing:
+            db.delete(existing)
+    elif not existing:
+        db.add(DHCPScopeSubnetAutoCreateExclusion(source=source, scope_id=scope_id))
+
+    write_audit(
+        db, current_user.username, "update", "dhcp_scope_subnet_autocreate", f"{source}/{scope_id}",
+        f"{'enabled' if body.enabled else 'disabled'} subnet auto-creation for scope {scope_id} ({source})",
+    )
+    db.commit()
+    return {"source": source, "scope_id": scope_id, "auto_create_subnet": body.enabled}
 
 
 @router.get("/scopes/{scope_id:path}/leases")

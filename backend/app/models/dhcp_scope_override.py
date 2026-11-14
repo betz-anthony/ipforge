@@ -23,3 +23,19 @@ class DHCPScopeReservedSyncExclusion(Base):
     source:     Mapped[str]      = mapped_column(String(100), nullable=False, index=True)
     scope_id:   Mapped[str]      = mapped_column(String(100), nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+
+class DHCPScopeSubnetAutoCreateExclusion(Base):
+    """Admin-set opt-out: a (source, scope_id) pair present here never has an
+    IPAM subnet auto-created from it, even when its provider has
+    auto_create_subnets turned on (sync.py's _auto_create_subnets). The scope
+    itself keeps syncing normally.
+
+    Never written by sync.py itself — only by the admin-facing API."""
+    __tablename__ = "dhcp_scope_subnet_autocreate_exclusions"
+    __table_args__ = (UniqueConstraint("source", "scope_id", name="uq_dhcp_scope_subnet_autocreate_exclusions"),)
+
+    id:         Mapped[int]      = mapped_column(Integer, primary_key=True)
+    source:     Mapped[str]      = mapped_column(String(100), nullable=False, index=True)
+    scope_id:   Mapped[str]      = mapped_column(String(100), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)

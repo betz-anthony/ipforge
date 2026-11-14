@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+**DHCP**
+- Search field on the DHCP page's scope list (name, scope ID, description,
+  pool range, server).
+- Optional subnet auto-creation from DHCP scopes: turn on "Auto-create
+  subnets from scopes" per DHCP provider (Settings → Providers), and sync
+  creates a subnet for each scope that has none, nested under the most
+  specific containing subnet. Per-scope opt-out via the "Auto-create
+  subnet" toggle on the DHCP page. Only enabled providers are considered;
+  existing subnets are never modified or deleted.
+
+### Fixed
+
+- The DHCP scope header's utilization and reservation count now reflect the
+  whole scope (static reservations included) instead of the current page or
+  search results.
+
 ## [1.3.0] - 2026-10-30
 
 ### Added

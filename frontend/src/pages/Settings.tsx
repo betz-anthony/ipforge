@@ -25,7 +25,7 @@ type FieldDef = {
   key: string
   label: string
   placeholder?: string
-  type?: 'text' | 'number' | 'password' | 'select' | 'textarea'
+  type?: 'text' | 'number' | 'password' | 'select' | 'textarea' | 'checkbox'
   options?: string[]
   default?: string | number
 }
@@ -46,6 +46,7 @@ const PROVIDER_FIELDS: Record<string, FieldDef[]> = {
     { key: 'winrm_port',      label: 'WinRM Port',   type: 'number', default: 5985 },
     { key: 'winrm_transport', label: 'Transport',    type: 'select', options: TRANSPORT_OPTIONS, default: 'ntlm' },
     { key: 'dhcp_server',     label: 'DHCP Server',  placeholder: 'dhcp.domain.local' },
+    { key: 'auto_create_subnets', label: 'Auto-create subnets from scopes', type: 'checkbox' },
   ],
   bind: [
     { key: 'host',            label: 'Nameserver Host',          placeholder: 'ns1.domain.local' },
@@ -62,6 +63,7 @@ const PROVIDER_FIELDS: Record<string, FieldDef[]> = {
   keadhcp: [
     { key: 'url',    label: 'Control Agent URL',        placeholder: 'http://kea-host:8000' },
     { key: 'secret', label: 'API Secret (if auth)',     type: 'password', placeholder: 'Leave blank if none' },
+    { key: 'auto_create_subnets', label: 'Auto-create subnets from scopes', type: 'checkbox' },
   ],
   cloudflare: [
     { key: 'api_token', label: 'API Token', type: 'password', placeholder: 'Cloudflare token (Zone:DNS:Edit)' },
@@ -193,6 +195,17 @@ function ProviderForm({
                     {show ? <EyeOff size={13} /> : <Eye size={13} />}
                   </button>
                 </div>
+              </Field>
+            )
+          }
+          if (f.type === 'checkbox') {
+            return (
+              <Field key={f.key} label={f.label} hint="Per-scope opt-out on the DHCP page">
+                <input
+                  type="checkbox"
+                  checked={cfg[f.key] === true}
+                  onChange={e => setCfgKey(f.key, e.target.checked)}
+                />
               </Field>
             )
           }

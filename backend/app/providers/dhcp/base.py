@@ -16,6 +16,8 @@ class DHCPScope(BaseModel):
     # API layer from DHCPScopeReservedSyncExclusion). False means this
     # scope's gateway/exclusions are withheld from Reserved Ranges sync.
     sync_reserved_ranges: bool = True
+    # Admin-set opt-out for subnet auto-creation (API layer, like the above).
+    auto_create_subnet: bool = True
     # Scope-wide pool utilization, computed by the API layer from the lease
     # cache (never a provider field). None when it can't be computed (IPv6 or
     # no pool range).
