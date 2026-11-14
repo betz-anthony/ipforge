@@ -322,6 +322,32 @@ docker compose up -d
 </tr>
 </tbody>
 </table>
+<h3 id="auto-creating-subnets-from-dhcp-scopes">Auto-creating subnets from DHCP scopes</h3>
+<p>By default a DHCP scope with no matching subnet in IPForge is skipped: its
+leases show on the DHCP page but nothing lands in IPAM. For <code>msdhcp</code> and
+<code>keadhcp</code> providers you can have sync create the missing subnets instead.</p>
+<ol>
+<li>Go to <strong>Settings → Providers</strong>, edit the DHCP provider, and tick
+   <strong>Auto-create subnets from scopes</strong>. It is off by default.</li>
+<li>On the next sync, each of that provider's scopes without a subnet gets one.</li>
+</ol>
+<p>How it behaves:</p>
+<ul>
+<li>The subnet's CIDR comes from the scope (network + mask for <code>msdhcp</code>, the
+  CIDR itself for <code>keadhcp</code>, prefix length for IPv6). Its name and description
+  come from the scope, and its DHCP provider is set to the source server.</li>
+<li>A new subnet is nested under the most specific subnet that already contains
+  it. Existing subnets that fall inside the new one move beneath it.</li>
+<li>A scope whose CIDR already exists as a subnet is skipped. Existing subnets
+  are never edited or deleted.</li>
+<li>Only <strong>enabled</strong> providers are considered. A disabled provider creates
+  nothing, even if the option is ticked, and scopes that don't describe a
+  network (such as Pi-hole's single scope) are skipped.</li>
+<li>Each created subnet is recorded in the <a href="#audit-log">audit log</a>.</li>
+</ul>
+<p>To keep an individual scope out (for example one kept on a test server), turn
+off <strong>Auto-create subnet</strong> for it in the DHCP page's scope list. The scope
+keeps syncing normally; it just never creates a subnet.</p>
 <h3 id="sync">Sync</h3>
 <p>IPForge caches DNS zones/records and DHCP scopes/leases locally for fast lookups. The cache is refreshed on a background schedule.</p>
 <ul>
@@ -797,8 +823,9 @@ result = client.subnets.allocate(3, hostname=&quot;web-02&quot;, pool=&quot;linu
 <p>The DHCP page shows scopes and leases/reservations synced from your DHCP providers.</p>
 <h3 id="scopes">Scopes</h3>
 <p>Scopes are listed with subnet mask, range, active status, and source provider. In the <strong>By Server</strong> view each server's group can be collapsed (scope counts stay visible) and the state is remembered between visits.</p>
+<p>Use the <strong>Search scopes</strong> box above the list to find a scope by name, scope ID, description, pool range, or server. Each scope also has two toggles: <strong>Sync to Reserved Ranges</strong> (see <a href="#reserved-ranges">Reserved ranges</a>) and <strong>Auto-create subnet</strong> (see <a href="#auto-creating-subnets-from-dhcp-scopes">Auto-creating subnets from DHCP scopes</a>).</p>
 <h3 id="leases-reservations">Leases / Reservations</h3>
-<p>Click a scope to see its leases and reservations. Shows IP, MAC, name, and description.</p>
+<p>Click a scope to see its leases and reservations. Shows IP, MAC, name, and description. The summary row above the table describes the whole scope — reservation count, pool range, pool size, and utilization (reservations and leases inside the pool, static reservations included) — and does not change when you search or page through the list.</p>
 <h3 id="adding-a-reservation">Adding a reservation</h3>
 <p>Click <strong>Add Reservation</strong> from within a scope. Specify IP, MAC, name, and description. The reservation is written to the DHCP provider immediately. Optionally register a matching DNS record in the same step.</p>
 <h3 id="editing-a-reservation">Editing a reservation</h3>
