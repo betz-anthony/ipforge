@@ -9,3 +9,13 @@ export function formatRelative(ts: string | null | undefined): string {
   const days = Math.floor(hrs / 24)
   return `${days}d ago`
 }
+
+// "8d", "1h 30m", "45s" — a DHCP lease duration given in seconds.
+export function formatDuration(seconds: number | null | undefined): string {
+  if (seconds == null) return '—'
+  if (seconds < 60) return `${seconds}s`
+  const d = Math.floor(seconds / 86400)
+  const h = Math.floor((seconds % 86400) / 3600)
+  const m = Math.floor((seconds % 3600) / 60)
+  return [d && `${d}d`, h && `${h}h`, m && `${m}m`].filter(Boolean).join(' ')
+}

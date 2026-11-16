@@ -826,6 +826,14 @@ result = client.subnets.allocate(3, hostname=&quot;web-02&quot;, pool=&quot;linu
 <h3 id="scopes">Scopes</h3>
 <p>Scopes are listed with subnet mask, range, active status, and source provider. In the <strong>By Server</strong> view each server's group can be collapsed (scope counts stay visible) and the state is remembered between visits.</p>
 <p>Use the <strong>Search scopes</strong> box above the list to find a scope by name, scope ID, description, pool range, or server. Each scope also has two toggles: <strong>Sync to Reserved Ranges</strong> (see <a href="#reserved-ranges">Reserved ranges</a>) and <strong>Auto-create subnet</strong> (see <a href="#auto-creating-subnets-from-dhcp-scopes">Auto-creating subnets from DHCP scopes</a>).</p>
+<h3 id="lease-duration-and-options">Lease duration and options</h3>
+<p>For <code>msdhcp</code> and <code>keadhcp</code> scopes, the summary row shows the scope's <strong>lease
+duration</strong>, and <strong>Scope options</strong> (expand it) lists the DHCP options defined on
+the scope — for example <code>003 Router</code>, <code>006 DNS Servers</code>, <code>042 NTP Servers</code>. The
+same information appears in a subnet's <strong>DHCP Scope</strong> section. These are
+read-only and refreshed on each sync. Only options set on the scope itself are
+shown: options inherited from the server (Microsoft) or global/shared-network
+level (Kea) are not, and IPv6 options aren't shown yet.</p>
 <h3 id="leases-reservations">Leases / Reservations</h3>
 <p>Click a scope to see its leases and reservations. Shows IP, MAC, name, and description. The summary row above the table describes the whole scope — reservation count, pool range, pool size, and utilization (reservations and leases inside the pool, static reservations included) — and does not change when you search or page through the list.</p>
 <h3 id="adding-a-reservation">Adding a reservation</h3>

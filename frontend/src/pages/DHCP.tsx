@@ -6,6 +6,7 @@ import { dhcpApi, providersApi, addressesApi, subnetsApi, type DHCPReservation, 
 import { rangeSize, ipInCidr, ipToNum, isValidIPv4, isValidIPv6, isValidEUI48, isValidEUI64 } from '../utils/ip'
 import { usePagedQuery } from '../hooks/usePagedQuery'
 import { Pager } from '../components/Pager'
+import { formatDuration } from '../utils/time'
 import { useAuth } from '../contexts/AuthContext'
 import SyncBar from '../components/SyncBar'
 import EmptyState from '../components/EmptyState'
@@ -739,6 +740,9 @@ export default function DHCP() {
                       </>
                     )
                   })()}
+                  {selectedScope.lease_seconds != null && (
+                    <span>Lease: <strong>{formatDuration(selectedScope.lease_seconds)}</strong></span>
+                  )}
                   <span>
                     <span className={`badge ${selectedScope.active ? 'badge-green' : 'badge-gray'}`}>
                       {selectedScope.active ? 'Active' : 'Inactive'}
@@ -764,6 +768,25 @@ export default function DHCP() {
                     )}
                   </div>
                 </div>
+              )}
+
+              {selectedScope.options.length > 0 && (
+                <details style={{ fontSize: '0.8rem', marginBottom: '0.75rem' }}>
+                  <summary style={{ cursor: 'pointer' }}>
+                    Scope options ({selectedScope.options.length})
+                  </summary>
+                  <table style={{ marginTop: '0.4rem' }}>
+                    <tbody>
+                      {selectedScope.options.map(o => (
+                        <tr key={o.code}>
+                          <td className="font-mono" style={{ paddingRight: '0.75rem' }}>{String(o.code).padStart(3, '0')}</td>
+                          <td style={{ paddingRight: '0.75rem' }}>{o.name}</td>
+                          <td className="font-mono">{o.value}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </details>
               )}
 
               {loadingLeases ? (

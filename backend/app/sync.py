@@ -1,4 +1,5 @@
 import ipaddress
+import json
 import logging
 import threading
 import time
@@ -9,7 +10,7 @@ from app.alerting.emit import emit
 from app.database import SessionLocal
 from app.models.cache import (
     CachedDNSZone, CachedDNSRecord,
-    CachedDHCPScope, CachedDHCPLease, CachedDHCPScopePool,
+    CachedDHCPScope, CachedDHCPLease, CachedDHCPScopePool, CachedDHCPScopeConfig,
     SyncStatus,
 )
 from app.core.mac import normalize_mac
@@ -86,7 +87,6 @@ def _auto_create_subnets(db, scope_list) -> int:
     auto_create_subnets and scopes not opted out. Never deletes or edits an
     existing subnet other than re-parenting direct children under a new
     supernet. Returns the number created."""
-    import json
     from app.core.audit import write_audit
     from app.models.provider_config import ProviderConfig
 
@@ -436,6 +436,10 @@ def sync_dhcp() -> None:
                          {"provider": p.source, "error": str(e)})
                     continue
                 db.query(CachedDHCPScope).filter_by(source=p.source).delete()
+                db.query(CachedDHCPScopeConfig).filter(
+                    CachedDHCPScopeConfig.source == p.source,
+                    CachedDHCPScopeConfig.scope_id.notin_([s.scope_id for s in scopes] or [""]),
+                ).delete(synchronize_session=False)
                 for s in scopes:
                     db.add(CachedDHCPScope(
                         scope_id=s.scope_id, name=s.name, subnet_mask=s.subnet_mask,
@@ -477,6 +481,29 @@ def sync_dhcp() -> None:
                         iaid=l.iaid, name=l.name, description=l.description,
                         source=p.source, synced_at=now,
                     ))
+                db.commit()
+
+        # Scope-defined options + lease duration. A fetch failure for one scope
+        # keeps whatever the last good sync cached for it.
+        def _fetch_config(p, scope_id):
+            return p, scope_id, p.get_scope_config(scope_id)
+
+        with ThreadPoolExecutor(max_workers=min(len(scope_list), 8) or 1) as ex:
+            fmap = {ex.submit(_fetch_config, p, s.scope_id): (p, s) for p, s in scope_list}
+            for f in as_completed(fmap):
+                try:
+                    p, scope_id, cfg = f.result()
+                except Exception as e:
+                    p, s = fmap[f]
+                    logger.error("DHCP %s get_scope_config(%s): %s", p.source, s.scope_id, e)
+                    continue
+                db.query(CachedDHCPScopeConfig).filter_by(scope_id=scope_id, source=p.source).delete()
+                db.add(CachedDHCPScopeConfig(
+                    scope_id=scope_id, source=p.source,
+                    lease_seconds=cfg.lease_seconds,
+                    options_json=json.dumps([o.model_dump() for o in cfg.options]),
+                    synced_at=now,
+                ))
                 db.commit()
 
         try:

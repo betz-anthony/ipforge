@@ -2,6 +2,19 @@ from abc import ABC, abstractmethod
 from pydantic import BaseModel
 
 
+class DHCPScopeOption(BaseModel):
+    code: int
+    name: str = ""
+    value: str = ""
+
+
+class DHCPScopeConfig(BaseModel):
+    """Options and lease duration defined on the scope itself — not inherited
+    from server/global level."""
+    options: list[DHCPScopeOption] = []
+    lease_seconds: int | None = None
+
+
 class DHCPScope(BaseModel):
     scope_id: str
     name: str
@@ -28,6 +41,9 @@ class DHCPScope(BaseModel):
     pool_used: int | None = None
     # Every cached reservation/lease in the scope, unfiltered (any IP version).
     lease_count: int = 0
+    # Scope-defined options and lease duration, from the sync cache (API layer).
+    lease_seconds: int | None = None
+    options: list[DHCPScopeOption] = []
 
 
 class DHCPReservation(BaseModel):
@@ -65,6 +81,11 @@ class DHCPProvider(ABC):
         """The scope's configured gateway/router IP, if the provider exposes
         one. Default: not supported by this provider."""
         return None
+
+    def get_scope_config(self, scope_id: str) -> DHCPScopeConfig:
+        """Options and lease duration set on this scope. Default: not
+        supported by this provider."""
+        return DHCPScopeConfig()
 
     def get_scope_exclusions(self, scope_id: str) -> list[tuple[str, str]]:
         """(start_ip, end_ip) ranges excluded from dynamic assignment within

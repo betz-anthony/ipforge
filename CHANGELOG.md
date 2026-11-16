@@ -12,6 +12,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 **DHCP**
 - Search field on the DHCP page's scope list (name, scope ID, description,
   pool range, server).
+- Each DHCP scope's own lease duration and DHCP options (e.g. 003 router,
+  006 DNS servers, 042 NTP servers) are now synced and shown read-only on the
+  DHCP page and in a subnet's DHCP Scope section. Only options defined on the
+  scope itself are shown, not server- or global-level ones (msdhcp and Kea;
+  IPv4 options only).
 - Optional subnet auto-creation from DHCP scopes: turn on "Auto-create
   subnets from scopes" per DHCP provider (Settings → Providers), and sync
   creates a subnet for each scope that has none, nested under the most

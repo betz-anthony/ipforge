@@ -473,6 +473,12 @@ export interface AddressHistory {
   point_in_time?: Record<string, unknown> | null
 }
 
+export interface DHCPScopeOption {
+  code: number
+  name: string
+  value: string
+}
+
 export interface DHCPScope {
   scope_id: string
   name: string
@@ -489,6 +495,8 @@ export interface DHCPScope {
   pool_size: number | null
   pool_used: number | null
   lease_count: number
+  lease_seconds: number | null
+  options: DHCPScopeOption[]
 }
 
 export interface DHCPReservation {

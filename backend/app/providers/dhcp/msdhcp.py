@@ -2,7 +2,10 @@ import logging
 import threading
 from winrm.exceptions import WinRMTransportError
 from app.core.mac import normalize_mac
-from app.providers.dhcp.base import DHCPProvider, DHCPScope, DHCPReservation
+from app.core.dhcp_options import option_name
+from app.providers.dhcp.base import (
+    DHCPProvider, DHCPScope, DHCPReservation, DHCPScopeConfig, DHCPScopeOption,
+)
 from app.providers._ps import ps_quote
 from app.providers._winrm import build_session, check_result, parse_ps_json
 
@@ -264,6 +267,35 @@ class MSDHCPProvider(DHCPProvider):
             if values:
                 return values[0]
         return None
+
+    def get_scope_config(self, scope_id: str) -> DHCPScopeConfig:
+        if _is_v6(scope_id):
+            return DHCPScopeConfig()  # v4 only for this pass
+        server, scope = ps_quote(self._dhcp_server), ps_quote(scope_id)
+        # Without -All this returns only options set on the scope itself.
+        out = self._run(
+            f"Get-DhcpServerv4OptionValue -ScopeId {scope} -ComputerName {server} "
+            "| ConvertTo-Json -Depth 3"
+        )
+        options = []
+        for r in self._parse_json(out):
+            code = r.get("OptionId")
+            if code is None:
+                continue
+            value = ", ".join(str(v) for v in (r.get("Value") or []))
+            options.append(DHCPScopeOption(
+                code=int(code), name=option_name(int(code), r.get("Name") or ""), value=value,
+            ))
+        out = self._run(
+            f"Get-DhcpServerv4Scope -ScopeId {scope} -ComputerName {server} "
+            "| Select-Object @{n='LeaseSeconds';e={[int]$_.LeaseDuration.TotalSeconds}} "
+            "| ConvertTo-Json"
+        )
+        lease = None
+        for r in self._parse_json(out):
+            if r.get("LeaseSeconds") is not None:
+                lease = int(r["LeaseSeconds"])
+        return DHCPScopeConfig(options=sorted(options, key=lambda o: o.code), lease_seconds=lease)
 
     def get_scope_exclusions(self, scope_id: str) -> list[tuple[str, str]]:
         if _is_v6(scope_id):

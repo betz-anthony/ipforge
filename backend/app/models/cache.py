@@ -1,5 +1,5 @@
 from datetime import datetime
-from sqlalchemy import Column, Integer, BigInteger, String, Boolean, DateTime, LargeBinary
+from sqlalchemy import Column, Integer, BigInteger, String, Boolean, DateTime, LargeBinary, Text, UniqueConstraint
 from app.database import Base
 
 
@@ -82,3 +82,17 @@ class SyncStatus(Base):
     synced_at = Column(DateTime, nullable=True)
     status    = Column(String, default="never")
     error     = Column(String, nullable=True)
+
+
+class CachedDHCPScopeConfig(Base):
+    """Options and lease duration defined on a DHCP scope (not inherited),
+    refreshed every sync pass. options_json is a list of
+    {code, name, value}."""
+    __tablename__ = "cache_dhcp_scope_config"
+    __table_args__ = (UniqueConstraint("source", "scope_id", name="uq_cache_dhcp_scope_config"),)
+    id            = Column(Integer, primary_key=True, autoincrement=True)
+    scope_id      = Column(String, nullable=False)
+    source        = Column(String, nullable=False, index=True)
+    lease_seconds = Column(Integer, nullable=True)
+    options_json  = Column(Text, nullable=False, default="[]")
+    synced_at     = Column(DateTime, nullable=False)

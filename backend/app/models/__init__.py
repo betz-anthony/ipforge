@@ -3,7 +3,7 @@ from app.models.address import IPAddress
 from app.models.setting import AppSetting
 from app.models.cache import (
     CachedDNSZone, CachedDNSRecord,
-    CachedDHCPScope, CachedDHCPLease,
+    CachedDHCPScope, CachedDHCPLease, CachedDHCPScopeConfig,
     SyncStatus,
 )
 from app.models.scan import ScanResult, DriftItem, DriftCategory, DriftPolicy, Collision, CollisionType, ScanHistoryDay, AlertEvent, SubnetUtilizationDay

@@ -18,6 +18,7 @@ import { useTableSort } from '../hooks/useTableSort'
 import { useToast } from '../contexts/ToastContext'
 import { useAuth } from '../contexts/AuthContext'
 import { rowActivation } from '../utils/a11y'
+import { formatDuration } from '../utils/time'
 
 function SubnetGrants({ subnetId }: { subnetId: number }) {
   const qc = useQueryClient()
@@ -501,6 +502,18 @@ export default function Subnets() {
                 <span className="detail-field-value">{s.description}</span>
               </div>
             )}
+            {s.lease_seconds != null && (
+              <div className="detail-field">
+                <span className="detail-field-label">Lease duration</span>
+                <span className="detail-field-value">{formatDuration(s.lease_seconds)}</span>
+              </div>
+            )}
+            {s.options.map(o => (
+              <div className="detail-field" key={o.code}>
+                <span className="detail-field-label">{String(o.code).padStart(3, '0')} {o.name}</span>
+                <span className="detail-field-value font-mono">{o.value}</span>
+              </div>
+            ))}
           </div>
         ))}
       </div>

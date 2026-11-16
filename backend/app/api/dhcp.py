@@ -9,9 +9,9 @@ from app.models.user import User
 from app.models.provider_config import ProviderConfig
 from app.models.subnet import Subnet
 from app.providers.registry import get_dhcp_providers, get_dns_providers
-from app.providers.dhcp.base import DHCPReservation, DHCPScope
+from app.providers.dhcp.base import DHCPReservation, DHCPScope, DHCPScopeOption
 from app.providers.dns.base import DNSRecord
-from app.models.cache import CachedDHCPScope, CachedDHCPScopePool, CachedDHCPLease, CachedDNSRecord, CachedDNSZone
+from app.models.cache import CachedDHCPScope, CachedDHCPScopePool, CachedDHCPScopeConfig, CachedDHCPLease, CachedDNSRecord, CachedDNSZone
 from app.models.dhcp_scope_override import DHCPScopeReservedSyncExclusion, DHCPScopeSubnetAutoCreateExclusion
 from app.core.deps import require_operator
 from app.core.audit import write_audit
@@ -66,6 +66,15 @@ def _pool_utilization(db: Session, scope: CachedDHCPScope,
     return (size, used) if size > 0 else (None, None)
 
 
+def _options_of(cfg: CachedDHCPScopeConfig | None) -> list[DHCPScopeOption]:
+    if cfg is None:
+        return []
+    try:
+        return [DHCPScopeOption(**o) for o in json.loads(cfg.options_json or "[]")]
+    except (ValueError, TypeError):
+        return []
+
+
 def _providers_with_auto_create(db: Session) -> set[str]:
     """Names of enabled DHCP providers whose config turns on subnet auto-creation."""
     names: set[str] = set()
@@ -92,6 +101,7 @@ def list_scopes(db: Session = Depends(get_db)):
         for row in db.query(DHCPScopeSubnetAutoCreateExclusion).all()
     }
     provider_auto = _providers_with_auto_create(db)
+    scope_cfg = {(c.source, c.scope_id): c for c in db.query(CachedDHCPScopeConfig).all()}
     pools: dict[tuple[str, str], list[tuple[str, str]]] = {}
     for p in db.query(CachedDHCPScopePool).all():
         pools.setdefault((p.source, p.scope_id), []).append((p.start_ip, p.end_ip))
@@ -113,6 +123,8 @@ def list_scopes(db: Session = Depends(get_db)):
             sync_reserved_ranges=(r.source, r.scope_id) not in excluded,
             auto_create_subnet=(r.source, r.scope_id) not in no_autocreate,
             provider_auto_create_subnets=r.source in provider_auto,
+            lease_seconds=cfg.lease_seconds if (cfg := scope_cfg.get((r.source, r.scope_id))) else None,
+            options=_options_of(cfg),
             pool_size=size, pool_used=used,
             lease_count=lease_counts.get((r.source, r.scope_id), 0),
         ))

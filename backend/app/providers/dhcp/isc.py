@@ -1,6 +1,9 @@
 import logging
 import requests
-from app.providers.dhcp.base import DHCPProvider, DHCPScope, DHCPReservation
+from app.core.dhcp_options import option_name
+from app.providers.dhcp.base import (
+    DHCPProvider, DHCPScope, DHCPReservation, DHCPScopeConfig, DHCPScopeOption,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -172,6 +175,31 @@ class KeaDHCPProvider(DHCPProvider):
                     data = opt.get("data", "")
                     return data.split(",")[0].strip() or None
         return None
+
+    def get_scope_config(self, scope_id: str) -> DHCPScopeConfig:
+        # Only what the subnet itself defines; global/shared-network/class
+        # option-data is inherited and deliberately not included.
+        service = self._service_for(scope_id)
+        for s in self._get_subnets(service):
+            if s["subnet"] != scope_id:
+                continue
+            options = []
+            if not _is_v6(scope_id):  # v4 option names only for this pass
+                for opt in s.get("option-data", []):
+                    code = opt.get("code")
+                    if code is None:
+                        continue
+                    options.append(DHCPScopeOption(
+                        code=int(code),
+                        name=option_name(int(code), opt.get("name", "")),
+                        value=str(opt.get("data", "")),
+                    ))
+            lease = s.get("valid-lifetime")
+            return DHCPScopeConfig(
+                options=sorted(options, key=lambda o: o.code),
+                lease_seconds=int(lease) if lease is not None else None,
+            )
+        return DHCPScopeConfig()
 
     def get_scope_exclusions(self, scope_id: str) -> list[tuple[str, str]]:
         if _is_v6(scope_id):
