@@ -1,11 +1,12 @@
 import { useMemo, useState, useEffect, useRef } from 'react'
-import { useSearchParams } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Plus, X, Pencil, Search, ArrowUp, ArrowDown, ArrowUpDown, Network, ChevronDown, ChevronRight } from 'lucide-react'
 import { dhcpApi, providersApi, addressesApi, subnetsApi, type DHCPReservation, type DHCPScope } from '../api/client'
 import { rangeSize, ipInCidr, ipToNum, isValidIPv4, isValidIPv6, isValidEUI48, isValidEUI64 } from '../utils/ip'
 import { usePagedQuery } from '../hooks/usePagedQuery'
 import { Pager } from '../components/Pager'
+import { useAuth } from '../contexts/AuthContext'
 import SyncBar from '../components/SyncBar'
 import EmptyState from '../components/EmptyState'
 import DetailPanel from '../components/DetailPanel'
@@ -31,6 +32,7 @@ const emptyForm = {
 export default function DHCP() {
   const [selectedScope, setSelectedScope] = useState<DHCPScope | null>(null)
   const [searchParams, setSearchParams] = useSearchParams()
+  const isAdmin = useAuth().user?.role === 'admin'
   const [showForm, setShowForm]           = useState(false)
   const [form, setForm]                   = useState(emptyForm)
   const [dnsLink, setDnsLink]             = useState({ register_dns: false, dns_zone: '' })
@@ -395,15 +397,26 @@ export default function DHCP() {
         className="panel-list-item-sub"
         style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', marginTop: '2px', cursor: 'pointer' }}
         onClick={e => e.stopPropagation()}
-        title="Whether sync may create an IPAM subnet for this scope (also requires Auto-create subnets on the provider)"
+        title={s.provider_auto_create_subnets
+          ? 'Untick to stop sync creating an IPAM subnet for this scope'
+          : 'Subnet auto-creation is off for this provider — turn it on in Settings → Providers'}
       >
         <input
           type="checkbox"
-          checked={s.auto_create_subnet}
+          checked={s.provider_auto_create_subnets && s.auto_create_subnet}
+          disabled={!s.provider_auto_create_subnets}
           onChange={e => autoCreateMutation.mutate({ scope: s, enabled: e.target.checked })}
         />
         Auto-create subnet
       </label>
+      {!s.provider_auto_create_subnets && (
+        <div className="panel-list-item-sub" style={{ fontSize: '0.65rem', marginTop: '1px' }}>
+          Off for this provider.{' '}
+          {isAdmin
+            ? <Link to="/settings" onClick={e => e.stopPropagation()}>Enable in Settings → Providers</Link>
+            : 'An admin can enable it in Settings → Providers.'}
+        </div>
+      )}
     </div>
   )
 

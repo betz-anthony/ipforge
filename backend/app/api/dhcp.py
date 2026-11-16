@@ -1,3 +1,4 @@
+import json
 import logging
 from fastapi import APIRouter, HTTPException, Depends, Query
 from pydantic import BaseModel
@@ -5,6 +6,7 @@ from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 from app.database import get_db
 from app.models.user import User
+from app.models.provider_config import ProviderConfig
 from app.models.subnet import Subnet
 from app.providers.registry import get_dhcp_providers, get_dns_providers
 from app.providers.dhcp.base import DHCPReservation, DHCPScope
@@ -64,6 +66,20 @@ def _pool_utilization(db: Session, scope: CachedDHCPScope,
     return (size, used) if size > 0 else (None, None)
 
 
+def _providers_with_auto_create(db: Session) -> set[str]:
+    """Names of enabled DHCP providers whose config turns on subnet auto-creation."""
+    names: set[str] = set()
+    for row in db.query(ProviderConfig).filter(
+        ProviderConfig.category == "dhcp", ProviderConfig.enabled == True,  # noqa: E712
+    ).all():
+        try:
+            if json.loads(row.config or "{}").get("auto_create_subnets"):
+                names.add(row.name)
+        except ValueError:
+            continue
+    return names
+
+
 @router.get("/scopes", response_model=list[DHCPScope])
 def list_scopes(db: Session = Depends(get_db)):
     rows = db.query(CachedDHCPScope).all()
@@ -75,6 +91,7 @@ def list_scopes(db: Session = Depends(get_db)):
         (row.source, row.scope_id)
         for row in db.query(DHCPScopeSubnetAutoCreateExclusion).all()
     }
+    provider_auto = _providers_with_auto_create(db)
     pools: dict[tuple[str, str], list[tuple[str, str]]] = {}
     for p in db.query(CachedDHCPScopePool).all():
         pools.setdefault((p.source, p.scope_id), []).append((p.start_ip, p.end_ip))
@@ -95,6 +112,7 @@ def list_scopes(db: Session = Depends(get_db)):
             ip_version=r.ip_version, source=r.source,
             sync_reserved_ranges=(r.source, r.scope_id) not in excluded,
             auto_create_subnet=(r.source, r.scope_id) not in no_autocreate,
+            provider_auto_create_subnets=r.source in provider_auto,
             pool_size=size, pool_used=used,
             lease_count=lease_counts.get((r.source, r.scope_id), 0),
         ))

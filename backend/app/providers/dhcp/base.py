@@ -18,6 +18,9 @@ class DHCPScope(BaseModel):
     sync_reserved_ranges: bool = True
     # Admin-set opt-out for subnet auto-creation (API layer, like the above).
     auto_create_subnet: bool = True
+    # Whether the scope's provider has auto_create_subnets on (read-only here;
+    # configured in Settings → Providers). The per-scope flag only applies when set.
+    provider_auto_create_subnets: bool = False
     # Scope-wide pool utilization, computed by the API layer from the lease
     # cache (never a provider field). None when it can't be computed (IPv6 or
     # no pool range).

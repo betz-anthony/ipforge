@@ -137,3 +137,18 @@ def test_scope_toggle_endpoint(client, db):
     client.request("PUT", "/api/v1/dhcp/scopes/10.10.0.0/auto-create-subnet?source=dhcp1",
                    json={"enabled": True})
     assert scope()["auto_create_subnet"] is True
+
+
+def test_scope_list_reports_provider_flag(client, db):
+    from app.models.cache import CachedDHCPScope
+    from app.core.time import utcnow
+    _provider_cfg(db, "on1", auto=True)
+    _provider_cfg(db, "off1", auto=False)
+    _provider_cfg(db, "dis1", enabled=False, auto=True)
+    for src in ("on1", "off1", "dis1"):
+        db.add(CachedDHCPScope(scope_id="10.1.0.0", name=src, subnet_mask="255.255.255.0",
+                               start_range="", end_range="", source=src, synced_at=utcnow()))
+    db.commit()
+    flags = {s["source"]: s["provider_auto_create_subnets"]
+             for s in client.get("/api/v1/dhcp/scopes").json()}
+    assert flags == {"on1": True, "off1": False, "dis1": False}

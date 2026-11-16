@@ -485,6 +485,7 @@ export interface DHCPScope {
   source: string
   sync_reserved_ranges: boolean
   auto_create_subnet: boolean
+  provider_auto_create_subnets: boolean
   pool_size: number | null
   pool_used: number | null
   lease_count: number

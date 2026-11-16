@@ -347,7 +347,9 @@ leases show on the DHCP page but nothing lands in IPAM. For <code>msdhcp</code> 
 </ul>
 <p>To keep an individual scope out (for example one kept on a test server), turn
 off <strong>Auto-create subnet</strong> for it in the DHCP page's scope list. The scope
-keeps syncing normally; it just never creates a subnet.</p>
+keeps syncing normally; it just never creates a subnet. That toggle is
+greyed out, with a link to Settings → Providers, while the provider's
+<strong>Auto-create subnets from scopes</strong> option is off.</p>
 <h3 id="sync">Sync</h3>
 <p>IPForge caches DNS zones/records and DHCP scopes/leases locally for fast lookups. The cache is refreshed on a background schedule.</p>
 <ul>
